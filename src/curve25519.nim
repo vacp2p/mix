@@ -1,12 +1,13 @@
 import pkg/libp2p/crypto/curve25519
 import bearssl/rand
 
-type
-  FieldElement* = Curve25519Key
+const FieldElementSize* = Curve25519KeySize
+
+type FieldElement* = Curve25519Key
 
 # Convert bytes to FieldElement
 proc bytesToFieldElement*(bytes: openArray[byte]): FieldElement =
-  assert bytes.len == Curve25519KeySize, "Field element size must be 32 bytes"
+  assert bytes.len == FieldElementSize, "Field element size must be 32 bytes"
   intoCurve25519Key(bytes)
 
 # Convert FieldElement to bytes
