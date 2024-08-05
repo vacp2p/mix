@@ -1,4 +1,4 @@
-# Custom Mix Protocol
+# Mix
 
 This repository contains the implementation of the Sphinx packet handling for the Mix protocol, a custom protocol within the libp2p framework.
 The protocol is designed to enable anonymous communication in peer-to-peer networks.
