@@ -15,8 +15,8 @@ suite "Curve25519 Tests":
     (privateKey, publicKey) = generateKeyPair()
 
     # Assert the length of the keys
-    assert fieldElementToBytes(privateKey).len == Curve25519KeySize, "Private key size must be 32 bytes" 
-    assert fieldElementToBytes(publicKey).len == Curve25519KeySize, "Public key size must be 32 bytes" 
+    assert fieldElementToBytes(privateKey).len == FieldElementSize, "Private key size must be 32 bytes" 
+    assert fieldElementToBytes(publicKey).len == FieldElementSize, "Public key size must be 32 bytes" 
     
     # Assert that the keys are not empty (i.e., not all zeros)
     assert privateKey.isNotZero(), "Private key is empty"
