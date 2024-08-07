@@ -5,8 +5,8 @@ suite "Cryptographic Functions Tests":
 
     test "aes_ctr function test":
         # Define test data
-        let key: seq[byte] = cast[seq[byte]]("thisis16byteskey")
-        let iv: seq[byte] = cast[seq[byte]]("thisis16bytesiv!")
+        let key = cast[array[16, byte]]("thisis16byteskey")
+        let iv = cast[array[16, byte]]("thisis16bytesiv!")
         let data: seq[byte] = cast[seq[byte]]("thisisdata")
         
         # Encrypt data
@@ -63,40 +63,54 @@ suite "Cryptographic Functions Tests":
         assert hmacResult == expectedHmac, "HMAC does not match the expected HMAC"
 
     test "aes_ctr empty data test":
-        let key: seq[byte] = cast[seq[byte]]("thisis16byteskey")
-        let iv: seq[byte] = cast[seq[byte]]("thisis16bytesiv!")
-        let emptyData: seq[byte] = @[]
+        # Define test data
+        let key = cast[array[16, byte]]("thisis16byteskey")
+        let iv = cast[array[16, byte]]("thisis16bytesiv!")
+        let emptyData: array[0, byte] = []
         
+        # Encrypt data
         let encrypted = aes_ctr(key, iv, emptyData)
+
+        # Decrypt data
         let decrypted = aes_ctr(key, iv, encrypted)
         
+        # Assertions
         assert emptyData == decrypted, "Decrypted empty data does not match the original empty data"
         assert encrypted == emptyData, "Encrypted empty data should still be empty"
 
     test "sha256_hash empty data test":
-        let emptyData: seq[byte] = @[]
+        # Define test data
+        let emptyData: array[0, byte] = []
         let expectedHashHex = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" # SHA-256 hash of empty input
         let expectedHash = fromHex(expectedHashHex)
         
+        # Compute hash
         let hash = sha256_hash(emptyData)
         
+        # Assertions
         assert hash == expectedHash, "SHA-256 hash of empty data does not match the expected hash"
 
     test "kdf empty key test":
-        let emptyKey: seq[byte] = @[]
+        # Define test data
+        let emptyKey: array[0, byte] = []
         let expectedKdfHex = "e3b0c44298fc1c149afbf4c8996fb924" # SHA-256 hash of empty key truncated
         let expectedKdf = fromHex(expectedKdfHex)
         
+        # Compute derived key
         let derivedKey = kdf(emptyKey)
         
+        # Assertions
         assert derivedKey == expectedKdf, "Derived key from empty key does not match the expected key"
 
     test "hmac empty key and data test":
-        let emptyKey: seq[byte] = @[]
-        let emptyData: seq[byte] = @[]
+        # Define test data
+        let emptyKey: array[0, byte] = []
+        let emptyData: array[0, byte] = []
         let expectedHmacHex = "b613679a0814d9ec772f95d778c35fc5ff1697c493715653c6c712144292c5ad" # SHA-256 HMAC of empty key and data
         let expectedHmac = fromHex(expectedHmacHex)
         
+        # Compute HMAC
         let hmacResult = hmac(emptyKey, emptyData)
         
+        # Assertions
         assert hmacResult == expectedHmac, "HMAC of empty key and data does not match the expected HMAC"
