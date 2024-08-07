@@ -1,4 +1,4 @@
-import nimcrypto, sequtils
+import nimcrypto
 
 # This function processes 'data' using AES in CTR mode.
 # For CTR mode, the same function handles both encryption and decryption.
@@ -16,14 +16,14 @@ proc aes_ctr*(key, iv, data: openArray[byte]): seq[byte] =
     return output
 
 # This function hashes 'data' using SHA-256.
-proc sha256_hash*(data: openArray[byte]): seq[byte] =
-    return toSeq(sha256.digest(data).data)
+proc sha256_hash*(data: openArray[byte]): array[32, byte] =
+    return sha256.digest(data).data
 
 # This function returns the hash of 'key' truncated to 16 bytes.
 proc kdf*(key: openArray[byte]): seq[byte] =
-    let hash = sha256_hash(key.toSeq)
+    let hash = sha256_hash(key)
     result = hash[0..15]
 
 # This function computes a HMAC for 'data' using given 'key'.
-proc hmac*(key, data: openArray[byte]): seq[byte] =
-    return toSeq(sha256.hmac(key, data).data)
+proc hmac*(key, data: openArray[byte]): array[32, byte] =
+    return sha256.hmac(key, data).data
