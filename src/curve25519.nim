@@ -43,4 +43,4 @@ proc multiplyBasePointWithScalars*(scalars: openArray[FieldElement]): FieldEleme
 
 # Compare two FieldElements
 proc compareFieldElements*(a, b: FieldElement): bool =
-  fieldElementToBytes(a) == fieldElementToBytes(b)
+  a == b
