@@ -5,7 +5,7 @@ description   = "A custom Mix Protocol"
 license       = "MIT"
 
 # Dependencies
-requires "nim >= 1.6.0"
+requires "nim >= 2.0.8"
 requires "nimcrypto >= 0.6.0"
 requires "libp2p >= 1.4.0"
 requires "protobuf_serialization >= 0.3.0"
@@ -17,3 +17,4 @@ srcDir = "src"
 task test, "Run the test suite":
   exec "nim c -r --path:src tests/test_crypto.nim"
   exec "nim c -r --path:src tests/test_curve25519.nim"
+  exec "nim c -r --path:src tests/test_serialization.nim"
