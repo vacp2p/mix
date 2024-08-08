@@ -1,4 +1,4 @@
-import ../src/Curve25519
+import ../src/curve25519
 import unittest, pkg/libp2p/crypto/curve25519
 
 # Helper function for non-zero check
