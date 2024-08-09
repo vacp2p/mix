@@ -17,4 +17,5 @@ srcDir = "src"
 task test, "Run the test suite":
   exec "nim c -r --path:src tests/test_crypto.nim"
   exec "nim c -r --path:src tests/test_curve25519.nim"
+  exec "nim c -r --path:src tests/test_pow.nim"
   exec "nim c -r --path:src tests/test_serialization.nim"
