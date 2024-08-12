@@ -3,9 +3,9 @@ import ../src/serialization
 import unittest
 
 # Define test cases
-suite "Serialization Tests":
+suite "serialization_tests":
 
-  test "Serialize and Deserialize Header":
+  test "serialize_and_deserialize_header":
     let header = initHeader(
       newSeq[byte](alphaSize),
       newSeq[byte](betaSize),
@@ -14,19 +14,19 @@ suite "Serialization Tests":
     let serialized = serializeHeader(header)
     assert len(serialized) == headerSize, "Serialized header size is incorrect"
 
-  test "Serialize and Deserialize Message":
+  test "serialize_and_deserialize_message":
     let message = initMessage(newSeq[byte](messageSize))
     let serialized = serializeMessage(message)
     let deserialized = deserializeMessage(serialized)
     assert getMessage(message) == getMessage(deserialized), "Deserialized message does not match the original message"
 
-  test "Serialize and Deserialize Hop":
+  test "serialize_and_deserialize_hop":
     let hop = initHop(newSeq[byte](addrSize))
     let serialized = serializeHop(hop)
     let deserialized = deserializeHop(serialized)
     assert getHop(hop) == getHop(deserialized), "Deserialized multiaddress does not match the original multiaddress"
 
-  test "Serialize and Deserialize RoutingInfo":
+  test "serialize_and_deserialize_routing_info":
     let routingInfo = initRoutingInfo(
       initHop(newSeq[byte](addrSize)),
       newSeq[byte](delaySize),
@@ -43,7 +43,7 @@ suite "Serialization Tests":
     assert gamma == dGamma, "Deserialized gamma does not match the original gamma"
     assert beta == dBeta, "Deserialized beta does not match the original beta"
 
-  test "Serialize and Deserialize SphinxPacket":
+  test "serialize_and_deserialize_sphinx_packet":
     let header = initHeader(
       newSeq[byte](alphaSize),
       newSeq[byte](betaSize),

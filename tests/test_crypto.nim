@@ -1,9 +1,9 @@
 import ../src/crypto
 import unittest, nimcrypto
 
-suite "Cryptographic Functions Tests":
+suite "cryptographic_functions_tests":
 
-    test "aes_ctr function test":
+    test "aes_ctr_encrypt_decrypt":
         # Define test data
         let key = cast[array[16, byte]]("thisis16byteskey")
         let iv = cast[array[16, byte]]("thisis16bytesiv!")
@@ -19,7 +19,7 @@ suite "Cryptographic Functions Tests":
         assert data == decrypted, "Decrypted data does not match the original data"
         assert encrypted != data, "Encrypted data should not match the original data"
 
-    test "sha256_hash function test":
+    test "sha256_hash_computation":
         # Define test data
         let data: seq[byte] = cast[seq[byte]]("thisisdata")
         
@@ -33,7 +33,7 @@ suite "Cryptographic Functions Tests":
         # Assertions
         assert hash == expectedHash, "SHA-256 hash does not match the expected hash"
 
-    test "kdf function test":
+    test "kdf_computation":
         # Define test key
         let key: seq[byte] = cast[seq[byte]]("thisiskey")
         
@@ -47,7 +47,7 @@ suite "Cryptographic Functions Tests":
         # Assertions
         assert derivedKey == expectedKdf, "Derived key does not match the expected key"
 
-    test "hmac function test":
+    test "hmac_computation":
         # Define test key and data
         let key: seq[byte] = cast[seq[byte]]("thisiskey")
         let data: seq[byte] = cast[seq[byte]]("thisisdata")
@@ -62,7 +62,7 @@ suite "Cryptographic Functions Tests":
         # Assertions
         assert hmacResult == expectedHmac, "HMAC does not match the expected HMAC"
 
-    test "aes_ctr empty data test":
+    test "aes_ctr_empty_data":
         # Define test data
         let key = cast[array[16, byte]]("thisis16byteskey")
         let iv = cast[array[16, byte]]("thisis16bytesiv!")
@@ -78,7 +78,7 @@ suite "Cryptographic Functions Tests":
         assert emptyData == decrypted, "Decrypted empty data does not match the original empty data"
         assert encrypted == emptyData, "Encrypted empty data should still be empty"
 
-    test "sha256_hash empty data test":
+    test "sha256_hash_empty_data":
         # Define test data
         let emptyData: array[0, byte] = []
         let expectedHashHex = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" # SHA-256 hash of empty input
@@ -90,7 +90,7 @@ suite "Cryptographic Functions Tests":
         # Assertions
         assert hash == expectedHash, "SHA-256 hash of empty data does not match the expected hash"
 
-    test "kdf empty key test":
+    test "kdf_empty_key":
         # Define test data
         let emptyKey: array[0, byte] = []
         let expectedKdfHex = "e3b0c44298fc1c149afbf4c8996fb924" # SHA-256 hash of empty key truncated
@@ -102,7 +102,7 @@ suite "Cryptographic Functions Tests":
         # Assertions
         assert derivedKey == expectedKdf, "Derived key from empty key does not match the expected key"
 
-    test "hmac empty key and data test":
+    test "hmac_empty_key_and_data":
         # Define test data
         let emptyKey: array[0, byte] = []
         let emptyData: array[0, byte] = []

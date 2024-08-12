@@ -8,9 +8,9 @@ proc isNotZero(key: FieldElement): bool =
       return true
   return false
 
-suite "Curve25519 Tests":
+suite "curve25519_tests":
   
-  test "TestGenerateKey":
+  test "generate_key_pair":
     var privateKey, publicKey: FieldElement
     (privateKey, publicKey) = generateKeyPair()
 
@@ -26,7 +26,7 @@ suite "Curve25519 Tests":
     let derivedPublicKey = multiplyBasePointWithScalars(@[privateKey])
     assert compareFieldElements(publicKey, derivedPublicKey), "Public key must be derived correctly"
     
-  test "TestCommutativity":
+  test "commutativity":
     # Test commutativity: (g^x1)^x2 == (g^x2)^x1
   
     let x1 = generateRandomFieldElement()
