@@ -1,4 +1,4 @@
-import config, crypto, curve25519, serialization
+import config, crypto, curve25519, pow, serialization
 import nimcrypto, std/math, sequtils 
 
 # const lambda* = 500 # Parameter for exp distribution for generating random delay
@@ -22,11 +22,11 @@ proc computeAlpha(publicKeys: openArray[FieldElement]): tuple[alpha_0: seq[byte]
 
         # Compute alpha, shared secret, and blinder
         if i == 0:
-            alpha = multiplyBasePointWithScalars(@[x])
-            secret = multiplyPointWithScalars(publicKeys[0], @[x])
+            alpha = multiplyBasePointWithScalars([x])
+            secret = multiplyPointWithScalars(publicKeys[0], [x])
             alpha_0 = fieldElementToBytes(alpha)
         else:
-            alpha = multiplyPointWithScalars(alpha, @[blinders[i - 1]])
+            alpha = multiplyPointWithScalars(alpha, [blinders[i - 1]])
             secret = multiplyPointWithScalars(publicKeys[i], blinders) # ToDo: Optimize point multiplication by multiplying scalars first
 
         blinders.add(bytesToFieldElement(sha256_hash(fieldElementToBytes(alpha) & fieldElementToBytes(secret))))
@@ -116,17 +116,27 @@ proc computeBetaGammaDelta(s: seq[seq[byte]], hop: openArray[Hop], msg: Message,
 
     return (beta, gamma, delta)
 
-proc wrapInSphinxPacket*(message: seq[byte], publicKeys: openArray[FieldElement], delay: seq[byte], hop: openArray[Hop], msg: Message): SphinxPacket =
-    # Compute PoW
-
+proc wrapInSphinxPacket*(message: seq[byte], publicKeys: openArray[FieldElement], delay: seq[byte], hop: openArray[Hop], msg: Message): seq[byte] =
 
     # Compute alphas and shared secrets
     let (alpha_0, s, errMsg) = computeAlpha(publicKeys)
     if errMsg.len > 0:
         echo "Error in createSphinxHeader: ", errMsg
-        return SphinxPacket()
+        return @[]
 
     # Compute betas, gammas, and deltas
     let (beta_0, gamma_0, delta_0) = computeBetaGammaDelta(s, hop, msg, delay)
-    return initSphinxPacket(initHeader(alpha_0, beta_0, gamma_0), delta_0)
+    
+    # Serialize sphinx packet
+    let sphinxPacket = initSphinxPacket(initHeader(alpha_0, beta_0, gamma_0), delta_0)
+    return serializeSphinxPacket(sphinxPacket)
+
+proc processSphinxPacket*(dSphinxPacket: seq[byte], privateKey: FieldElement): SphinxPacket =
+    # Deserialize the Sphinx packet
+    let sphinxPacket = deserializeSphinxPacket(dSphinxPacket)
+    let (header, payload) = getSphinxPacket(sphinxPacket)
+    let (alpha, beta, gamma) = getHeader(header)
+
+    # Compute shared secret
+    let s = multiplyBasePointWithScalars([privateKey])
 
