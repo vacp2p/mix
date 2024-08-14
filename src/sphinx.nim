@@ -1,5 +1,13 @@
-import config, crypto, curve25519, pow, serialization
-import nimcrypto, std/math, sequtils 
+import config, crypto, curve25519, serialization, tag_manager
+import std/math, sequtils
+
+# Define possible outcomes of processing a Sphinx packet
+type
+  ProcessingStatus* = enum
+    Success,                # Packet processed successfully
+    Duplicate,              # Packet was discarded due to duplicate tag
+    InvalidMAC,             # Packet was discarded due to MAC verification failure
+    Invalid                 # Packet was discarded due to an invalid message
 
 # const lambda* = 500 # Parameter for exp distribution for generating random delay
 
@@ -116,8 +124,7 @@ proc computeBetaGammaDelta(s: seq[seq[byte]], hop: openArray[Hop], msg: Message,
 
     return (beta, gamma, delta)
 
-proc wrapInSphinxPacket*(message: seq[byte], publicKeys: openArray[FieldElement], delay: seq[byte], hop: openArray[Hop], msg: Message): seq[byte] =
-
+proc wrapInSphinxPacket*( msg: Message, publicKeys: openArray[FieldElement], delay: seq[byte], hop: openArray[Hop]): seq[byte] =
     # Compute alphas and shared secrets
     let (alpha_0, s, errMsg) = computeAlpha(publicKeys)
     if errMsg.len > 0:
@@ -131,12 +138,60 @@ proc wrapInSphinxPacket*(message: seq[byte], publicKeys: openArray[FieldElement]
     let sphinxPacket = initSphinxPacket(initHeader(alpha_0, beta_0, gamma_0), delta_0)
     return serializeSphinxPacket(sphinxPacket)
 
-proc processSphinxPacket*(dSphinxPacket: seq[byte], privateKey: FieldElement): SphinxPacket =
+proc processSphinxPacket*(serSphinxPacket: seq[byte], privateKey: FieldElement): (Hop, seq[byte], seq[byte], ProcessingStatus) =
     # Deserialize the Sphinx packet
-    let sphinxPacket = deserializeSphinxPacket(dSphinxPacket)
+    let sphinxPacket = deserializeSphinxPacket(serSphinxPacket)
     let (header, payload) = getSphinxPacket(sphinxPacket)
     let (alpha, beta, gamma) = getHeader(header)
 
     # Compute shared secret
-    let s = multiplyBasePointWithScalars([privateKey])
+    let s = multiplyPointWithScalars(bytesToFieldElement(alpha), [privateKey])
+    let sBytes = fieldElementToBytes(s)
+    
+    # Check if the tag has been seen
+    if isTagSeen(s):
+        # If the tag is in the seen list, discard the message
+        return (Hop(), @[], @[], Duplicate)
+    
+    # Compute MAC
+    let mac_key = kdf(deriveKeyMaterial("mac_key", sBytes))
+    if not (toseq(hmac(mac_key, beta)) == gamma):
+        # If MAC not verified
+        return (Hop(), @[], @[], InvalidMAC)
 
+    # Store the tag as seen
+    addTag(s)
+
+    # Derive AES key and IV
+    let beta_aes_key = kdf(deriveKeyMaterial("beta_aes_key", sBytes))
+    let beta_iv = kdf(deriveKeyMaterial("beta_iv", sBytes))
+
+    let delta_aes_key = kdf(deriveKeyMaterial("delta_aes_key", sBytes))
+    let delta_iv = kdf(deriveKeyMaterial("delta_iv", sBytes))
+
+    # Compute delta
+    let delta_prime = aes_ctr(delta_aes_key, delta_iv, payload)
+
+    # Compute B
+    let B = aes_ctr(beta_aes_key, beta_iv, beta)
+
+    # Check if B has the required prefix
+    let prefixLength = (2 * (r - L) + t + 2) * k
+    let expectedPrefix = newSeq[byte](prefixLength)
+    
+    if B[0..prefixLength-1] == expectedPrefix:
+        return (Hop(), @[], getMessage(deserializeMessage(delta_prime)), Success)
+        
+    else:
+        # Extract routing information from B
+        let routingInfo = deserializeRoutingInfo(B)
+        let (address, delay, gamma_prime, beta_prime) = getRoutingInfo(routingInfo)
+        echo B.len, " ", beta_prime.len
+        
+        # Compute alpha
+        let blinder = bytesToFieldElement(sha256_hash(alpha & sBytes))
+        let alpha_prime = multiplyPointWithScalars(bytesToFieldElement(alpha), [blinder])
+        
+        # Serialize sphinx packet
+        let sphinxPkt = initSphinxPacket(initHeader(fieldElementToBytes(alpha_prime), beta_prime, gamma_prime), delta_prime)
+        return (address, delay, serializeSphinxPacket(sphinxPkt), Success)
