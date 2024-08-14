@@ -19,4 +19,5 @@ task test, "Run the test suite":
   exec "nim c -r --path:src tests/test_curve25519.nim"
   exec "nim c -r --path:src tests/test_pow.nim"
   exec "nim c -r --path:src tests/test_serialization.nim"
+  exec "nim c -r --path:src tests/test_sphinx.nim"
   exec "nim c -r --path:src tests/test_tag_manager.nim"
