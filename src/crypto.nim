@@ -25,5 +25,6 @@ proc kdf*(key: openArray[byte]): seq[byte] =
     result = hash[0..15]
 
 # This function computes a HMAC for 'data' using given 'key'.
-proc hmac*(key, data: openArray[byte]): array[32, byte] =
-    return sha256.hmac(key, data).data
+proc hmac*(key, data: openArray[byte]): seq[byte] =
+    let hmac = sha256.hmac(key, data).data
+    result = hmac[0..15]
