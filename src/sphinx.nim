@@ -58,7 +58,7 @@ proc computeFillerStrings(s: seq[seq[byte]]): seq[byte] =
         let iv = kdf(deriveKeyMaterial("filler_iv", s[i-1]))
         
         # Compute filler string
-        let fillerLength = 2 * k
+        let fillerLength = (t + 1) * k
         let zeroPadding = newSeq[byte](fillerLength)
         filler = aes_ctr(aes_key, iv, filler & zeroPadding)
     return filler
@@ -106,16 +106,13 @@ proc computeBetaGammaDelta(s: seq[seq[byte]], hop: openArray[Hop], msg: Message,
 
         # Compute Beta and Gamma
         if i == sLen - 1:
-            var paddingLength: int
-            var zeroPadding: seq[byte]
-
-            paddingLength = ((2 * (r - sLen)) + t + 2) * k
-            zeroPadding = newSeq[byte](paddingLength)
+            let paddingLength = (((t + 1) * (r - L)) + t + 2) * k
+            let zeroPadding = newSeq[byte](paddingLength)
             beta = aes_ctr(beta_aes_key, beta_iv, zeroPadding) & filler
 
             delta = aes_ctr(delta_aes_key, delta_iv, serializeMessage(msg)) 
         else:
-            let routingInfo = initRoutingInfo(hop[i+1], delay, gamma, beta[0..(((2 * r) - 1) * k) - 1])
+            let routingInfo = initRoutingInfo(hop[i+1], delay, gamma, beta[0..(((r * (t+1)) - t) * k) - 1])
             beta = aes_ctr(beta_aes_key, beta_iv, serializeRoutingInfo(routingInfo))
 
             delta = aes_ctr(delta_aes_key, delta_iv, delta)
@@ -173,20 +170,23 @@ proc processSphinxPacket*(serSphinxPacket: seq[byte], privateKey: FieldElement):
     let delta_prime = aes_ctr(delta_aes_key, delta_iv, payload)
 
     # Compute B
-    let B = aes_ctr(beta_aes_key, beta_iv, beta)
+    var paddingLength: int
+    var zeroPadding: seq[byte]
+    paddingLength = (t + 1) * k
+    zeroPadding = newSeq[byte](paddingLength)
+    let B = aes_ctr(beta_aes_key, beta_iv, beta & zeroPadding)
 
-    # Check if B has the required prefix
-    let prefixLength = (2 * (r - L) + t + 2) * k
-    let expectedPrefix = newSeq[byte](prefixLength)
+    # Check if B has the required prefix for the original message
+    paddingLength = (((t + 1) * (r - L)) + t + 2) * k
+    zeroPadding = newSeq[byte](paddingLength)
     
-    if B[0..prefixLength-1] == expectedPrefix:
+    if B[0..paddingLength - 1] == zeroPadding:
         return (Hop(), @[], getMessage(deserializeMessage(delta_prime)), Success)
         
     else:
         # Extract routing information from B
         let routingInfo = deserializeRoutingInfo(B)
         let (address, delay, gamma_prime, beta_prime) = getRoutingInfo(routingInfo)
-        echo B.len, " ", beta_prime.len
         
         # Compute alpha
         let blinder = bytesToFieldElement(sha256_hash(alpha & sBytes))

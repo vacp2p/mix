@@ -78,17 +78,17 @@ proc serializeRoutingInfo*(info: RoutingInfo): seq[byte] =
     let addrBytes = serializeHop(info.Addr)
     assert len(info.Delay) == delaySize, "Delay must be exactly " & $delaySize & " bytes"
     assert len(info.Gamma) == gammaSize, "Gamma must be exactly " & $gammaSize & " bytes"
-    assert len(info.Beta) == ((2 * r) - 1) * k, "Beta must be exactly " & $(((2 * r) - 1) * k) & " bytes"
+    assert len(info.Beta) == (((r * (t+1)) - t) * k), "Beta must be exactly " & $(((r * (t+1)) - t) * k) & " bytes"
     
     result = addrBytes & info.Delay & info.Gamma & info.Beta
 
 proc deserializeRoutingInfo*(data: openArray[byte]): RoutingInfo =
-    assert len(data) == betaSize, "Data must be exactly " & $betaSize & " bytes"
+    assert len(data) == betaSize + ((t + 1) * k), "Data must be exactly " & $(betaSize + ((t + 1) * k)) & " bytes"
 
     result.Addr = deserializeHop(data[0..addrSize - 1])
     result.Delay = data[addrSize..(addrSize + delaySize - 1)]
     result.Gamma = data[(addrSize + delaySize)..(addrSize + delaySize + gammaSize - 1)]
-    result.Beta = data[(addrSize + delaySize + gammaSize)..^1]
+    result.Beta = data[(addrSize + delaySize + gammaSize)..(((r * (t+1))+t+2) * k) - 1]
 
 type
     SphinxPacket* = object

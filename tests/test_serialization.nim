@@ -31,17 +31,19 @@ suite "serialization_tests":
       initHop(newSeq[byte](addrSize)),
       newSeq[byte](delaySize),
       newSeq[byte](gammaSize),
-      newSeq[byte](((2 * r) - 1) * k)
+      newSeq[byte](((r * (t+1)) - t) * k)
     )
     let serialized = serializeRoutingInfo(routingInfo)
-    let deserialized = deserializeRoutingInfo(serialized)
+    let suffixLength = (t + 1) * k
+    let suffix = newSeq[byte](suffixLength)
+    let deserialized = deserializeRoutingInfo(serialized & suffix)
     let (hop, delay, gamma, beta) = getRoutingInfo(routingInfo)
     let (dHop, dDelay, dGamma, dBeta) = getRoutingInfo(deserialized)
 
     assert getHop(hop) == getHop(dHop), "Deserialized multiaddress does not match the original multiaddress"
     assert delay == dDelay, "Deserialized delay does not match the original delay"
     assert gamma == dGamma, "Deserialized gamma does not match the original gamma"
-    assert beta == dBeta, "Deserialized beta does not match the original beta"
+    assert beta == dBeta[0..(((r * (t+1)) - t) * k) - 1], "Deserialized beta does not match the original beta"
 
   test "serialize_and_deserialize_sphinx_packet":
     let header = initHeader(
