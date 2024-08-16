@@ -48,17 +48,16 @@ suite "Sphinx Tests":
     assert packet.len > 0, "Packet should not be empty"
     
     let (address1, delay1, processedPacket1, status1) = processSphinxPacket(packet, privateKeys[0])
-    echo "status1: ", status1
     assert status1 == Success, "Processing status should be Success"
     assert processedPacket1.len > 0, "Processed packet should not be empty"
     assert not ifExit(address1, delay1, processedPacket1, status1), "Packet processing failed"
 
-    let (address2, delay2, processedPacket2, status2) = processSphinxPacket(packet, privateKeys[1])
+    let (address2, delay2, processedPacket2, status2) = processSphinxPacket(processedPacket1, privateKeys[1])
     assert status2 == Success, "Processing status should be Success"
     assert processedPacket2.len > 0, "Processed packet should not be empty"
     assert not ifExit(address2, delay2, processedPacket2, status2), "Packet processing failed"
 
-    let (address3, delay3, processedPacket3, status3) = processSphinxPacket(packet, privateKeys[2])
+    let (address3, delay3, processedPacket3, status3) = processSphinxPacket(processedPacket2, privateKeys[2])
     assert status3 == Success, "Processing status should be Success"
     assert processedPacket3.len > 0, "Processed packet should not be empty"
     assert ifExit(address3, delay3, processedPacket3, status3), "Packet processing failed"
