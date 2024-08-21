@@ -10,7 +10,7 @@ proc ifExit(address: Hop, delay: seq[byte], processedPacket: seq[byte], status: 
     return false
 
 # Helper function to create dummy data
-proc createDummyData(): (Message, seq[FieldElement], seq[FieldElement], seq[byte], seq[Hop]) =
+proc createDummyData(): (Message, seq[FieldElement], seq[FieldElement], seq[seq[byte]], seq[Hop]) =
   let (privateKey1, publicKey1) = generateKeyPair()
   let (privateKey2, publicKey2) = generateKeyPair()
   let (privateKey3, publicKey3) = generateKeyPair()
@@ -27,7 +27,12 @@ proc createDummyData(): (Message, seq[FieldElement], seq[FieldElement], seq[byte
     publicKey3
   ]
 
-  let delay = newSeq[byte](delaySize)
+  let delay = @[
+    newSeq[byte](delaySize),
+    newSeq[byte](delaySize),
+    newSeq[byte](delaySize)
+  ]
+
   let hops = @[
     initHop(newSeq[byte](addrSize)),
     initHop(newSeq[byte](addrSize)),
