@@ -23,6 +23,7 @@ proc computeAlpha(publicKeys: openArray[FieldElement]): tuple[alpha_0: seq[byte]
     var blinders: seq[FieldElement] = @[]
 
     let x = generateRandomFieldElement()
+    blinders.add(x)
 
     for i in 0..<publicKeys.len:
         if publicKeys[i].len != FieldElementSize:
@@ -30,12 +31,12 @@ proc computeAlpha(publicKeys: openArray[FieldElement]): tuple[alpha_0: seq[byte]
 
         # Compute alpha, shared secret, and blinder
         if i == 0:
-            alpha = multiplyBasePointWithScalars([x])
-            secret = multiplyPointWithScalars(publicKeys[0], [x])
+            alpha = multiplyBasePointWithScalars([blinders[i]])
             alpha_0 = fieldElementToBytes(alpha)
         else:
-            alpha = multiplyPointWithScalars(alpha, [blinders[i - 1]])
-            secret = multiplyPointWithScalars(publicKeys[i], blinders) # ToDo: Optimize point multiplication by multiplying scalars first
+            alpha = multiplyPointWithScalars(alpha, [blinders[i]])
+        
+        secret = multiplyPointWithScalars(publicKeys[i], blinders) # ToDo: Optimize point multiplication by multiplying scalars first
 
         blinders.add(bytesToFieldElement(sha256_hash(fieldElementToBytes(alpha) & fieldElementToBytes(secret))))
 
@@ -54,13 +55,14 @@ proc computeFillerStrings(s: seq[seq[byte]]): seq[byte] =
     
     for i in 1..<s.len:
         # Derive AES key and IV
-        let aes_key = kdf(deriveKeyMaterial("filler_aes_key", s[i-1]))
-        let iv = kdf(deriveKeyMaterial("filler_iv", s[i-1]))
+        let aes_key = kdf(deriveKeyMaterial("aes_key", s[i-1]))
+        let iv = kdf(deriveKeyMaterial("iv", s[i-1]))
         
         # Compute filler string
         let fillerLength = (t + 1) * k
         let zeroPadding = newSeq[byte](fillerLength)
         filler = aes_ctr(aes_key, iv, filler & zeroPadding)
+        
     return filler
 
 #[
@@ -86,7 +88,7 @@ proc generateRandomDelay(): seq[byte] =
 ]#
 
 # Function to compute betas, gammas, and deltas  
-proc computeBetaGammaDelta(s: seq[seq[byte]], hop: openArray[Hop], msg: Message, delay: seq[byte]): tuple[beta, gamma, delta: seq[byte]] = 
+proc computeBetaGammaDelta(s: seq[seq[byte]], hop: openArray[Hop], msg: Message, delay: openArray[seq[byte]]): tuple[beta, gamma, delta: seq[byte]] = 
     let sLen = s.len
     var beta: seq[byte]
     var gamma: seq[byte]
@@ -97,9 +99,9 @@ proc computeBetaGammaDelta(s: seq[seq[byte]], hop: openArray[Hop], msg: Message,
 
     for i in countdown(sLen-1, 0):
         # Derive AES keys, MAC key, and IVs
-        let beta_aes_key = kdf(deriveKeyMaterial("beta_aes_key", s[i]))
+        let beta_aes_key = kdf(deriveKeyMaterial("aes_key", s[i]))
         let mac_key = kdf(deriveKeyMaterial("mac_key", s[i]))
-        let beta_iv = kdf(deriveKeyMaterial("beta_iv", s[i]))
+        let beta_iv = kdf(deriveKeyMaterial("iv", s[i]))
 
         let delta_aes_key = kdf(deriveKeyMaterial("delta_aes_key", s[i]))
         let delta_iv = kdf(deriveKeyMaterial("delta_iv", s[i]))
@@ -112,7 +114,7 @@ proc computeBetaGammaDelta(s: seq[seq[byte]], hop: openArray[Hop], msg: Message,
 
             delta = aes_ctr(delta_aes_key, delta_iv, serializeMessage(msg)) 
         else:
-            let routingInfo = initRoutingInfo(hop[i+1], delay, gamma, beta[0..(((r * (t+1)) - t) * k) - 1])
+            let routingInfo = initRoutingInfo(hop[i+1], delay[i+1], gamma, beta[0..(((r * (t+1)) - t) * k) - 1])
             beta = aes_ctr(beta_aes_key, beta_iv, serializeRoutingInfo(routingInfo))
 
             delta = aes_ctr(delta_aes_key, delta_iv, delta)
@@ -121,11 +123,10 @@ proc computeBetaGammaDelta(s: seq[seq[byte]], hop: openArray[Hop], msg: Message,
 
     return (beta, gamma, delta)
 
-proc wrapInSphinxPacket*( msg: Message, publicKeys: openArray[FieldElement], delay: seq[byte], hop: openArray[Hop]): seq[byte] =
+proc wrapInSphinxPacket*( msg: Message, publicKeys: openArray[FieldElement], delay: seq[seq[byte]], hop: openArray[Hop]): seq[byte] =
     # Compute alphas and shared secrets
     let (alpha_0, s, errMsg) = computeAlpha(publicKeys)
     if errMsg.len > 0:
-        echo "Error in createSphinxHeader: ", errMsg
         return @[]
 
     # Compute betas, gammas, and deltas
@@ -152,6 +153,7 @@ proc processSphinxPacket*(serSphinxPacket: seq[byte], privateKey: FieldElement):
     
     # Compute MAC
     let mac_key = kdf(deriveKeyMaterial("mac_key", sBytes))
+
     if not (toseq(hmac(mac_key, beta)) == gamma):
         # If MAC not verified
         return (Hop(), @[], @[], InvalidMAC)
@@ -160,8 +162,8 @@ proc processSphinxPacket*(serSphinxPacket: seq[byte], privateKey: FieldElement):
     addTag(s)
 
     # Derive AES key and IV
-    let beta_aes_key = kdf(deriveKeyMaterial("beta_aes_key", sBytes))
-    let beta_iv = kdf(deriveKeyMaterial("beta_iv", sBytes))
+    let beta_aes_key = kdf(deriveKeyMaterial("aes_key", sBytes))
+    let beta_iv = kdf(deriveKeyMaterial("iv", sBytes))
 
     let delta_aes_key = kdf(deriveKeyMaterial("delta_aes_key", sBytes))
     let delta_iv = kdf(deriveKeyMaterial("delta_iv", sBytes))
