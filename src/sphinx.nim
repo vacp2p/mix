@@ -7,7 +7,6 @@ type
     Success,                # Packet processed successfully
     Duplicate,              # Packet was discarded due to duplicate tag
     InvalidMAC,             # Packet was discarded due to MAC verification failure
-    Invalid                 # Packet was discarded due to an invalid message
 
 # const lambda* = 500 # Parameter for exp distribution for generating random delay
 
