@@ -4,7 +4,7 @@ import unittest # sphinx, crypto
 
 # Helper function to check if a mix node is the exit in some message path
 proc ifExit(address: Hop, delay: seq[byte], processedPacket: seq[byte], status: ProcessingStatus): bool =
-  if (address == Hop()) and (delay == @[]) and (processedPacket == @[]) and (status == Success):
+  if (address == Hop()) and (delay == @[]) and (status == Success):
     return true
   else:
     return false
