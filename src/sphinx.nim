@@ -61,8 +61,8 @@ proc computeFillerStrings(s: seq[seq[byte]]): seq[byte] =
         # Compute filler string
         let fillerLength = (t + 1) * k
         let zeroPadding = newSeq[byte](fillerLength)
-        filler = aes_ctr(aes_key, iv, filler & zeroPadding)
-        
+        filler = aes_ctr_start_index(aes_key, iv, filler & zeroPadding, (((t + 1) * (r - i)) + t + 2) * k)
+
     return filler
 
 #[
@@ -110,7 +110,7 @@ proc computeBetaGammaDelta(s: seq[seq[byte]], hop: openArray[Hop], msg: Message,
         if i == sLen - 1:
             let paddingLength = (((t + 1) * (r - L)) + t + 2) * k
             let zeroPadding = newSeq[byte](paddingLength)
-            beta = aes_ctr(beta_aes_key, beta_iv, zeroPadding) & filler
+            beta = aes_ctr(beta_aes_key, beta_iv, zeroPadding) & filler 
 
             delta = aes_ctr(delta_aes_key, delta_iv, serializeMessage(msg)) 
         else:
