@@ -1,4 +1,4 @@
-import config
+import ../src/config, ../src/pow
 import ../src/serialization
 import unittest
 
@@ -16,9 +16,10 @@ suite "serialization_tests":
 
   test "serialize_and_deserialize_message":
     let message = initMessage(newSeq[byte](messageSize))
-    let serialized = serializeMessage(message)
+    let msgPow = initMessage(attachPow(getMessage(message)))
+    let serialized = serializeMessage(msgPow)
     let deserialized = deserializeMessage(serialized)
-    assert getMessage(message) == getMessage(deserialized), "Deserialized message does not match the original message"
+    assert getMessage(msgPow) == getMessage(deserialized), "Deserialized message does not match the original message"
 
   test "serialize_and_deserialize_hop":
     let hop = initHop(newSeq[byte](addrSize))
@@ -59,7 +60,7 @@ suite "serialization_tests":
     let (dHeader, dPayload)  = getSphinxPacket(deserialized)
 
     let (alpha, beta, gamma) = getHeader(header)
-    let (dAlpha, dBeta, dGamma) = getHeader(header)
+    let (dAlpha, dBeta, dGamma) = getHeader(dHeader)
 
     assert alpha == dAlpha, "Deserialized alpha does not match the original alpha"
     assert beta == dBeta, "Deserialized beta does not match the original beta"

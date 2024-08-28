@@ -31,7 +31,7 @@ proc getMessage*(message: Message): seq[byte] =
   result = message.Content
 
 proc serializeMessage*(message: Message): seq[byte] =
-    assert len(message.Content) == messageSize, "Message must be exactly " & $messageSize & " bytes"
+    assert len(message.Content) == messageSize + powSize, "Message with PoW must be exactly " & $(messageSize + powSize) & " bytes"
     result = newSeq[byte](k) # Prepend k bytes of zero padding
     result.add(message.Content)
 

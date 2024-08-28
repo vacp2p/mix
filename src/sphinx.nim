@@ -1,4 +1,4 @@
-import config, crypto, curve25519, serialization, tag_manager
+import config, crypto, curve25519, pow, serialization, tag_manager
 import std/math, sequtils
 
 # Define possible outcomes of processing a Sphinx packet
@@ -7,6 +7,7 @@ type
     Success,                # Packet processed successfully
     Duplicate,              # Packet was discarded due to duplicate tag
     InvalidMAC,             # Packet was discarded due to MAC verification failure
+    InvalidPoW             # Packet was discarded due to PoW verification failure
 
 # const lambda* = 500 # Parameter for exp distribution for generating random delay
 
@@ -123,13 +124,16 @@ proc computeBetaGammaDelta(s: seq[seq[byte]], hop: openArray[Hop], msg: Message,
     return (beta, gamma, delta)
 
 proc wrapInSphinxPacket*( msg: Message, publicKeys: openArray[FieldElement], delay: seq[seq[byte]], hop: openArray[Hop]): seq[byte] =
+    # Compute PoW
+    let msgPow = initMessage(attachPow(getMessage(msg)))
+
     # Compute alphas and shared secrets
     let (alpha_0, s, errMsg) = computeAlpha(publicKeys)
     if errMsg.len > 0:
         return @[]
 
     # Compute betas, gammas, and deltas
-    let (beta_0, gamma_0, delta_0) = computeBetaGammaDelta(s, hop, msg, delay)
+    let (beta_0, gamma_0, delta_0) = computeBetaGammaDelta(s, hop, msgPow, delay)
     
     # Serialize sphinx packet
     let sphinxPacket = initSphinxPacket(initHeader(alpha_0, beta_0, gamma_0), delta_0)
@@ -182,8 +186,11 @@ proc processSphinxPacket*(serSphinxPacket: seq[byte], privateKey: FieldElement):
     zeroPadding = newSeq[byte](paddingLength)
     
     if B[0..paddingLength - 1] == zeroPadding:
-        return (Hop(), @[], getMessage(deserializeMessage(delta_prime)), Success)
-        
+        let msgPow = getMessage(deserializeMessage(delta_prime))
+        if verifyPow(msgPow):
+            return (Hop(), @[], msgPow[0..messageSize - 1], Success)
+        else:
+            return (Hop(), @[], @[], InvalidPoW)
     else:
         # Extract routing information from B
         let routingInfo = deserializeRoutingInfo(B)

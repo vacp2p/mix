@@ -11,5 +11,5 @@ const
   delaySize* = 2 # Delay size
   addrSize* = (t * k) - delaySize # Address size 
   messageSize* = 2413 - headerSize - k - powSize # Size of the message itself
-  payloadSize* = messageSize + k  # Total payload size
+  payloadSize* = messageSize + powSize + k  # Total payload size
   packetSize* = headerSize + payloadSize # Total packet size
