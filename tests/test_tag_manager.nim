@@ -1,4 +1,4 @@
-import unittest, tag_manager, curve25519, strutils, tables
+import unittest, ../src/tag_manager, ../src/curve25519, tables
 
 suite "tag_manager_tests":
     # Setup to initialize the tag manager before running tests
