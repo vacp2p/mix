@@ -1,4 +1,4 @@
-import os, unittest, crypto, pow
+import os, unittest, ../src/crypto, ../src/pow
 import std/random, std/times
 
 # Helper function to generates a 32-byte array with the specified number of leading zero bits.
