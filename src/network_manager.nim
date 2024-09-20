@@ -2,7 +2,9 @@ import chronos
 import libp2p
 import libp2p/multiaddress
 import libp2p/peerinfo
+import libp2p/crypto/crypto
 import strutils
+import options
 
 type 
   NetworkManager* = ref object
@@ -10,8 +12,14 @@ type
 
 proc newNetworkManager*(): NetworkManager =
   let rng = newRng()
+  let seckey = PrivateKey.random(ECDSA, rng[]).tryGet()
   result = NetworkManager(
-    switch: newStandardSwitch(rng = rng)
+    switch: newStandardSwitch(
+      privKey = some(seckey),
+      addrs = @[MultiAddress.init("/ip4/127.0.0.1/tcp/0").tryGet()],
+      secureManagers = [SecureProtocol.Noise],
+      rng = rng
+    )
   )
 
 proc start*(nm: NetworkManager) {.async.} =
@@ -20,15 +28,25 @@ proc start*(nm: NetworkManager) {.async.} =
 proc stop*(nm: NetworkManager) {.async.} =
   await nm.switch.stop()
 
-proc dialNextHop*(nm: NetworkManager, nextHopMultiaddr: string, protocolId: string): Future[Connection] =
-  let ma = MultiAddress.init(nextHopMultiaddr).tryGet()
-  let parts = nextHopMultiaddr.split("/")
+proc dialPeer*(nm: NetworkManager, peerMultiaddr: string, protocolId: string): Future[Connection] {.async.} =
+  let ma = MultiAddress.init(peerMultiaddr).tryGet()
+  let parts = peerMultiaddr.split("/")
   let peerIdStr = parts[^1]
   let peerId = PeerID.init(peerIdStr).tryGet()
-  nm.switch.dial(peerId, @[ma], protocolId)
-
-proc mount*(nm: NetworkManager, proto: LPProtocol) =
-  nm.switch.mount(proto)
+  
+  echo "Attempting to dial peer: ", peerIdStr
+  echo "Using protocol: ", protocolId
+  
+  try:
+    let conn = await nm.switch.dial(peerId, @[ma], protocolId)
+    echo "Connection established successfully"
+    return conn
+  except CatchableError as e:
+    echo "Error during dial: ", e.msg
+    raise e
 
 proc getPeerInfo*(nm: NetworkManager): PeerInfo =
   nm.switch.peerInfo
+
+proc mount*(nm: NetworkManager, proto: LPProtocol) =
+  nm.switch.mount(proto)
