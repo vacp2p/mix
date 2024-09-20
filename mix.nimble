@@ -6,7 +6,7 @@ license       = "MIT"
 
 # Dependencies
 requires "chronos >= 4.0.3"
-requires "libp2p >= 1.4.0"
+requires "libp2p >= 1.5.0"
 requires "nim >= 2.0.8"
 requires "nimcrypto >= 0.6.0"
 requires "serialization >= 0.2.2"
