@@ -1,20 +1,27 @@
-import tables, curve25519
+import tables, curve25519, locks
 
-# Define a global variable for the tag manager
-var seenTags*: Table[FieldElement, bool]
+type
+  TagManager* = ref object
+    lock: Lock
+    seenTags: Table[FieldElement, bool]
 
-# Initialize the tag manager
-proc initTagManager*() =
-  seenTags = initTable[FieldElement, bool]()
+proc initTagManager*(): TagManager =
+  new(result)
+  result.seenTags = initTable[FieldElement, bool]()
+  initLock(result.lock)
 
-# Add a tag to the seen list
-proc addTag*(tag: FieldElement) =
-  seenTags[tag] = true
+proc addTag*(tm: TagManager, tag: FieldElement) {.gcsafe.} =
+  withLock tm.lock:
+    tm.seenTags[tag] = true
 
-# Check if a tag has been seen
-proc isTagSeen*(tag: FieldElement): bool =
-  seenTags.contains(tag)
+proc isTagSeen*(tm: TagManager, tag: FieldElement): bool {.gcsafe.} =
+  withLock tm.lock:
+    result = tm.seenTags.contains(tag)
 
-# Remove a tag from the seen list
-proc removeTag*(tag: FieldElement) =
-  seenTags.del(tag)
+proc removeTag*(tm: TagManager, tag: FieldElement) {.gcsafe.} =
+  withLock tm.lock:
+    tm.seenTags.del(tag)
+
+proc clearTags*(tm: TagManager) {.gcsafe.} =
+  withLock tm.lock:
+    tm.seenTags.clear()

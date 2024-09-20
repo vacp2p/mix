@@ -52,26 +52,30 @@ proc createDummyData(): (Message, seq[FieldElement], seq[FieldElement], seq[seq[
 
 # Unit tests for sphinx.nim
 suite "Sphinx Tests":
+  var tm: TagManager
+
+  setup:
+    tm = initTagManager()
+
+  teardown:
+    clearTags(tm)
   
   test "sphinx_wrap_and_process":
-    # Initialize tag manager
-    initTagManager()
-
     let (message, privateKeys, publicKeys, delay, hops) = createDummyData()
     let packet = wrapInSphinxPacket(message, publicKeys, delay, hops)
     assert packet.len == packetSize, "Packet size be exactly " & $packetSize & " bytes"
     
-    let (address1, delay1, processedPacket1, status1) = processSphinxPacket(packet, privateKeys[0])
+    let (address1, delay1, processedPacket1, status1) = processSphinxPacket(packet, privateKeys[0], tm)
     assert status1 == Success, "Processing status should be Success"
     assert processedPacket1.len == packetSize, "Packet size be exactly " & $packetSize & " bytes"
     assert not ifExit(address1, delay1, processedPacket1, status1), "Packet processing failed"
 
-    let (address2, delay2, processedPacket2, status2) = processSphinxPacket(processedPacket1, privateKeys[1])
+    let (address2, delay2, processedPacket2, status2) = processSphinxPacket(processedPacket1, privateKeys[1], tm)
     assert status2 == Success, "Processing status should be Success"
     assert processedPacket2.len == packetSize, "Packet size be exactly " & $packetSize & " bytes"
     assert not ifExit(address2, delay2, processedPacket2, status2), "Packet processing failed"
 
-    let (address3, delay3, processedPacket3, status3) = processSphinxPacket(processedPacket2, privateKeys[2])
+    let (address3, delay3, processedPacket3, status3) = processSphinxPacket(processedPacket2, privateKeys[2], tm)
     assert status3 == Success, "Processing status should be Success"
     assert ifExit(address3, delay3, processedPacket3, status3), "Packet processing failed"
 
@@ -91,7 +95,7 @@ suite "Sphinx Tests":
     # Corrupt the MAC for testing
     var tamperedPacket = packet
     tamperedPacket[0] = packet[0] xor 0x01
-    let (_, _, _, status) = processSphinxPacket(tamperedPacket, privateKeys[0])
+    let (_, _, _, status) = processSphinxPacket(tamperedPacket, privateKeys[0], tm)
     assert status == InvalidMAC, "Processing status should be InvalidMAC"
 
   test "sphinx_process_duplicate_tag":
@@ -100,9 +104,9 @@ suite "Sphinx Tests":
     assert packet.len == packetSize, "Packet size be exactly " & $packetSize & " bytes"
 
     # Process the packet twice to test duplicate tag handling
-    let (_, _, _, status1) = processSphinxPacket(packet, privateKeys[0])
+    let (_, _, _, status1) = processSphinxPacket(packet, privateKeys[0], tm)
     assert status1 == Success, "Processing status should be Success"
-    let (_, _, _, status2) = processSphinxPacket(packet, privateKeys[0])
+    let (_, _, _, status2) = processSphinxPacket(packet, privateKeys[0], tm)
     assert status2 == Duplicate, "Processing status should be Duplicate"
 
   test "sphinx_wrap_and_process_message_sizes":
@@ -117,17 +121,17 @@ suite "Sphinx Tests":
       let packet = wrapInSphinxPacket(initMessage(paddedMessage), publicKeys, delay, hops)
       assert packet.len == packetSize, "Packet size be exactly " & $packetSize & " bytes for message size " & $messageSize
 
-      let (address1, delay1, processedPacket1, status1) = processSphinxPacket(packet, privateKeys[0])
+      let (address1, delay1, processedPacket1, status1) = processSphinxPacket(packet, privateKeys[0], tm)
       assert status1 == Success, "Processing status should be Success"
       assert processedPacket1.len == packetSize, "Packet size be exactly " & $packetSize & " bytes"
       assert not ifExit(address1, delay1, processedPacket1, status1), "Packet processing failed"
       
-      let (address2, delay2, processedPacket2, status2) = processSphinxPacket(processedPacket1, privateKeys[1])
+      let (address2, delay2, processedPacket2, status2) = processSphinxPacket(processedPacket1, privateKeys[1], tm)
       assert status2 == Success, "Processing status should be Success"
       assert processedPacket2.len == packetSize, "Packet size be exactly " & $packetSize & " bytes"
       assert not ifExit(address2, delay2, processedPacket2, status2), "Packet processing failed"
       
-      let (address3, delay3, processedPacket3, status3) = processSphinxPacket(processedPacket2, privateKeys[2])
+      let (address3, delay3, processedPacket3, status3) = processSphinxPacket(processedPacket2, privateKeys[2], tm)
       assert status3 == Success, "Processing status should be Success"
       assert ifExit(address3, delay3, processedPacket3, status3), "Packet processing failed"
       

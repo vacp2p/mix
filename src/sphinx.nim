@@ -139,7 +139,7 @@ proc wrapInSphinxPacket*( msg: Message, publicKeys: openArray[FieldElement], del
     let sphinxPacket = initSphinxPacket(initHeader(alpha_0, beta_0, gamma_0), delta_0)
     return serializeSphinxPacket(sphinxPacket)
 
-proc processSphinxPacket*(serSphinxPacket: seq[byte], privateKey: FieldElement): (Hop, seq[byte], seq[byte], ProcessingStatus) =
+proc processSphinxPacket*(serSphinxPacket: seq[byte], privateKey: FieldElement, tm: var TagManager): (Hop, seq[byte], seq[byte], ProcessingStatus) =
     # Deserialize the Sphinx packet
     let sphinxPacket = deserializeSphinxPacket(serSphinxPacket)
     let (header, payload) = getSphinxPacket(sphinxPacket)
@@ -150,7 +150,7 @@ proc processSphinxPacket*(serSphinxPacket: seq[byte], privateKey: FieldElement):
     let sBytes = fieldElementToBytes(s)
     
     # Check if the tag has been seen
-    if isTagSeen(s):
+    if isTagSeen(tm, s):
         # If the tag is in the seen list, discard the message
         return (Hop(), @[], @[], Duplicate)
     
@@ -162,7 +162,7 @@ proc processSphinxPacket*(serSphinxPacket: seq[byte], privateKey: FieldElement):
         return (Hop(), @[], @[], InvalidMAC)
 
     # Store the tag as seen
-    addTag(s)
+    addTag(tm, s)
 
     # Derive AES key and IV
     let beta_aes_key = kdf(deriveKeyMaterial("aes_key", sBytes))

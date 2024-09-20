@@ -1,42 +1,44 @@
-import unittest, ../src/tag_manager, ../src/curve25519, tables
+import unittest, ../src/tag_manager, ../src/curve25519
 
 suite "tag_manager_tests":
-    # Setup to initialize the tag manager before running tests
-    initTagManager()
+  var tm: TagManager
 
-    test "add_and_check_tag":
-        let tag = generateRandomFieldElement()
-        addTag(tag)
-        check isTagSeen(tag)
-        let nonexistentTag = generateRandomFieldElement()
-        check not isTagSeen(nonexistentTag)
+  setup:
+    tm = initTagManager()
 
-    test "remove_tag":
-        let tag = generateRandomFieldElement()
-        addTag(tag)
-        check isTagSeen(tag)
-        removeTag(tag)
-        check not isTagSeen(tag)
+  teardown:
+    clearTags(tm)
 
-    test "check_tag_presence":
-        let tag = generateRandomFieldElement()
-        check not isTagSeen(tag)
-        addTag(tag)
-        check isTagSeen(tag)
-        removeTag(tag)
-        check not isTagSeen(tag)
+  test "add_and_check_tag":
+    let tag = generateRandomFieldElement()
+    addTag(tm, tag)
+    check isTagSeen(tm, tag)
+    let nonexistentTag = generateRandomFieldElement()
+    check not isTagSeen(tm, nonexistentTag)
 
-    test "handle_multiple_tags":
-        let tag1 = generateRandomFieldElement()
-        let tag2 = generateRandomFieldElement()
-        addTag(tag1)
-        addTag(tag2)
-        check isTagSeen(tag1)
-        check isTagSeen(tag2)
-        removeTag(tag1)
-        removeTag(tag2)
-        check not isTagSeen(tag1)
-        check not isTagSeen(tag2)
+  test "remove_tag":
+    let tag = generateRandomFieldElement()
+    addTag(tm, tag)
+    check isTagSeen(tm, tag)
+    removeTag(tm, tag)
+    check not isTagSeen(tm, tag)
 
-    # Teardown to clean up after running tests
-    clear(seenTags)
+  test "check_tag_presence":
+    let tag = generateRandomFieldElement()
+    check not isTagSeen(tm, tag)
+    addTag(tm, tag)
+    check isTagSeen(tm, tag)
+    removeTag(tm, tag)
+    check not isTagSeen(tm, tag)
+
+  test "handle_multiple_tags":
+    let tag1 = generateRandomFieldElement()
+    let tag2 = generateRandomFieldElement()
+    addTag(tm, tag1)
+    addTag(tm, tag2)
+    check isTagSeen(tm, tag1)
+    check isTagSeen(tm, tag2)
+    removeTag(tm, tag1)
+    removeTag(tm, tag2)
+    check not isTagSeen(tm, tag1)
+    check not isTagSeen(tm, tag2)
