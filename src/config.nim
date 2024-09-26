@@ -13,3 +13,4 @@ const
   messageSize* = 2413 - headerSize - k - powSize # Size of the message itself
   payloadSize* = messageSize + powSize + k  # Total payload size
   packetSize* = headerSize + payloadSize # Total packet size
+  mixMsgSize* = 8 + packetSize # Total mix protocol message size

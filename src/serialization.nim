@@ -133,6 +133,6 @@ proc serializeMixProtocolMsg*(msg: MixProtocolMsg): seq[byte] =
     result = @seqNoBytes & sphinxPktBytes
 
 proc deserializeMixProtocolMsg*(data: openArray[byte]): MixProtocolMsg =
-    assert len(data) == 8 + packetSize, "Sphinx packet size must be exactly " & $(8 + packetSize) & " bytes"
+    assert len(data) == mixMsgSize, "Sphinx packet size must be exactly " & $(mixMsgSize) & " bytes"
     result.SeqNo = fromBytesBE(uint64, @data[0..7])
     result.SphinxPkt = deserializeSphinxPacket(data[8..^1])
