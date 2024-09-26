@@ -66,3 +66,27 @@ suite "serialization_tests":
     assert beta == dBeta, "Deserialized beta does not match the original beta"
     assert gamma == dGamma, "Deserialized gamma does not match the original gammaa"
     assert payload == dPayload, "Deserialized payload does not match the original payload"
+
+  test "serialize_and_deserialize_mix_protocol_msg":
+    let header = initHeader(
+      newSeq[byte](alphaSize),
+      newSeq[byte](betaSize),
+      newSeq[byte](gammaSize)
+    )
+    let payload = newSeq[byte](payloadSize)
+    let packet = initSphinxPacket(header, payload)
+    let seqNo: uint64 = 12345
+    let mixProtocolMsg = initMixProtocolMsg(seqNo, packet)
+    let serialized = serializeMixProtocolMsg(mixProtocolMsg)
+    let deserialized = deserializeMixProtocolMsg(serialized)
+
+    let (dSeqNo, dPacket) = getMixProtocolMsg(deserialized)
+    let (dHeader, dPayload) = getSphinxPacket(dPacket)
+    let (alpha, beta, gamma) = getHeader(header)
+    let (dAlpha, dBeta, dGamma) = getHeader(dHeader)
+
+    assert seqNo == dSeqNo, "Deserialized sequence number does not match the original sequence number"
+    assert alpha == dAlpha, "Deserialized alpha does not match the original alpha"
+    assert beta == dBeta, "Deserialized beta does not match the original beta"
+    assert gamma == dGamma, "Deserialized gamma does not match the original gamma"
+    assert payload == dPayload, "Deserialized payload does not match the original payload"

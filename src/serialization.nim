@@ -1,4 +1,5 @@
 import config
+import stew/endians2
 
 type
   Header* = object
@@ -113,3 +114,25 @@ proc deserializeSphinxPacket*(data: openArray[byte]): SphinxPacket =
     result.Hdr.Beta = data[alphaSize..(alphaSize + betaSize - 1)]
     result.Hdr.Gamma = data[(alphaSize + betaSize)..(headerSize - 1)]
     result.Payload = data[headerSize..^1]
+
+type
+    MixProtocolMsg* = object
+        SeqNo: uint64
+        SphinxPkt: SphinxPacket
+
+proc initMixProtocolMsg*(seqNo: uint64, sphinxPkt: SphinxPacket): MixProtocolMsg =
+  result.SeqNo = seqNo
+  result.SphinxPkt = sphinxPkt
+
+proc getMixProtocolMsg*(msg: MixProtocolMsg): (uint64, SphinxPacket) =
+  (msg.SeqNo, msg.SphinxPkt)
+
+proc serializeMixProtocolMsg*(msg: MixProtocolMsg): seq[byte] =
+    let seqNoBytes = msg.SeqNo.toBytesBE()
+    let sphinxPktBytes = serializeSphinxPacket(msg.SphinxPkt)
+    result = @seqNoBytes & sphinxPktBytes
+
+proc deserializeMixProtocolMsg*(data: openArray[byte]): MixProtocolMsg =
+    assert len(data) == 8 + packetSize, "Sphinx packet size must be exactly " & $(8 + packetSize) & " bytes"
+    result.SeqNo = fromBytesBE(uint64, @data[0..7])
+    result.SphinxPkt = deserializeSphinxPacket(data[8..^1])
