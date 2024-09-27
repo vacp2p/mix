@@ -1,5 +1,4 @@
 import config
-import stew/endians2
 
 type
   Header* = object
