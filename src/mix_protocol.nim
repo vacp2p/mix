@@ -1,5 +1,5 @@
 import chronos
-import config, curve25519, serialization, sphinx, tag_manager
+import config, curve25519, serialization, sphinx, tag_manager, utils
 import libp2p
 import libp2p/protocols/protocol
 import libp2p/stream/connection
@@ -26,60 +26,63 @@ proc new*(T: typedesc[MixProtocol], switch: Switch): T =
       if receivedBytes.len == 0:
         break  # No data, end of stream
 
-      while receivedBytes.len >= packetSize:
-        let packet = receivedBytes[0..packetSize-1]
-        receivedBytes = receivedBytes[packetSize..^1]  # Remove the processed packet
+      # Process the packet
+      let (nextHop, delay, processedPkt, status) = processSphinxPacket(receivedBytes, mixProto.privateKey, mixProto.tagManager)
 
-        # Process the packet
-        var tm = mixProto.tagManager
-        let (nextHop, delay, processedPkt, status) = processSphinxPacket(packet, mixProto.privateKey, tm)
-        mixProto.tagManager = tm  # Update the tagManager after processing
+      case status:
+      of Success:
+        if (nextHop == Hop()) and (delay == @[]):
+          # This is the exit node, forward to local ping protocol instance
+          try:
+            let pingStream = await mixProto.switch.dialProtocol(mixProto.switch.peerInfo.peerId, PingProtocolID)
+            await pingStream.writeLP(processedPkt)
+            await pingStream.close()
+          except CatchableError as e:
+            echo "Failed to forward to ping protocol: ", e.msg
+        else:
+          # Add delay
+          let delayMillis = (delay[0].int shl 8) or delay[1].int
+          await sleepAsync(milliseconds(delayMillis))
 
-        case status:
-        of Success:
-          if not ((nextHop == Hop()) and (delay == @[]) and (status == Success)):
-            # Add delay
-            let delayMillis = (delay[0].int shl 8) or delay[1].int
-            await sleepAsync(milliseconds(delayMillis))
+          # Forward to next hop
+          let nextHopBytes = getHop(nextHop)
+          let fullAddrStr = bytesToMultiAddr(nextHopBytes)
+          let parts = fullAddrStr.split("/mix/")
+          if parts.len != 2:
+            echo "Invalid multiaddress format: ", fullAddrStr
+            return
 
-            # Forward to next hop
-            let fullAddrStr = cast[string](getHop(nextHop))
-            let parts = fullAddrStr.split("/mix/")
-            if parts.len != 2:
-              echo "Invalid multiaddress format: ", fullAddrStr
-              return
+          let locationAddrStr = parts[0]
+          let peerIdStr = parts[1]
 
-            let locationAddrStr = parts[0]
-            let peerIdStr = parts[1]
+          # Create MultiAddress and PeerId
+          let locationAddrRes = MultiAddress.init(locationAddrStr)
+          if locationAddrRes.isErr:
+            echo "Failed to parse location multiaddress: ", locationAddrStr
+            return
+          let locationAddr = locationAddrRes.get()
 
-            # Create MultiAddress and PeerId
-            let locationAddrRes = MultiAddress.init(locationAddrStr)
-            if locationAddrRes.isErr:
-              echo "Failed to parse location multiaddress: ", locationAddrStr
-              return
-            let locationAddr = locationAddrRes.get()
+          let peerIdRes = PeerId.init(peerIdStr)
+          if peerIdRes.isErr:
+            echo "Failed to parse PeerId: ", peerIdStr
+            return
+          let peerId = peerIdRes.get()
 
-            let peerIdRes = PeerId.init(peerIdStr)
-            if peerIdRes.isErr:
-              echo "Failed to parse PeerId: ", peerIdStr
-              return
-            let peerId = peerIdRes.get()
-
-            var nextHopConn: Connection
-            try:
-              nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
-              await nextHopConn.writeLp(processedPkt)
-            except CatchableError as e:
-              echo "Failed to dial next hop: ", e.msg
-            finally:
-              if not nextHopConn.isNil:
-                await nextHopConn.close()
-        of Duplicate:
-          discard
-        of InvalidMAC:
-          discard
-        of InvalidPoW:
-          discard
+          var nextHopConn: Connection
+          try:
+            nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
+            await nextHopConn.writeLp(processedPkt)
+          except CatchableError as e:
+            echo "Failed to dial next hop: ", e.msg
+          finally:
+            if not nextHopConn.isNil:
+              await nextHopConn.close()
+      of Duplicate:
+        discard
+      of InvalidMAC:
+        discard
+      of InvalidPoW:
+        discard
 
     # Close the current connection after processing
     await conn.close()
