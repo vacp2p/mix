@@ -1,4 +1,3 @@
-# mix.nimble
 version       = "0.1.0"
 author        = "Akshaya"
 description   = "A custom Mix Protocol"
@@ -15,10 +14,9 @@ requires "serialization >= 0.2.2"
 srcDir = "src"
 
 task test, "Run the test suite":
-  exec "nim c -r --path:src tests/test_crypto.nim"
-  exec "nim c -r --path:src tests/test_curve25519.nim"
-  exec "nim c -r --path:src tests/test_network_manager.nim"
-  exec "nim c -r --path:src tests/test_pow.nim"
-  exec "nim c -r --path:src tests/test_serialization.nim"
-  exec "nim c -r --path:src tests/test_sphinx.nim"
-  exec "nim c -r --path:src tests/test_tag_manager.nim"
+  exec "nim c -r tests/test_crypto.nim"
+  exec "nim c -r tests/test_curve25519.nim"
+  exec "nim c -r tests/test_pow.nim"
+  exec "nim c -r tests/test_serialization.nim"
+  exec "nim c -r tests/test_sphinx.nim"
+  exec "nim c -r tests/test_tag_manager.nim"
