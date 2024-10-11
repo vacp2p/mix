@@ -2,8 +2,7 @@ import config
 import strutils
 import stew/base58
 
-const addrBytesSize* = 39
-const paddingSize* = addrSize - addrBytesSize
+const addrBytesSize* = 46
 
 proc multiAddrToBytes*(multiAddr: string): seq[byte] =
   var parts = multiAddr.split('/')
@@ -26,15 +25,12 @@ proc multiAddrToBytes*(multiAddr: string): seq[byte] =
   result.add(byte((port shr 8) and 0xFF))
   result.add(byte(port and 0xFF))
 
-  # PeerID (32 bytes)
+  # PeerID (39 bytes)
   let peerIdBase58 = parts[6]
-  assert peerIdBase58.len == 44, "Peer ID must be exactly 44 characters"
+  assert peerIdBase58.len == 53, "Peer ID must be exactly 53 characters"
   let peerIdBytes = Base58.decode(peerIdBase58)
-  assert peerIdBytes.len == 32, "Peer ID must be exactly 32 bytes"
+  assert peerIdBytes.len == 39, "Peer ID must be exactly 39 bytes"
   result.add(peerIdBytes)
-
-  # Add 7 bytes of zero padding
-  result.add(newSeq[byte](paddingSize))
 
   assert result.len == addrSize,"Address must be exactly " & $addrSize & " bytes"
 
@@ -51,6 +47,6 @@ proc bytesToMultiAddr*(bytes: openArray[byte]): string =
   
   let port = (int(bytes[5]) shl 8) or int(bytes[6])
   
-  let peerIdBase58 = Base58.encode(bytes[7..^(paddingSize + 1)])
+  let peerIdBase58 = Base58.encode(bytes[7..^1])
 
-  return "/ip4/" & ipParts.join(".") & "/" & protocol & "/" & $port & "/mix/" & peerIdBase58
+  return "/ip4/" & ipParts.join(".") & "/" & protocol & "/" & $port & "/p2p/" & peerIdBase58
