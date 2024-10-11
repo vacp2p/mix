@@ -1,6 +1,6 @@
 import curve25519, config, utils
-import libp2p/[crypto/crypto, crypto/secp, multiaddress, peerid]
-import options, os, std/streams, stew/base58, strformat, strutils
+import libp2p/[crypto/crypto, crypto/curve25519, crypto/secp, multiaddress, peerid]
+import options, os, std/streams, strformat, strutils
 
 const MixNodeInfoSize* = addrSize + (2 * FieldElementSize) + (SkRawPublicKeySize + SkRawPrivateKeySize)
 
@@ -12,16 +12,27 @@ type
     libp2pPubKey*: SkPublicKey
     libp2pPrivKey*: SkPrivateKey
 
+proc initMixNodeInfo*(multiAddr: string, mixPubKey, mixPrivKey: FieldElement, libp2pPubKey: SkPublicKey, libp2pPrivKey: SkPrivateKey): MixNodeInfo =
+  result.multiAddr = multiAddr
+  result.mixPubKey = mixPubKey
+  result.mixPrivKey = mixPrivKey
+  result.libp2pPubKey = libp2pPubKey
+  result.libp2pPrivKey = libp2pPrivKey
+
+proc getMixNodeInfo*(info: MixNodeInfo): (string, FieldElement, FieldElement, SkPublicKey, SkPrivateKey) =
+  (info.multiAddr, info.mixPubKey, info.mixPrivKey, info.libp2pPubKey, info.libp2pPrivKey)
+
 proc serializeMixNodeInfo*(nodeInfo: MixNodeInfo): seq[byte] =
-    result = newSeq[byte](MixNodeInfoSize)
-    result.add(multiAddrToBytes(nodeInfo.multiAddr))
-    result.add(fieldElementToBytes(nodeInfo.mixPubKey))
-    result.add(fieldElementToBytes(nodeInfo.mixPrivKey))
-    result.add(nodeInfo.libp2pPubKey.getBytes())
-    result.add(nodeInfo.libp2pPrivKey.getBytes())
+    let addrBytes = multiAddrToBytes(nodeInfo.multiAddr)
+    let mixPubKeyBytes = fieldElementToBytes(nodeInfo.mixPubKey)
+    let mixPrivKeyBytes = fieldElementToBytes(nodeInfo.mixPrivKey)
+    let libp2pPubKeyBytes = nodeInfo.libp2pPubKey.getBytes()
+    let libp2pPrivKeyBytes = nodeInfo.libp2pPrivKey.getBytes()
+    
+    result = addrBytes & mixPubKeyBytes & mixPrivKeyBytes & libp2pPubKeyBytes & libp2pPrivKeyBytes
 
 proc deserializeMixNodeInfo*(data: openArray[byte]): MixNodeInfo =
-    assert len(data) == MixNodeInfoSize, "Serialized Mix node info must be exactly " & $(MixNodeInfoSize + 128) & " bytes"
+    assert len(data) == MixNodeInfoSize, "Serialized Mix node info must be exactly " & $MixNodeInfoSize & " bytes"
     result.multiAddr = bytesToMultiAddr(data[0..addrSize - 1])
     result.mixPubKey = bytesToFieldElement(data[addrSize..(addrSize + FieldElementSize - 1)])
     result.mixPrivKey = bytesToFieldElement(data[(addrSize + FieldElementSize)..(addrSize + (2 * FieldElementSize) - 1)])
@@ -34,7 +45,7 @@ proc deserializeMixNodeInfo*(data: openArray[byte]): MixNodeInfo =
     assert privKeyRes.isOk, "Failed to initialize libp2p private key"
     result.libp2pPrivKey = privKeyRes.get()
 
-const folderPath = "nodeInfo"
+const folderPath* = "nodeInfo"
 
 proc writeMixNodeInfoToFile*(node: MixNodeInfo, index: int): bool =
     if not dirExists(folderPath):
@@ -76,9 +87,9 @@ proc generateMixNodes(count: int, basePort: int = 4242): seq[MixNodeInfo] =
         let libp2pPrivKey = keyPair.seckey
         let libp2pPubKey = keyPair.pubkey
         
-        let pubKeyBytes = libp2pPubKey.getBytes()
-        let peerId = PeerId.init(pubKeyBytes)
-        let multiAddr = fmt"/ip4/127.0.0.1/tcp/{basePort + i}/mix/{peerId}"
+        let pubKeyProto = PublicKey(scheme: Secp256k1, skkey: libp2pPubKey)
+        let peerId = PeerId.init(pubKeyProto).get()
+        let multiAddr = fmt"/ip4/127.0.0.1/tcp/{basePort + i}/p2p/{peerId}"
         
         result[i] = MixNodeInfo(
         multiAddr: multiAddr,
@@ -91,18 +102,15 @@ proc generateMixNodes(count: int, basePort: int = 4242): seq[MixNodeInfo] =
 proc initializeMixNodes*(count: int, basePort: int = 4242) =
     mixNodes = generateMixNodes(count, basePort)
 
-proc getPublicMixNodeInfo*(): seq[tuple[multiaddr: string, publicKey: FieldElement]] =
-    result = newSeq[tuple[multiaddr: string, publicKey: FieldElement]](mixNodes.len)
+proc getPublicMixNodeInfo*(): seq[tuple[multiaddr: string, mixPubKey: FieldElement, libp2pPubKey: SkPublicKey]] =
+    result = newSeq[tuple[multiaddr: string, mixPubKey: FieldElement, libp2pPubKey: SkPublicKey]](mixNodes.len)
     for i, node in mixNodes:
-        result[i] = (node.multiAddr, node.mixPubKey)
+        result[i] = (node.multiAddr, node.mixPubKey, node.libp2pPubKey)
 
 proc getPeerIdFromMultiAddr*(multiAddr: string): PeerId =
     let parts = multiAddr.split("/")
     assert parts.len == 7, "Invalid multiaddress format"
-    let peerIdBase58 = parts[6]
-    let peerIdBytes = Base58.decode(peerIdBase58)
-    assert peerIdBytes.len == 32, "Peer ID must be exactly 32 bytes"
-    return PeerId.init(peerIdBytes).get()
+    return PeerId.init(parts[6]).get()
 
 proc findMixNodeByPeerId*(peerId: PeerId): Option[MixNodeInfo] =
     for node in mixNodes:
