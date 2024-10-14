@@ -9,25 +9,28 @@ suite "Mix Node Tests":
     var count = 5
     initializeMixNodes(count)
     deleteNodeInfoFolder()
+    deletePubInfoFolder()
 
   teardown:
     deleteNodeInfoFolder()
+    deletePubInfoFolder()
 
   test "get_mix_node_by_index":
     assert mixNodes.len == count, "Number of mix nodes simulated is incorrect."
 
     for i in 0..<count:
       let node = getMixNodeByIndex(i)
+      let (multiAddr, mixPubKey, mixPrivKey, libp2pPubKey, libp2pPrivKey) = getMixNodeInfo(node)
 
-      let pubKeyProto = PublicKey(scheme: Secp256k1, skkey: node.libp2pPubKey)
+      let pubKeyProto = PublicKey(scheme: Secp256k1, skkey: libp2pPubKey)
       let peerId = PeerId.init(pubKeyProto).get()
-      assert node.multiAddr == fmt"/ip4/127.0.0.1/tcp/{4242 + i}/p2p/{peerId}", "Multiaddress of node " & $i & " is invalid."
+      assert multiAddr == fmt"/ip4/127.0.0.1/tcp/{4242 + i}/p2p/{peerId}", "Multiaddress of node " & $i & " is invalid."
 
-      assert fieldElementToBytes(node.mixPubKey).len == FieldElementSize, "Mix public key of node " & $i & " is not " & $FieldElementSize & "bytes."
-      assert fieldElementToBytes(node.mixPrivKey).len == FieldElementSize, "Mix privte key of node " & $i & " is not " & $FieldElementSize & "bytes."
+      assert fieldElementToBytes(mixPubKey).len == FieldElementSize, "Mix public key of node " & $i & " is not " & $FieldElementSize & "bytes."
+      assert fieldElementToBytes(mixPrivKey).len == FieldElementSize, "Mix privte key of node " & $i & " is not " & $FieldElementSize & "bytes."
 
-      assert node.libp2pPubKey.getBytes().len == SkRawPublicKeySize, "Libp2p public key of node " & $i & " is not " & $SkRawPublicKeySize & "bytes."
-      assert node.libp2pPrivKey.getBytes().len == SkRawPrivateKeySize, "Libp2p private key of node " & $i & " is not " & $SkRawPrivateKeySize & "bytes."
+      assert libp2pPubKey.getBytes().len == SkRawPublicKeySize, "Libp2p public key of node " & $i & " is not " & $SkRawPublicKeySize & "bytes."
+      assert libp2pPrivKey.getBytes().len == SkRawPrivateKeySize, "Libp2p private key of node " & $i & " is not " & $SkRawPrivateKeySize & "bytes."
 
   test "get_peer_id_from_multiaddr":
     let multiAddr = "/ip4/127.0.0.1/tcp/4242/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"
@@ -64,10 +67,10 @@ suite "Mix Node Tests":
         let node = getMixNodeByIndex(i)
         let (multiAddr, mixPubKey, mixPrivKey, libp2pPubKey, libp2pPrivKey) = getMixNodeInfo(node)
         
-        assert writeMixNodeInfoToFile(node, i), "File mixNode_" & $i & ": write error."
-        assert dirExists(folderPath), "Node info folder does not exist."
+        assert writeMixNodeInfoToFile(node, i), "File nodeInfo/mixNode_" & $i & ": write error."
+        assert dirExists(nodeInfoFolderPath), "nodeInfo folder does not exist."
         let readNodeOpt = readMixNodeInfoFromFile(i)
-        assert readNodeOpt.isSome, "File mixNode_" & $i & ": read error."
+        assert readNodeOpt.isSome, "File nodeInfo/mixNode_" & $i & ": read error."
 
         let readNode = readNodeOpt.get()
         let (rMultiAddr, rMixPubKey, rMixPrivKey, rLibp2pPubKey, rLibp2pPrivKey) = getMixNodeInfo(readNode)
@@ -77,6 +80,23 @@ suite "Mix Node Tests":
         assert compareFieldElements(rMixPrivKey, mixPrivKey), "Mix private key does not match original mix private key."
         assert rLibp2pPubKey.getBytes() == libp2pPubKey.getBytes(), "Libp2p public key does not match original libp2p public key."
         assert rLibp2pPrivKey.getBytes() == libp2pPrivKey.getBytes(), "Libp2p private key does not match original libp2p private key."
+
+  test "write_and_read_mix_pub_info":
+    for i in 0..<count:
+        let node = getMixPubInfoByIndex(i)
+        let (multiAddr, mixPubKey, libp2pPubKey) = getMixPubInfo(node)
+        
+        assert writePubInfoToFile(node, i), "File pubInfo/mixNode_" & $i & ": write error."
+        assert dirExists(pubInfoFolderPath), "pubInfo folder does not exist."
+        let readNodeOpt = readMixPubInfoFromFile(i)
+        assert readNodeOpt.isSome, "File pubInfo/mixNode_" & $i & ": read error."
+
+        let readNode = readNodeOpt.get()
+        let (rMultiAddr, rMixPubKey, rLibp2pPubKey) = getMixPubInfo(readNode)
+
+        assert rMultiAddr == multiAddr, "Multiaddress does not match original multiaddress."
+        assert compareFieldElements(rMixPubKey, mixPubKey), "Mix public key does not match original mix public key."
+        assert rLibp2pPubKey.getBytes() == libp2pPubKey.getBytes(), "Libp2p public key does not match original libp2p public key."
 
   test "read_nonexistent_mix_node_info":
     let readNodeOpt = readMixNodeInfoFromFile(999)  # Non-existent index
@@ -89,4 +109,5 @@ suite "Mix Node Tests":
 
     for i in 0..<count:
       let node = getMixNodeByIndex(i)
-      check node.multiAddr.contains($(basePort + i))
+      let (multiAddr, _, _, _, _) = getMixNodeInfo(node)
+      check multiAddr.contains($(basePort + i))
