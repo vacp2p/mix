@@ -1,5 +1,5 @@
 import chronos
-import config, curve25519, serialization, sphinx, tag_manager, utils
+import config, curve25519, mix_node, serialization, sphinx, tag_manager, utils
 import libp2p
 import libp2p/protocols/protocol
 import libp2p/stream/connection
@@ -9,13 +9,27 @@ const MixProtocolID = "/mix/proto/1.0.0"
 
 type
   MixProtocol* = ref object of LPProtocol
-    privateKey: FieldElement
-    publicKey: FieldElement
+    mixNodeInfo: MixNodeInfo
+    pubNodeInfo: seq[MixPubInfo]
     switch: Switch
     tagManager: TagManager
 
-proc new*(T: typedesc[MixProtocol], switch: Switch): T =
-  let (privateKey, publicKey) = generateKeyPair()
+proc loadMixNodeInfo*(index: int): MixNodeInfo =
+  let mixNodeInfoOpt = readMixNodeInfoFromFile(index)
+  assert mixNodeInfoOpt.isSome, "Failed to load node info from file."
+  return mixNodeInfoOpt.get()
+
+proc loadAllButIndexMixPubInfo*(index, numNodes: int): seq[MixPubInfo] =
+  var pubInfoList: seq[MixPubInfo] = @[]
+  for i in 0..<numNodes:
+    if i != index:
+      let pubInfoOpt = readMixPubInfoFromFile(i)
+      if pubInfoOpt.isSome:
+        pubInfoList.add(pubInfoOpt.get())
+  return pubInfoList
+
+proc new*(T: typedesc[MixProtocol], index: int, switch: Switch): T =
+  let mixNodeInfo = loadMixNodeInfo(index)
   let tagManager = initTagManager()
   
   proc handle(conn: Connection, proto: string) {.async.} =
@@ -90,8 +104,7 @@ proc new*(T: typedesc[MixProtocol], switch: Switch): T =
   result = T(
     codecs: @[MixProtocolID],
     handler: handle,
-    privateKey: privateKey,
-    publicKey: publicKey,
+    mixNodeInfo: MixNodeInfo,
     switch: switch,
     tagManager: tagManager
   )
