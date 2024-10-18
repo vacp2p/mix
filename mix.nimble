@@ -18,6 +18,7 @@ task test, "Run the test suite":
   exec "nim c -r tests/test_curve25519.nim"
   exec "nim c -r tests/test_mix_node.nim"
   exec "nim c -r tests/test_pow.nim"
+  exec "nim c -r tests/test_seqno_generator.nim"
   exec "nim c -r tests/test_serialization.nim"
   exec "nim c -r tests/test_sphinx.nim"
   exec "nim c -r tests/test_tag_manager.nim"
