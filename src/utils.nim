@@ -4,6 +4,31 @@ import stew/base58
 
 const addrBytesSize* = 46
 
+proc bytesToUInt16*(data: openArray[byte]): uint16 =
+    assert len(data) == 2, "Data must be exactly 2 bytes long to convert to uint16"
+    result = uint16(data[0]) shl 8 or uint16(data[1])
+
+proc uint16ToBytes*(value: uint16): seq[byte] =
+  result = @[
+    byte(value shr 8),
+    byte(value and 0xFF)
+  ]
+
+proc bytesToUInt32*(data: openArray[byte]): uint32 =
+  assert len(data) == 4, "Data must be exactly 4 bytes long to convert to uint32"
+  result = uint32(data[0]) shl 24 or
+           uint32(data[1]) shl 16 or
+           uint32(data[2]) shl 8 or
+           uint32(data[3])
+
+proc uint32ToBytes*(value: uint32): seq[byte] =
+  result = @[
+    byte(value shr 24),
+    byte(value shr 16 and 0xFF),
+    byte(value shr 8 and 0xFF),
+    byte(value and 0xFF)
+  ]
+
 proc multiAddrToBytes*(multiAddr: string): seq[byte] =
   var parts = multiAddr.split('/')
   result = @[]
@@ -22,8 +47,7 @@ proc multiAddrToBytes*(multiAddr: string): seq[byte] =
 
   # Port (2 bytes)
   let port = parseInt(parts[4])
-  result.add(byte((port shr 8) and 0xFF))
-  result.add(byte(port and 0xFF))
+  result.add(uint16ToBytes(uint16(port)))
 
   # PeerID (39 bytes)
   let peerIdBase58 = parts[6]
@@ -45,7 +69,7 @@ proc bytesToMultiAddr*(bytes: openArray[byte]): string =
 
   let protocol = if bytes[4] == 0: "tcp" else: "quic" # ToDo: TLS or QUIC (Using TCP for testing purposes)
   
-  let port = (int(bytes[5]) shl 8) or int(bytes[6])
+  let port = bytesToUInt16(bytes[5..6])
   
   let peerIdBase58 = Base58.encode(bytes[7..^1])
 
