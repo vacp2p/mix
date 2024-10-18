@@ -8,7 +8,7 @@ suite "Sequence Number Generator":
   test "init_seq_no_from_peer_id":
     let peerId = PeerId.init("16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC").get()
     let seqNo = initSeqNo(peerId)
-    check seqNo.counter != 0
+    assert seqNo.counter != 0, "Sequence number must be initialized."
 
   test "generate_seq_nos_for_different_messages":
     let peerId = PeerId.init("16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC").get()
@@ -74,4 +74,4 @@ suite "Sequence Number Generator":
       generateSeqNo(seqNo, @[byte i.uint8])
       seenValues.incl(seqNo.counter)
     
-    check seenValues.len > 9000
+    assert seenValues.len > 9000, "Sequence numbers must be uniformly distributed."
