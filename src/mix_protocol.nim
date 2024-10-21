@@ -1,8 +1,7 @@
 import chronos
 import config, curve25519, mix_node, serialization, sphinx, tag_manager, utils
 import libp2p
-import libp2p/protocols/protocol
-import libp2p/stream/connection
+import libp2p/[protocols/protocol, stream/connection]
 import os, strutils
 
 const MixProtocolID = "/mix/proto/1.0.0"
@@ -10,7 +9,7 @@ const MixProtocolID = "/mix/proto/1.0.0"
 type
   MixProtocol* = ref object of LPProtocol
     mixNodeInfo: MixNodeInfo
-    pubNodeInfo: seq[MixPubInfo]
+    pubNodeInfo: Table[PeerId, MixPubInfo]
     switch: Switch
     tagManager: TagManager
 
@@ -19,17 +18,24 @@ proc loadMixNodeInfo*(index: int): MixNodeInfo =
   assert mixNodeInfoOpt.isSome, "Failed to load node info from file."
   return mixNodeInfoOpt.get()
 
-proc loadAllButIndexMixPubInfo*(index, numNodes: int): seq[MixPubInfo] =
-  var pubInfoList: seq[MixPubInfo] = @[]
+proc loadAllButIndexMixPubInfo*(index, numNodes: int): Table[PeerId, MixPubInfo] =
+  var pubInfoTable = initTable[PeerId, MixPubInfo]()
   for i in 0..<numNodes:
     if i != index:
       let pubInfoOpt = readMixPubInfoFromFile(i)
       if pubInfoOpt.isSome:
-        pubInfoList.add(pubInfoOpt.get())
-  return pubInfoList
+        let pubInfo = pubInfoOpt.get()
+        let (multiAddr, _, _) = getMixPubInfo(pubInfo)
+        let peerId = getPeerIdFromMultiAddr(multiAddr)
+        pubInfoTable[peerId] = pubInfo
+  return pubInfoTable
 
-proc new*(T: typedesc[MixProtocol], index: int, switch: Switch): T =
+proc isMixNode(peerId: PeerId, pubNodeInfo: Table[PeerId, MixPubInfo]): bool =
+  return peerId in pubNodeInfo
+
+proc new*(T: typedesc[MixProtocol], index, numNodes: int, switch: Switch): T =
   let mixNodeInfo = loadMixNodeInfo(index)
+  let pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes)
   let tagManager = initTagManager()
   
   proc handle(conn: Connection, proto: string) {.async.} =
@@ -41,7 +47,8 @@ proc new*(T: typedesc[MixProtocol], index: int, switch: Switch): T =
         break  # No data, end of stream
 
       # Process the packet
-      let (nextHop, delay, processedPkt, status) = processSphinxPacket(receivedBytes, mixProto.privateKey, mixProto.tagManager)
+      let (_, _, mixPrivKey, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
+      let (nextHop, delay, processedPkt, status) = processSphinxPacket(receivedBytes, mixPrivKey, mixProto.tagManager)
 
       case status:
       of Success:
@@ -104,7 +111,8 @@ proc new*(T: typedesc[MixProtocol], index: int, switch: Switch): T =
   result = T(
     codecs: @[MixProtocolID],
     handler: handle,
-    mixNodeInfo: MixNodeInfo,
+    mixNodeInfo: mixNodeInfo,
+    pubNodeInfo: pubNodeInfo,
     switch: switch,
     tagManager: tagManager
   )
