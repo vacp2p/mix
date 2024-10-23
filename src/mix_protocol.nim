@@ -1,8 +1,8 @@
 import chronos
-import config, curve25519, mix_node, serialization, sphinx, tag_manager, utils
+import config, mix_node, serialization, sphinx, tag_manager, utils
 import libp2p
-import libp2p/[protocols/protocol, stream/connection]
-import os, strutils
+import libp2p/[protocols/ping, protocols/protocol, stream/connection, stream/lpstream, switch]
+import strutils
 
 const MixProtocolID = "/mix/proto/1.0.0"
 
@@ -33,6 +33,76 @@ proc loadAllButIndexMixPubInfo*(index, numNodes: int): Table[PeerId, MixPubInfo]
 proc isMixNode(peerId: PeerId, pubNodeInfo: Table[PeerId, MixPubInfo]): bool =
   return peerId in pubNodeInfo
 
+proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} =
+  while true:
+    var receivedBytes = await conn.readLp(packetSize)
+    
+    if receivedBytes.len == 0:
+      break  # No data, end of stream
+
+    # Process the packet
+    let (_, _, mixPrivKey, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
+    let (nextHop, delay, processedPkt, status) = processSphinxPacket(receivedBytes, mixPrivKey, mixProto.tagManager)
+
+    case status:
+    of Success:
+      if (nextHop == Hop()) and (delay == @[]):
+        # This is the exit node, forward to local ping protocol instance
+        try:
+          let peerInfo = mixProto.switch.peerInfo
+          let pingStream = await mixProto.switch.dial(peerInfo.peerId, peerInfo.addrs, PingCodec)
+          await pingStream.writeLP(processedPkt)
+          await pingStream.close()
+        except CatchableError as e:
+          echo "Failed to forward to ping protocol: ", e.msg
+      else:
+        # Add delay
+        let delayMillis = (delay[0].int shl 8) or delay[1].int
+        await sleepAsync(milliseconds(delayMillis))
+
+        # Forward to next hop
+        let nextHopBytes = getHop(nextHop)
+        let fullAddrStr = bytesToMultiAddr(nextHopBytes)
+        let parts = fullAddrStr.split("/mix/")
+        if parts.len != 2:
+          echo "Invalid multiaddress format: ", fullAddrStr
+          return
+
+        let locationAddrStr = parts[0]
+        let peerIdStr = parts[1]
+
+        # Create MultiAddress and PeerId
+        let locationAddrRes = MultiAddress.init(locationAddrStr)
+        if locationAddrRes.isErr:
+          echo "Failed to parse location multiaddress: ", locationAddrStr
+          return
+        let locationAddr = locationAddrRes.get()
+
+        let peerIdRes = PeerId.init(peerIdStr)
+        if peerIdRes.isErr:
+          echo "Failed to parse PeerId: ", peerIdStr
+          return
+        let peerId = peerIdRes.get()
+
+        var nextHopConn: Connection
+        try:
+          nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
+          await nextHopConn.writeLp(processedPkt)
+        except CatchableError as e:
+          echo "Failed to dial next hop: ", e.msg
+        finally:
+          if not nextHopConn.isNil:
+            await nextHopConn.close()
+    of Duplicate:
+      discard
+    of InvalidMAC:
+      discard
+    of InvalidPoW:
+      discard
+
+  # Close the current connection after processing
+  await conn.close()
+  
 proc new*(T: typedesc[MixProtocol], index, numNodes: int, switch: Switch): T =
   let mixNodeInfo = loadMixNodeInfo(index)
   let pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes)
@@ -40,73 +110,10 @@ proc new*(T: typedesc[MixProtocol], index, numNodes: int, switch: Switch): T =
   
   proc handle(conn: Connection, proto: string) {.async.} =
     var mixProto = cast[MixProtocol](conn.protocol)
-    while true:
-      var receivedBytes = await conn.readLp(packetSize)
-      
-      if receivedBytes.len == 0:
-        break  # No data, end of stream
+    let remotePeerId = conn.peerId
 
-      # Process the packet
-      let (_, _, mixPrivKey, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
-      let (nextHop, delay, processedPkt, status) = processSphinxPacket(receivedBytes, mixPrivKey, mixProto.tagManager)
-
-      case status:
-      of Success:
-        if (nextHop == Hop()) and (delay == @[]):
-          # This is the exit node, forward to local ping protocol instance
-          try:
-            let pingStream = await mixProto.switch.dialProtocol(mixProto.switch.peerInfo.peerId, PingProtocolID)
-            await pingStream.writeLP(processedPkt)
-            await pingStream.close()
-          except CatchableError as e:
-            echo "Failed to forward to ping protocol: ", e.msg
-        else:
-          # Add delay
-          let delayMillis = (delay[0].int shl 8) or delay[1].int
-          await sleepAsync(milliseconds(delayMillis))
-
-          # Forward to next hop
-          let nextHopBytes = getHop(nextHop)
-          let fullAddrStr = bytesToMultiAddr(nextHopBytes)
-          let parts = fullAddrStr.split("/mix/")
-          if parts.len != 2:
-            echo "Invalid multiaddress format: ", fullAddrStr
-            return
-
-          let locationAddrStr = parts[0]
-          let peerIdStr = parts[1]
-
-          # Create MultiAddress and PeerId
-          let locationAddrRes = MultiAddress.init(locationAddrStr)
-          if locationAddrRes.isErr:
-            echo "Failed to parse location multiaddress: ", locationAddrStr
-            return
-          let locationAddr = locationAddrRes.get()
-
-          let peerIdRes = PeerId.init(peerIdStr)
-          if peerIdRes.isErr:
-            echo "Failed to parse PeerId: ", peerIdStr
-            return
-          let peerId = peerIdRes.get()
-
-          var nextHopConn: Connection
-          try:
-            nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
-            await nextHopConn.writeLp(processedPkt)
-          except CatchableError as e:
-            echo "Failed to dial next hop: ", e.msg
-          finally:
-            if not nextHopConn.isNil:
-              await nextHopConn.close()
-      of Duplicate:
-        discard
-      of InvalidMAC:
-        discard
-      of InvalidPoW:
-        discard
-
-    # Close the current connection after processing
-    await conn.close()
+    if isMixNode(remotePeerId, mixProto.pubNodeInfo):
+      await handleMixNodeConnection(mixProto, conn)
 
   result = T(
     codecs: @[MixProtocolID],
