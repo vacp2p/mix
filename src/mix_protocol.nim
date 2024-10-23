@@ -1,8 +1,8 @@
 import chronos
-import config, mix_node, serialization, sphinx, tag_manager, utils
+import config, curve25519, mix_node, serialization, sphinx, tag_manager, utils
 import libp2p
 import libp2p/[protocols/ping, protocols/protocol, stream/connection, stream/lpstream, switch]
-import strutils
+import os, strutils
 
 const MixProtocolID = "/mix/proto/1.0.0"
 
@@ -109,10 +109,9 @@ proc new*(T: typedesc[MixProtocol], index, numNodes: int, switch: Switch): T =
   let tagManager = initTagManager()
   
   proc handle(conn: Connection, proto: string) {.async.} =
-    var mixProto = cast[MixProtocol](conn.protocol)
     let remotePeerId = conn.peerId
 
-    if isMixNode(remotePeerId, mixProto.pubNodeInfo):
+    if isMixNode(remotePeerId, pubNodeInfo):
       await handleMixNodeConnection(mixProto, conn)
 
   result = T(
@@ -123,3 +122,4 @@ proc new*(T: typedesc[MixProtocol], index, numNodes: int, switch: Switch): T =
     switch: switch,
     tagManager: tagManager
   )
+
