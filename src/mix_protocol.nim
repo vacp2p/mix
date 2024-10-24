@@ -1,8 +1,8 @@
 import chronos
-import config, curve25519, mix_node, serialization, sphinx, tag_manager, utils
+import config, curve25519, fragmentation, mix_node, sequtils, serialization, sphinx, tag_manager, utils
 import libp2p
 import libp2p/[protocols/ping, protocols/protocol, stream/connection, stream/lpstream, switch]
-import os, strutils
+import std/sysrand, strutils
 
 const MixProtocolID = "/mix/proto/1.0.0"
 
@@ -32,6 +32,51 @@ proc loadAllButIndexMixPubInfo*(index, numNodes: int): Table[PeerId, MixPubInfo]
 
 proc isMixNode(peerId: PeerId, pubNodeInfo: Table[PeerId, MixPubInfo]): bool =
   return peerId in pubNodeInfo
+
+proc cryptoRandomInt(max: int): int =
+  var bytes: array[8, byte]
+  let value = cast[uint64](bytes)
+  result = int(value mod uint64(max))
+
+proc sendChunk(mixProto: MixProtocol, chunk: seq[byte]) {.async.} =
+  var multiAddrs: seq[string] = @[]
+  var publicKeys: seq[FieldElement] = @[]
+  var hop: seq[Hop] = @[]
+  var delay: seq[seq[byte]] = @[]
+
+  # Select L mix nodes at random
+  let numMixNodes = mixProto.pubNodeInfo.len
+  assert numMixNodes > 0, "No public mix nodes available."
+
+  var pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
+  for _ in 0..<L:
+    let randomIndex = cryptoRandomInt(numMixNodes)
+    let randPeerId = pubNodeInfoKeys[randomIndex]
+
+    # Extract multiaddress, mix public key, and hop
+    let (multiAddr, mixPubKey, _) = getMixPubInfo(mixProto.pubNodeInfo[randPeerId])
+    multiAddrs.add(multiAddr)
+    publicKeys.add(mixPubKey)
+    hop.add(initHop(multiAddrToBytes(multiAddr)))
+
+    # Compute delay
+    let delayMilliSec = cryptoRandomInt(3)
+    delay.add(uint16ToBytes(uint16(delayMilliSec)))
+
+  # Wrap in Sphinx packet
+  let sphinxPacket = wrapInSphinxPacket(initMessage(chunk), publicKeys, delay, hop)
+
+  # Send the wrapped message to the first mix node in the selected path
+  let firstMixNode = multiAddrs[0]
+  var nextHopConn: Connection
+  try:
+    nextHopConn = await mixProto.switch.dial(getPeerIdFromMultiAddr(firstMixNode), @[MultiAddress.init(firstMixNode).get()], @[MixProtocolID])
+    await nextHopConn.writeLp(sphinxPacket)
+  except CatchableError as e:
+    echo "Failed to send message to next hop: ", e.msg
+  finally:
+    if not nextHopConn.isNil:
+      await nextHopConn.close()
 
 proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} =
   while true:
@@ -102,7 +147,31 @@ proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} 
 
   # Close the current connection after processing
   await conn.close()
-  
+
+proc handlePingInstanceConnection(mixProto: MixProtocol, conn: Connection) {.async.} =
+  var message: seq[byte] = @[]
+  while true:
+    var receivedBytes = await conn.readLp(1024)
+    if receivedBytes.len == 0:
+      break  # No more data, end of stream
+    message.add(receivedBytes)
+
+  if message.len == 0:
+    await conn.close()
+    return
+
+  # Pad and chunk the incoming message
+  let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
+  let peerID = getPeerIdFromMultiAddr(multiAddr)
+  let chunks = padAndChunkMessage(message, peerID)
+
+  # Wrap and send each chunk
+  for chunk in chunks:
+    await sendChunk(mixProto, serializeMessageChunk(chunk))
+
+  # Close the connection after processing
+  await conn.close()
+
 proc new*(T: typedesc[MixProtocol], index, numNodes: int, switch: Switch): T =
   let mixNodeInfo = loadMixNodeInfo(index)
   let pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes)
@@ -110,16 +179,18 @@ proc new*(T: typedesc[MixProtocol], index, numNodes: int, switch: Switch): T =
   
   proc handle(conn: Connection, proto: string) {.async.} =
     let remotePeerId = conn.peerId
-
     if isMixNode(remotePeerId, pubNodeInfo):
       await handleMixNodeConnection(mixProto, conn)
+    else:
+      await handlePingInstanceConnection(mixProto, conn)
 
   result = T(
-    codecs: @[MixProtocolID],
-    handler: handle,
     mixNodeInfo: mixNodeInfo,
     pubNodeInfo: pubNodeInfo,
     switch: switch,
     tagManager: tagManager
   )
+  result.init()
+  result.codec = MixProtocolID
+  result.handler = handle
 
