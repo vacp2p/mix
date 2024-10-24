@@ -35,8 +35,7 @@ proc deserializeMessageChunk*(data: openArray[byte]): MessageChunk =
 proc ceilDiv*(a, b: int): int =
   (a + b - 1) div b
 
-proc padAndChunkMessage*(message: string, peerId: PeerId): seq[MessageChunk] =
-  let messageBytes = cast[seq[byte]](message)
+proc padAndChunkMessage*(messageBytes: seq[byte], peerId: PeerId): seq[MessageChunk] =
   var seqNoGen = initSeqNo(peerId)
   seqNoGen.generateSeqNo(messageBytes)
 
