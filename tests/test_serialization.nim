@@ -57,7 +57,7 @@ suite "serialization_tests":
     let serialized = serializeSphinxPacket(packet)
     let deserialized = deserializeSphinxPacket(serialized)
 
-    let (dHeader, dPayload)  = getSphinxPacket(deserialized)
+    let (dHeader, dPayload) = getSphinxPacket(deserialized)
 
     let (alpha, beta, gamma) = getHeader(header)
     let (dAlpha, dBeta, dGamma) = getHeader(dHeader)

@@ -12,7 +12,7 @@ type
 
 proc newTestProtocol(): TestProtocol =
   let testProto = TestProtocol(codecs: @["/test/1.0.0"])
-  
+
   proc handle(conn: Connection, proto: string) {.async.} =
     let msg = await conn.readLp(1024)
     await conn.writeLp("Received: " & cast[string](msg))
@@ -48,10 +48,10 @@ suite "NetworkManager Tests":
     let nm1 = newNetworkManager()
     let nm2 = newNetworkManager()
     let testProto = newTestProtocol()
-    
+
     nm1.mount(testProto)
     nm2.mount(testProto)
-    
+
     waitFor nm1.start()
     waitFor nm2.start()
 
@@ -61,14 +61,15 @@ suite "NetworkManager Tests":
 
     echo "Attempting to dial: ", multiAddr2
 
-    proc tryDial(nm: NetworkManager, multiAddr: string): Future[bool] {.async.} =
+    proc tryDial(nm: NetworkManager, multiAddr: string): Future[
+        bool] {.async.} =
       try:
         echo "Dialing peer..."
         let conn = await nm.dialPeer(multiAddr, "/test/1.0.0")
         if conn == nil:
           echo "Connection is nil"
           return false
-        
+
         echo "Connection established, sending message..."
         await conn.writeLp("Hello")
         echo "Message sent, waiting for response..."
@@ -77,7 +78,7 @@ suite "NetworkManager Tests":
         if cast[string](response) != "Received: Hello":
           echo "Unexpected response"
           return false
-        
+
         await conn.close()
         return true
       except CatchableError as e:
@@ -107,8 +108,9 @@ suite "NetworkManager Tests":
     waitFor nm.start()
     let peerInfo = nm.getPeerInfo()
     let multiAddr = $peerInfo.addrs[0] & "/p2p/" & $peerInfo.peerId
-    
-    proc trySelfDial(manager: NetworkManager, address: string): Future[bool] {.async.} =
+
+    proc trySelfDial(manager: NetworkManager, address: string): Future[
+        bool] {.async.} =
       try:
         discard await manager.dialPeer(address, "/test/1.0.0")
         return false

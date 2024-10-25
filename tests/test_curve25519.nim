@@ -9,26 +9,26 @@ proc isNotZero(key: FieldElement): bool =
   return false
 
 suite "curve25519_tests":
-  
+
   test "generate_key_pair":
     var privateKey, publicKey: FieldElement
     (privateKey, publicKey) = generateKeyPair()
 
     # Assert the length of the keys
-    assert fieldElementToBytes(privateKey).len == FieldElementSize, "Private key size must be 32 bytes" 
-    assert fieldElementToBytes(publicKey).len == FieldElementSize, "Public key size must be 32 bytes" 
-    
+    assert fieldElementToBytes(privateKey).len == FieldElementSize, "Private key size must be 32 bytes"
+    assert fieldElementToBytes(publicKey).len == FieldElementSize, "Public key size must be 32 bytes"
+
     # Assert that the keys are not empty (i.e., not all zeros)
     assert privateKey.isNotZero(), "Private key is empty"
     assert publicKey.isNotZero(), "Public key is empty"
-    
+
     # Verify the public key derived from private key
     let derivedPublicKey = multiplyBasePointWithScalars(@[privateKey])
     assert compareFieldElements(publicKey, derivedPublicKey), "Public key must be derived correctly"
-    
+
   test "commutativity":
     # Test commutativity: (g^x1)^x2 == (g^x2)^x1
-  
+
     let x1 = generateRandomFieldElement()
     let x2 = generateRandomFieldElement()
 
