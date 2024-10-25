@@ -22,11 +22,9 @@ suite "Fragmentation":
     let message = cast[seq[byte]]("Hello, World!") 
     let messageBytesLen = len(message)
 
-    let chunks = padAndChunkMessage(message, peerId)
-    let totalChunks = max(1, ceilDiv(messageBytesLen, dataSize))
-    assert chunks.len == totalChunks, "Chunk length must be " & $totalChunks & "."
+    let paddedMsg = padMessage(message, peerId)
 
-    let (paddingLength, data, _) = getMessageChunk(chunks[0])
+    let (paddingLength, data, _) = getMessageChunk(paddedMsg)
     assert paddingLength == uint16(dataSize - messageBytesLen), "Padding length must be exactly " & $(dataSize - messageBytesLen) & " bytes." 
     assert len(data) == dataSize, "Padded data must be exactly " & $dataSize & " bytes."
 
