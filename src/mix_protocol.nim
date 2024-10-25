@@ -1,10 +1,12 @@
 import chronos
-import config, curve25519, fragmentation, mix_node, sequtils, serialization, sphinx, tag_manager, utils
+import config, curve25519, fragmentation, mix_node, sequtils, serialization,
+    sphinx, tag_manager, utils
 import libp2p
-import libp2p/[protocols/ping, protocols/protocol, stream/connection, stream/lpstream, switch]
+import libp2p/[protocols/ping, protocols/protocol, stream/connection,
+    stream/lpstream, switch]
 import std/sysrand, strutils
 
-const MixProtocolID = "/mix/proto/1.0.0"
+const MixProtocolID* = "/mix/proto/1.0.0"
 
 type
   MixProtocol* = ref object of LPProtocol
@@ -33,6 +35,7 @@ proc loadAllButIndexMixPubInfo*(index, numNodes: int): Table[PeerId, MixPubInfo]
 proc isMixNode(peerId: PeerId, pubNodeInfo: Table[PeerId, MixPubInfo]): bool =
   return peerId in pubNodeInfo
 
+# ToDo: Change to a more secure random number generator for production.
 proc cryptoRandomInt(max: int): int =
   var bytes: array[8, byte]
   let value = cast[uint64](bytes)
@@ -70,7 +73,8 @@ proc sendChunk(mixProto: MixProtocol, chunk: seq[byte]) {.async.} =
   let firstMixNode = multiAddrs[0]
   var nextHopConn: Connection
   try:
-    nextHopConn = await mixProto.switch.dial(getPeerIdFromMultiAddr(firstMixNode), @[MultiAddress.init(firstMixNode).get()], @[MixProtocolID])
+    nextHopConn = await mixProto.switch.dial(getPeerIdFromMultiAddr(
+        firstMixNode), @[MultiAddress.init(firstMixNode).get()], @[MixProtocolID])
     await nextHopConn.writeLp(sphinxPacket)
   except CatchableError as e:
     echo "Failed to send message to next hop: ", e.msg
@@ -78,16 +82,18 @@ proc sendChunk(mixProto: MixProtocol, chunk: seq[byte]) {.async.} =
     if not nextHopConn.isNil:
       await nextHopConn.close()
 
-proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} =
+proc handleMixNodeConnection(mixProto: MixProtocol,
+    conn: Connection) {.async.} =
   while true:
     var receivedBytes = await conn.readLp(packetSize)
-    
+
     if receivedBytes.len == 0:
-      break  # No data, end of stream
+      break # No data, end of stream
 
     # Process the packet
     let (_, _, mixPrivKey, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
-    let (nextHop, delay, processedPkt, status) = processSphinxPacket(receivedBytes, mixPrivKey, mixProto.tagManager)
+    let (nextHop, delay, processedPkt, status) = processSphinxPacket(
+        receivedBytes, mixPrivKey, mixProto.tagManager)
 
     case status:
     of Success:
@@ -95,7 +101,8 @@ proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} 
         # This is the exit node, forward to local ping protocol instance
         try:
           let peerInfo = mixProto.switch.peerInfo
-          let pingStream = await mixProto.switch.dial(peerInfo.peerId, peerInfo.addrs, PingCodec)
+          let pingStream = await mixProto.switch.dial(peerInfo.peerId,
+              peerInfo.addrs, PingCodec)
           await pingStream.writeLP(processedPkt)
           await pingStream.close()
         except CatchableError as e:
@@ -148,12 +155,13 @@ proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} 
   # Close the current connection after processing
   await conn.close()
 
-proc handlePingInstanceConnection(mixProto: MixProtocol, conn: Connection) {.async.} =
+proc handlePingInstanceConnection(mixProto: MixProtocol,
+    conn: Connection) {.async.} =
   var message: seq[byte] = @[]
   while true:
     var receivedBytes = await conn.readLp(1024)
     if receivedBytes.len == 0:
-      break  # No more data, end of stream
+      break # No more data, end of stream
     message.add(receivedBytes)
 
   if message.len == 0:
@@ -176,7 +184,14 @@ proc new*(T: typedesc[MixProtocol], index, numNodes: int, switch: Switch): T =
   let mixNodeInfo = loadMixNodeInfo(index)
   let pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes)
   let tagManager = initTagManager()
-  
+
+  let mixProto = T(
+    mixNodeInfo: mixNodeInfo,
+    pubNodeInfo: pubNodeInfo,
+    switch: switch,
+    tagManager: tagManager
+  )
+
   proc handle(conn: Connection, proto: string) {.async.} =
     let remotePeerId = conn.peerId
     if isMixNode(remotePeerId, pubNodeInfo):
@@ -184,13 +199,8 @@ proc new*(T: typedesc[MixProtocol], index, numNodes: int, switch: Switch): T =
     else:
       await handlePingInstanceConnection(mixProto, conn)
 
-  result = T(
-    mixNodeInfo: mixNodeInfo,
-    pubNodeInfo: pubNodeInfo,
-    switch: switch,
-    tagManager: tagManager
-  )
-  result.init()
-  result.codec = MixProtocolID
-  result.handler = handle
+  mixProto.init()
+  mixProto.codecs = @[MixProtocolID]
+  mixProto.handler = handle
 
+  return mixProto
