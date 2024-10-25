@@ -9,6 +9,7 @@ requires "libp2p >= 1.5.0"
 requires "nim >= 2.0.8"
 requires "nimcrypto >= 0.6.0"
 requires "serialization >= 0.2.2"
+requires "unittest2"
 
 # Set the source directory
 srcDir = "src"
@@ -18,6 +19,7 @@ task test, "Run the test suite":
   exec "nim c -r tests/test_curve25519.nim"
   exec "nim c -r tests/test_fragmentation.nim"
   exec "nim c -r tests/test_mix_node.nim"
+  exec "nim c -r tests/test_mix_protocol.nim"
   exec "nim c -r tests/test_pow.nim"
   exec "nim c -r tests/test_seqno_generator.nim"
   exec "nim c -r tests/test_serialization.nim"
