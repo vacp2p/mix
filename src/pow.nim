@@ -1,10 +1,10 @@
 import crypto, std/times
 
-const 
-    difficultyLevel* = 18 # Difficulty level
+const
+    difficultyLevel* = 18      # Difficulty level
     acceptanceWindow* = 5 * 60 # Acceptance time window in seconds
-    nonceSize = 4 # Nonce size
-    timestampSize = 8 # Timestamp size
+    nonceSize = 4              # Nonce size
+    timestampSize = 8          # Timestamp size
 
 # Helper function to convert integer to sequence of bytes
 proc intToBytes*(value: int64, byteSize: int): seq[byte] =
@@ -18,7 +18,7 @@ proc intToBytes*(value: int64, byteSize: int): seq[byte] =
         (1 shl (byteSize * 8)) - 1
 
     assert value >= 0 and value <= maxValue, "Value too large for the specified byte size"
-    
+
     result = newSeq[byte](byteSize)
     for i in 0..<byteSize:
         result[i] = byte((value shr (i * 8)) and 0xFF)
@@ -51,7 +51,7 @@ proc attachPow*(message: seq[byte]): seq[byte] =
         if isValidHash(hash):
             return inputData
 
-        nonce.inc()  # Increment nonce if hash does not meet criteria
+        nonce.inc() # Increment nonce if hash does not meet criteria
 
 # Function to verify the Proof of Work (PoW)
 proc verifyPow*(inputData: openArray[byte]): bool =

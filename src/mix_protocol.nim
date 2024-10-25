@@ -1,11 +1,9 @@
 import chronos
-import
-  config, curve25519, fragmentation, mix_node, sequtils, serialization, sphinx,
-  tag_manager, utils
+import config, curve25519, fragmentation, mix_node, sequtils, serialization,
+    sphinx, tag_manager, utils
 import libp2p
-import
-  libp2p/
-    [protocols/ping, protocols/protocol, stream/connection, stream/lpstream, switch]
+import libp2p/[protocols/ping, protocols/protocol, stream/connection,
+    stream/lpstream, switch]
 import std/sysrand, strutils
 
 const MixProtocolID* = "/mix/proto/1.0.0"
@@ -36,6 +34,7 @@ proc loadAllButIndexMixPubInfo*(index, numNodes: int): Table[PeerId, MixPubInfo]
 proc isMixNode(peerId: PeerId, pubNodeInfo: Table[PeerId, MixPubInfo]): bool =
   return peerId in pubNodeInfo
 
+# ToDo: Change to a more secure random number generator for production.
 proc cryptoRandomInt(max: int): int =
   var bytes: array[8, byte]
   let value = cast[uint64](bytes)
@@ -85,7 +84,8 @@ proc sendChunk(mixProto: MixProtocol, chunk: seq[byte]) {.async.} =
     if not nextHopConn.isNil:
       await nextHopConn.close()
 
-proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} =
+proc handleMixNodeConnection(mixProto: MixProtocol,
+    conn: Connection) {.async.} =
   while true:
     var receivedBytes = await conn.readLp(packetSize)
 
@@ -158,7 +158,8 @@ proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} 
   # Close the current connection after processing
   await conn.close()
 
-proc handlePingInstanceConnection(mixProto: MixProtocol, conn: Connection) {.async.} =
+proc handlePingInstanceConnection(mixProto: MixProtocol,
+    conn: Connection) {.async.} =
   var message: seq[byte] = @[]
   while true:
     var receivedBytes = await conn.readLp(1024)

@@ -6,7 +6,7 @@ import libp2p/crypto/crypto
 import strutils
 import options
 
-type 
+type
   NetworkManager* = ref object
     switch*: Switch
 
@@ -28,15 +28,16 @@ proc start*(nm: NetworkManager) {.async.} =
 proc stop*(nm: NetworkManager) {.async.} =
   await nm.switch.stop()
 
-proc dialPeer*(nm: NetworkManager, peerMultiaddr: string, protocolId: string): Future[Connection] {.async.} =
+proc dialPeer*(nm: NetworkManager, peerMultiaddr: string,
+    protocolId: string): Future[Connection] {.async.} =
   let ma = MultiAddress.init(peerMultiaddr).tryGet()
   let parts = peerMultiaddr.split("/")
   let peerIdStr = parts[^1]
   let peerId = PeerID.init(peerIdStr).tryGet()
-  
+
   echo "Attempting to dial peer: ", peerIdStr
   echo "Using protocol: ", protocolId
-  
+
   try:
     let conn = await nm.switch.dial(peerId, @[ma], protocolId)
     echo "Connection established successfully"
