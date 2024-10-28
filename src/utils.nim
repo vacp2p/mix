@@ -68,7 +68,7 @@ proc bytesToMultiAddr*(bytes: openArray[byte]): string =
         ipParts.add($bytes[i]) # ToDo: Add support for ipv6. Supporting ipv4 only for testing purposes
 
     let protocol = if bytes[4] == 0: "tcp" else: "quic" # ToDo: TLS or QUIC (Using TCP for testing purposes)
-    
+
     let port = bytesToUInt16(bytes[5..6])
 
     let peerIdBase58 = Base58.encode(bytes[7..^1])
