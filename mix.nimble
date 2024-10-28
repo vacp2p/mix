@@ -1,7 +1,7 @@
-version       = "0.1.0"
-author        = "Akshaya"
-description   = "A custom Mix Protocol"
-license       = "MIT"
+version = "0.1.0"
+author = "Akshaya"
+description = "A custom Mix Protocol"
+license = "MIT"
 
 # Dependencies
 requires "chronos >= 4.0.3"
@@ -13,16 +13,25 @@ requires "unittest2"
 
 # Set the source directory
 srcDir = "src"
+const TEST_DIRECTORY = "tests"
+
+import strformat
+
+proc runTest(filename: string, shouldRemoveTestBinary: bool = true) =
+  var execStr = "nim c -r"
+  exec fmt"{execStr} {TEST_DIRECTORY}/{filename}"
+  if shouldRemoveTestBinary:
+    rmFile fmt"{TEST_DIRECTORY}/{filename.toExe()}"
 
 task test, "Run the test suite":
-  exec "nim c -r tests/test_crypto.nim"
-  exec "nim c -r tests/test_curve25519.nim"
-  exec "nim c -r tests/test_fragmentation.nim"
-  exec "nim c -r tests/test_mix_node.nim"
-  exec "nim c -r tests/test_mix_protocol.nim"
-  exec "nim c -r tests/test_pow.nim"
-  exec "nim c -r tests/test_seqno_generator.nim"
-  exec "nim c -r tests/test_serialization.nim"
-  exec "nim c -r tests/test_sphinx.nim"
-  exec "nim c -r tests/test_tag_manager.nim"
-  exec "nim c -r tests/test_utils.nim"
+  runTest("test_crypto")
+  runTest("test_curve25519")
+  runTest("test_fragmentation")
+  runTest("test_mix_node")
+  runTest("test_mix_protocol")
+  runTest("test_pow")
+  runTest("test_seqno_generator")
+  runTest("test_serialization")
+  runTest("test_sphinx")
+  runTest("test_tag_manager")
+  runTest("test_utils")

@@ -19,9 +19,9 @@ proc setUpMixNet(numberOfNodes: int) =
         echo "Failed to write mix node info to file for node ", $index
 
 suite "Mix Protocol Test":
-  TODO: Fix the tests
-  The tests listed here are not working as expected for now
-  They serve as a reference for information flow and basic debugging
+  # TODO: Fix the tests
+  # The tests listed here are not working as expected for now
+  # They serve as a reference for information flow and basic debugging
 
   asyncTest "Mix to Mix":
     # Given a number of nodes
@@ -108,7 +108,7 @@ suite "Mix Protocol Test":
     switchA.mount(mixA)
     # switchB.mount(mixB)
     switchA.mount(pingA)
-    # switchB.mount(pingB)
+    # switchB.mount(pingB)  
 
     # And the switches are started
     # let switchFut = await allFinished(switchA.start(), switchB.start())
