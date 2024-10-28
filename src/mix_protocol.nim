@@ -1,6 +1,6 @@
 import chronos
-import config, curve25519, fragmentation, mix_node, sequtils, serialization,
-    sphinx, tag_manager, utils
+import config, curve25519, fragmentation, mix_message, mix_node, sequtils,
+    serialization, sphinx, tag_manager, utils
 import libp2p
 import libp2p/[protocols/ping, protocols/protocol, stream/connection,
     stream/lpstream, switch]
@@ -41,7 +41,8 @@ proc cryptoRandomInt(max: int): int =
   let value = cast[uint64](bytes)
   result = int(value mod uint64(max))
 
-proc sendChunk(mixProto: MixProtocol, chunk: seq[byte]) {.async.} =
+proc sendMessage(mixProto: MixProtocol, message: seq[byte],
+    dest: string) {.async.} =
   var multiAddrs: seq[string] = @[]
   var publicKeys: seq[FieldElement] = @[]
   var hop: seq[Hop] = @[]
@@ -52,9 +53,13 @@ proc sendChunk(mixProto: MixProtocol, chunk: seq[byte]) {.async.} =
   assert numMixNodes > 0, "No public mix nodes available."
 
   var pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
-  for _ in 0..<L:
-    let randomIndex = cryptoRandomInt(numMixNodes)
-    let randPeerId = pubNodeInfoKeys[randomIndex]
+  var randPeerId: PeerId
+  for i in 0..<L:
+    if i == L - 1:
+      randPeerId = getPeerIdFromMultiAddr(dest)
+    else:
+      let randomIndex = cryptoRandomInt(numMixNodes)
+      randPeerId = pubNodeInfoKeys[randomIndex]
 
     # Extract multiaddress, mix public key, and hop
     let (multiAddr, mixPubKey, _) = getMixPubInfo(mixProto.pubNodeInfo[randPeerId])
@@ -67,7 +72,7 @@ proc sendChunk(mixProto: MixProtocol, chunk: seq[byte]) {.async.} =
     delay.add(uint16ToBytes(uint16(delayMilliSec)))
 
   # Wrap in Sphinx packet
-  let sphinxPacket = wrapInSphinxPacket(initMessage(chunk), publicKeys, delay, hop)
+  let sphinxPacket = wrapInSphinxPacket(initMessage(message), publicKeys, delay, hop)
 
   # Send the wrapped message to the first mix node in the selected path
   let firstMixNode = multiAddrs[0]
@@ -98,15 +103,25 @@ proc handleMixNodeConnection(mixProto: MixProtocol,
     case status:
     of Success:
       if (nextHop == Hop()) and (delay == @[]):
-        # This is the exit node, forward to local ping protocol instance
-        try:
-          let peerInfo = mixProto.switch.peerInfo
-          let pingStream = await mixProto.switch.dial(peerInfo.peerId,
+        # This is the exit node, forward to local protocol instance
+        let msgChunk = deserializeMessageChunk(processedPkt)
+        let unpaddedMsg = unpadMessage(msgChunk)
+        let mixMsg = deserializeMixMessage(unpaddedMsg)
+        let (message, protocol) = getMixMessage(mixMsg)
+        case protocol:
+        of Ping:
+          try:
+            let peerInfo = mixProto.switch.peerInfo
+            let pingStream = await mixProto.switch.dial(peerInfo.peerId,
               peerInfo.addrs, PingCodec)
-          await pingStream.writeLP(processedPkt)
-          await pingStream.close()
-        except CatchableError as e:
-          echo "Failed to forward to ping protocol: ", e.msg
+            await pingStream.writeLP(cast[seq[byte]](message))
+            await pingStream.close()
+          except CatchableError as e:
+            echo "Failed to forward to ping protocol: ", e.msg
+        of GossipSub:
+          discard
+        of OtherProtocol:
+          discard
       else:
         # Add delay
         let delayMillis = (delay[0].int shl 8) or delay[1].int
@@ -155,7 +170,7 @@ proc handleMixNodeConnection(mixProto: MixProtocol,
   # Close the current connection after processing
   await conn.close()
 
-proc handlePingInstanceConnection(mixProto: MixProtocol,
+proc handleLocalProtocolInstanceConnection(mixProto: MixProtocol,
     conn: Connection) {.async.} =
   var message: seq[byte] = @[]
   while true:
@@ -168,14 +183,16 @@ proc handlePingInstanceConnection(mixProto: MixProtocol,
     await conn.close()
     return
 
-  # Pad and chunk the incoming message
+  # Split into mix message and destination
+  let (mixMsg, dest) = deserializeMixMessageAndDestination(message)
+
+  # Pad the incoming message
+  # ToDo: Split large messages
   let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
   let peerID = getPeerIdFromMultiAddr(multiAddr)
-  let chunks = padAndChunkMessage(message, peerID)
+  let paddedMsg = padMessage(mixMsg, peerID)
 
-  # Wrap and send each chunk
-  for chunk in chunks:
-    await sendChunk(mixProto, serializeMessageChunk(chunk))
+  await sendMessage(mixProto, serializeMessageChunk(paddedMsg), dest)
 
   # Close the connection after processing
   await conn.close()
@@ -197,7 +214,7 @@ proc new*(T: typedesc[MixProtocol], index, numNodes: int, switch: Switch): T =
     if isMixNode(remotePeerId, pubNodeInfo):
       await handleMixNodeConnection(mixProto, conn)
     else:
-      await handlePingInstanceConnection(mixProto, conn)
+      await handleLocalProtocolInstanceConnection(mixProto, conn)
 
   mixProto.init()
   mixProto.codecs = @[MixProtocolID]
