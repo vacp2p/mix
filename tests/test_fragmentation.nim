@@ -18,16 +18,19 @@ suite "Fragmentation":
     assert data == dData, "Data not equal to original data."
     assert seqNo == dSeqNo, "Sequence no. not equal to original sequence no."
 
-  test "pad_and_chunk_small_message":
+  test "pad_and_unpad_small_message":
     let message = cast[seq[byte]]("Hello, World!")
     let messageBytesLen = len(message)
 
     let paddedMsg = padMessage(message, peerId)
+    let msg = unpadMessage(paddedMsg)
 
     let (paddingLength, data, _) = getMessageChunk(paddedMsg)
     assert paddingLength == uint16(dataSize - messageBytesLen),
         "Padding length must be exactly " & $(dataSize - messageBytesLen) & " bytes."
     assert len(data) == dataSize, "Padded data must be exactly " & $dataSize & " bytes."
+    assert len(msg) == messageBytesLen, "Unpadded data must be exactly " &
+        $messageBytesLen & " bytes."
 
   test "pad_and_chunk_large_message":
     let message = newSeq[byte](messageSize * 2 + 10)
