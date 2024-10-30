@@ -8,20 +8,20 @@ type MixnetUpgradeAdapter* = ref object of Upgrade
 method upgrade*(
     self: MixnetUpgradeAdapter, conn: Connection, peerId: Opt[PeerId]
 ): Future[Muxer] {.async: (raises: [CancelledError, LPError], raw: true).} =
-  # assert conn of MixnetConnectionAdapter
+  assert conn of MixnetConnectionAdapter
   # No other kind of connection should arrive here.
   # If it arrives, it's due to poor Switch configuration.
-  # TODO: Some way to prevent this without using an 'if?
+  # TODO: Some way to prevent this without using an 'if'?
   echo "> MixnetUpgradeAdapter::upgrade"
   self.upgrade.upgrade(conn.MixnetConnectionAdapter.connection, peerId)
 
 method secure*(
     self: MixnetUpgradeAdapter, conn: Connection, peerId: Opt[PeerId]
 ): Future[Connection] {.async: (raises: [CancelledError, LPError]).} =
-  # assert conn of MixnetConnectionAdapter
+  assert conn of MixnetConnectionAdapter
   # No other kind of connection should arrive here.
   # If it arrives, it's due to poor Switch configuration.
-  # TODO: Some way to prevent this without using an 'if?
+  # TODO: Some way to prevent this without using an 'if'?
   echo "> MixnetUpgradeAdapter::secure"
   await self.upgrade.secure(conn.MixnetConnectionAdapter.connection, peerId)
 
