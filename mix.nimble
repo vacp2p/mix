@@ -6,6 +6,8 @@ license = "MIT"
 # Dependencies
 requires "chronos >= 4.0.3"
 requires "libp2p#5494c345899ce7470323e43134d7189f62b93381"
+requires "quic#0e4677b3e8cafdaaaba52de59164a8e64ed3906e"
+  # This is a libp2p dependency, but we need a ref that contains a specific ref that is not yet merged
 requires "nim >= 2.0.8"
 requires "nimcrypto >= 0.6.0"
 requires "serialization >= 0.2.2"
