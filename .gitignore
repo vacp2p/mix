@@ -1,0 +1,4 @@
+nimbledeps/
+*.ignore*
+nodeInfo/
+pubInfo/
