@@ -25,7 +25,7 @@ suite "Mix Node Tests":
 
       let pubKeyProto = PublicKey(scheme: Secp256k1, skkey: libp2pPubKey)
       let peerId = PeerId.init(pubKeyProto).get()
-      assert multiAddr == fmt"/ip4/127.0.0.1/tcp/{4242 + i}/p2p/{peerId}",
+      assert multiAddr == fmt"/ip4/127.0.0.1/tcp/{4242 + i}/mix/{peerId}",
           "Multiaddress of node " & $i & " is invalid."
 
       assert fieldElementToBytes(mixPubKey).len == FieldElementSize,
@@ -40,7 +40,7 @@ suite "Mix Node Tests":
           $SkRawPrivateKeySize & "bytes."
 
   test "get_peer_id_from_multiaddr":
-    let multiAddr = "/ip4/127.0.0.1/tcp/4242/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"
+    let multiAddr = "/ip4/127.0.0.1/tcp/4242/mix/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"
     let peerId = getPeerIdFromMultiAddr(multiAddr)
 
     assert $peerId == "QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N", "Incorrect peer ID."
@@ -65,7 +65,7 @@ suite "Mix Node Tests":
       assert fLibp2pPrivKey.getBytes() == libp2pPrivKey.getBytes(), "Libp2p private key does not match original libp2p private key."
 
   test "invalid_peer_id_lookup":
-    let multiAddr = "/ip4/127.0.0.1/tcp/4242/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N" # Random peer ID
+    let multiAddr = "/ip4/127.0.0.1/tcp/4242/mix/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N" # Random peer ID
     let peerId = getPeerIdFromMultiAddr(multiAddr)
 
     let foundNodeOpt = findMixNodeByPeerId(peerId)
