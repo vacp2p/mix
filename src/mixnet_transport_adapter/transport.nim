@@ -1,17 +1,49 @@
-import chronos
-import libp2p/[stream/connection, transports/transport, upgrademngrs/upgrade]
+import chronicles, chronos, options, tables
+import libp2p/[multiaddress, stream/connection, transports/transport, upgrademngrs/upgrade]
 import ./[connection, muxer]
+import ../[mix_node, tag_manager]
 
 type MixnetTransportAdapter* = ref object of Transport
+  mixNodeInfo: MixNodeInfo
+  pubNodeInfo: Table[PeerId, MixPubInfo]
   transport: Transport
+  tagManager: TagManager
+
+proc loadMixNodeInfo*(index: int): MixNodeInfo {.raises: [].} =
+  let mixNodeInfoOpt = readMixNodeInfoFromFile(index)
+  assert mixNodeInfoOpt.isSome, "Failed to load node info from file."
+  return mixNodeInfoOpt.get()
+
+proc loadAllButIndexMixPubInfo*(index, numNodes: int): Table[PeerId, MixPubInfo] {.raises: [].} =
+  var pubInfoTable = initTable[PeerId, MixPubInfo]()
+  for i in 0 ..< numNodes:
+    if i != index:
+      let pubInfoOpt = readMixPubInfoFromFile(i)
+      if pubInfoOpt.isSome:
+        let pubInfo = pubInfoOpt.get()
+        let (multiAddr, _, _) = getMixPubInfo(pubInfo)
+        let peerId = getPeerIdFromMultiAddr(multiAddr)
+        pubInfoTable[peerId] = pubInfo
+  return pubInfoTable
 
 method log*(self: MixnetTransportAdapter): string {.gcsafe.} =
   "<MixnetTransportAdapter>"
 
+proc handlesStart(address: MultiAddress): bool {.gcsafe.} =
+  return TcpMix.match(address)
+
 method start*(self: MixnetTransportAdapter, addrs: seq[MultiAddress]) {.async.} =
   echo "# Start"
-  await self.transport.start(addrs)
-  await procCall self.Transport.start(addrs)
+  for i, ma in addrs:
+    if not handlesStart(ma):
+      warn "Invalid address detected, skipping!", address = ma
+      continue
+
+  if len(addrs) != 0:
+    await procCall Transport(self).start(addrs)
+    await self.transport.start(addrs)
+  else:
+    raise (ref transport.TransportError)(msg: "Mix transport couldn't start, no supported addr was provided.")
 
 method stop*(self: MixnetTransportAdapter) {.async.} =
   echo "# Stop"
@@ -92,6 +124,13 @@ method handles*(self: MixnetTransportAdapter, address: MultiAddress): bool {.gcs
   self.transport.handles(address)
 
 proc new*(
-    T: typedesc[MixnetTransportAdapter], transport: Transport, upgrade: Upgrade
-): MixnetTransportAdapter =
-  T(transport: transport, upgrader: upgrade)
+    T: typedesc[MixnetTransportAdapter], transport: Transport, upgrade: Upgrade, index, numNodes: int
+): MixnetTransportAdapter {.raises: [].} =
+  let mixNodeInfo = loadMixNodeInfo(index)
+  let pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes)
+  let tagManager = initTagManager()
+  T(mixNodeInfo: mixNodeInfo,
+    pubNodeInfo: pubNodeInfo,
+    transport: transport,
+    tagManager: tagManager,
+    upgrader: upgrade)
