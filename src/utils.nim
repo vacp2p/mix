@@ -74,4 +74,4 @@ proc bytesToMultiAddr*(bytes: openArray[byte]): string =
     let peerIdBase58 = Base58.encode(bytes[7..^1])
 
     return "/ip4/" & ipParts.join(".") & "/" & protocol & "/" & $port &
-            "/p2p/" & peerIdBase58
+            "/mix/" & peerIdBase58

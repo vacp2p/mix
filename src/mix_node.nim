@@ -73,17 +73,20 @@ proc writeMixNodeInfoToFile*(node: MixNodeInfo, index: int): bool =
   return true
 
 proc readMixNodeInfoFromFile*(index: int): Option[MixNodeInfo] =
-  let filename = nodeInfoFolderPath / fmt"mixNode_{index}"
-  if not fileExists(filename):
+  try:
+    let filename = nodeInfoFolderPath / fmt"mixNode_{index}"
+    if not fileExists(filename):
+      return none(MixNodeInfo)
+    var file = newFileStream(filename, fmRead)
+    if file == nil:
+      return none(MixNodeInfo)
+    defer: file.close()
+    let data = file.readAll()
+    if data.len != MixNodeInfoSize:
+      return none(MixNodeInfo)
+    return some(deserializeMixNodeInfo(cast[seq[byte]](data)))
+  except IOError, OSError:
     return none(MixNodeInfo)
-  var file = newFileStream(filename, fmRead)
-  if file == nil:
-    return none(MixNodeInfo)
-  defer: file.close()
-  let data = file.readAll()
-  if data.len != MixNodeInfoSize:
-    return none(MixNodeInfo)
-  return some(deserializeMixNodeInfo(cast[seq[byte]](data)))
 
 proc deleteNodeInfoFolder*() =
   if dirExists(nodeInfoFolderPath):
@@ -135,17 +138,20 @@ proc writePubInfoToFile*(node: MixPubInfo, index: int): bool =
   return true
 
 proc readMixPubInfoFromFile*(index: int): Option[MixPubInfo] =
-  let filename = pubInfoFolderPath / fmt"mixNode_{index}"
-  if not fileExists(filename):
+  try:
+    let filename = pubInfoFolderPath / fmt"mixNode_{index}"
+    if not fileExists(filename):
+      return none(MixPubInfo)
+    var file = newFileStream(filename, fmRead)
+    if file == nil:
+      return none(MixPubInfo)
+    defer: file.close()
+    let data = file.readAll()
+    if data.len != MixPubInfoSize:
+      return none(MixPubInfo)
+    return some(deserializeMixPubInfo(cast[seq[byte]](data)))
+  except IOError, OSError:
     return none(MixPubInfo)
-  var file = newFileStream(filename, fmRead)
-  if file == nil:
-    return none(MixPubInfo)
-  defer: file.close()
-  let data = file.readAll()
-  if data.len != MixPubInfoSize:
-    return none(MixPubInfo)
-  return some(deserializeMixPubInfo(cast[seq[byte]](data)))
 
 proc deletePubInfoFolder*() =
   if dirExists(pubInfoFolderPath):
@@ -169,7 +175,7 @@ proc generateMixNodes(count: int, basePort: int = 4242): seq[MixNodeInfo] =
 
     let pubKeyProto = PublicKey(scheme: Secp256k1, skkey: libp2pPubKey)
     let peerId = PeerId.init(pubKeyProto).get()
-    let multiAddr = fmt"/ip4/127.0.0.1/tcp/{basePort + i}/p2p/{peerId}"
+    let multiAddr = fmt"/ip4/127.0.0.1/tcp/{basePort + i}/mix/{peerId}"
 
     result[i] = MixNodeInfo(
     multiAddr: multiAddr,
