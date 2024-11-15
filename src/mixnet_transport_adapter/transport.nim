@@ -1,4 +1,4 @@
-import chronicles, chronos, options, tables
+import chronicles, chronos, options, strformat, strutils, tables
 import libp2p/[multiaddress, stream/connection, transports/transport, upgrademngrs/upgrade]
 import ./[connection, muxer]
 import ../[mix_node, tag_manager]
@@ -29,19 +29,25 @@ proc loadAllButIndexMixPubInfo*(index, numNodes: int): Table[PeerId, MixPubInfo]
 method log*(self: MixnetTransportAdapter): string {.gcsafe.} =
   "<MixnetTransportAdapter>"
 
+proc handlesDial(address: MultiAddress): bool {.gcsafe.} =
+  return TCPMix.match(address)
+
 proc handlesStart(address: MultiAddress): bool {.gcsafe.} =
   return TcpMix.match(address)
 
-method start*(self: MixnetTransportAdapter, addrs: seq[MultiAddress]) {.async.} =
+method start*(self: MixnetTransportAdapter, mixAddrs: seq[MultiAddress]) {.async.} =
   echo "# Start"
-  for i, ma in addrs:
+  var tcpAddrs: seq[MultiAddress]
+  for i, ma in mixAddrs:
     if not handlesStart(ma):
       warn "Invalid address detected, skipping!", address = ma
       continue
+    let tcpAddress = MultiAddress.init(($ma).split("/mix/")[0]).value()
+    tcpAddrs.add(tcpAddress)
 
-  if len(addrs) != 0:
-    await procCall Transport(self).start(addrs)
-    await self.transport.start(addrs)
+  if len(tcpAddrs) != 0 and len(mixAddrs) != 0:
+    await procCall Transport(self).start(mixAddrs)
+    await self.transport.start(tcpAddrs)
   else:
     raise (ref transport.TransportError)(msg: "Mix transport couldn't start, no supported addr was provided.")
 
@@ -68,6 +74,8 @@ method dialWithMixnet*(
     peerId: Opt[PeerId] = Opt.none(PeerId),
 ): Future[Connection] {.base, async.} =
   echo "> MixnetTransportAdapter::dialWithMixnet1 - ", $peerId
+  if not handlesDial(address):
+    raise newException(LPError, fmt"Address not supported: {address}")
   let connection = await self.transport.dial(hostname, address, peerId)
   echo "Connection: ", connection.shortLog()
   let x = MixnetConnectionAdapter.new(connection)
@@ -84,44 +92,10 @@ method dial*(
   echo "> MixnetTransportAdapter::dial1"
   self.dialWithMixnet(hostname, address, peerId)
 
-method dialWithMixnet*(
-    self: MixnetTransportAdapter,
-    address: MultiAddress,
-    peerId: Opt[PeerId] = Opt.none(PeerId),
-): Future[Connection] {.base, async.} =
-  echo "MixnetTransportAdapter::dialWithMixnet2"
-  let connection = await self.transport.dial(address, peerId)
-  MixnetConnectionAdapter.new(connection)
-
-method dial*(
-    self: MixnetTransportAdapter,
-    address: MultiAddress,
-    peerId: Opt[PeerId] = Opt.none(PeerId),
-): Future[Connection] {.gcsafe.} =
-  echo "MixnetTransportAdapter::dial2"
-  self.dialWithMixnet(address, peerId)
-
-method upgradeWithMixnet(
-    self: MixnetTransportAdapter, conn: MixnetConnectionAdapter, peerId: Opt[PeerId]
-): Future[MixnetMuxerAdapter] {.
-    base, async, async: (raises: [CancelledError, LPError], raw: true)
-.} =
-  echo "> MixnetTransportAdapter::upgradeWithMixnet"
-  # echo conn.shortLog()
-  let muxer = await self.transport.upgrade(conn.connection, peerId)
-  echo "< MixnetTransportAdapter::upgradeWithMixnet"
-  MixnetMuxerAdapter.new(muxer)
-
-method upgrade*(
-    self: MixnetTransportAdapter, conn: MixnetConnectionAdapter, peerId: Opt[PeerId]
-): Future[MixnetMuxerAdapter] {.async: (raises: [CancelledError, LPError], raw: true).} =
-  echo "# Upgrade"
-  echo conn.shortLog()
-  self.upgradeWithMixnet(conn, peerId)
-
 method handles*(self: MixnetTransportAdapter, address: MultiAddress): bool {.gcsafe.} =
   echo "# Handles"
-  self.transport.handles(address)
+  if procCall Transport(self).handles(address):
+    return handlesDial(address) or handlesStart(address)
 
 proc new*(
     T: typedesc[MixnetTransportAdapter], transport: Transport, upgrade: Upgrade, index, numNodes: int
