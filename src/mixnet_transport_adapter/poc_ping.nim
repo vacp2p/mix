@@ -42,8 +42,8 @@ proc mixnet_with_transport_adapter_poc() {.async.} =
     transportFlags: set[ServerFlags] = {}
 
   let
-    addressA = MultiAddress.init(multiAddrs[0].split("/mix/")[0]).value()
-    addressB = MultiAddress.init(multiAddrs[1].split("/mix/")[0]).value()
+    addressA = MultiAddress.init(multiAddrs[0]).value()
+    addressB = MultiAddress.init(multiAddrs[1]).value()
 
     switchA = SwitchBuilder
       .new()
