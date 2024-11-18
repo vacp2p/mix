@@ -32,12 +32,10 @@ proc loadAllButIndexMixPubInfo*(index, numNodes: int): Table[PeerId, MixPubInfo]
         pubInfoTable[peerId] = pubInfo
   return pubInfoTable
 
-proc isMixNode(peerId: PeerId, pubNodeInfo: Table[PeerId, MixPubInfo]): bool =
-  return peerId in pubNodeInfo
-
 # ToDo: Change to a more secure random number generator for production.
 proc cryptoRandomInt(max: int): int =
   var bytes: array[8, byte]
+  discard urandom(bytes)
   let value = cast[uint64](bytes)
   result = int(value mod uint64(max))
 
@@ -54,12 +52,15 @@ proc sendMessage(mixProto: MixProtocol, message: seq[byte],
 
   var pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
   var randPeerId: PeerId
+  var availableIndices = toSeq(0..<numMixNodes)
   for i in 0..<L:
     if i == L - 1:
       randPeerId = getPeerIdFromMultiAddr(dest)
     else:
-      let randomIndex = cryptoRandomInt(numMixNodes)
-      randPeerId = pubNodeInfoKeys[randomIndex]
+      let randomIndexPosition = cryptoRandomInt(availableIndices.len)
+      let selectedIndex = availableIndices[randomIndexPosition]
+      randPeerId = pubNodeInfoKeys[selectedIndex]
+      availableIndices.del(randomIndexPosition)
 
     # Extract multiaddress, mix public key, and hop
     let (multiAddr, mixPubKey, _) = getMixPubInfo(mixProto.pubNodeInfo[randPeerId])
@@ -170,22 +171,9 @@ proc handleMixNodeConnection(mixProto: MixProtocol,
   # Close the current connection after processing
   await conn.close()
 
-proc handleLocalProtocolInstanceConnection(mixProto: MixProtocol,
-    conn: Connection) {.async.} =
-  var message: seq[byte] = @[]
-  while true:
-    var receivedBytes = await conn.readLp(1024)
-    if receivedBytes.len == 0:
-      break # No more data, end of stream
-    message.add(receivedBytes)
-
-  if message.len == 0:
-    await conn.close()
-    return
-
-  # Split into mix message and destination
-  let (mixMsg, dest) = deserializeMixMessageAndDestination(message)
-
+proc anonymizeLocalProtocolSend*(mixProto: MixProtocol,
+    mixMsg: seq[byte], dest: string) {.async.} =
+ 
   # Pad the incoming message
   # ToDo: Split large messages
   let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
@@ -193,9 +181,6 @@ proc handleLocalProtocolInstanceConnection(mixProto: MixProtocol,
   let paddedMsg = padMessage(mixMsg, peerID)
 
   await sendMessage(mixProto, serializeMessageChunk(paddedMsg), dest)
-
-  # Close the connection after processing
-  await conn.close()
 
 proc new*(T: typedesc[MixProtocol], index, numNodes: int, switch: Switch): T =
   let mixNodeInfo = loadMixNodeInfo(index)
@@ -208,16 +193,12 @@ proc new*(T: typedesc[MixProtocol], index, numNodes: int, switch: Switch): T =
     switch: switch,
     tagManager: tagManager
   )
-
-  proc handle(conn: Connection, proto: string) {.async.} =
-    let remotePeerId = conn.peerId
-    if isMixNode(remotePeerId, pubNodeInfo):
-      await handleMixNodeConnection(mixProto, conn)
-    else:
-      await handleLocalProtocolInstanceConnection(mixProto, conn)
-
   mixProto.init()
-  mixProto.codecs = @[MixProtocolID]
-  mixProto.handler = handle
-
   return mixProto
+
+method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
+  proc handle(conn: Connection, proto: string) {.async.} =
+    await mixProtocol.handleMixNodeConnection(conn)
+
+  mixProtocol.codecs = @[MixProtocolID]
+  mixProtocol.handler = handle
