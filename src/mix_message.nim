@@ -10,27 +10,27 @@ type
 
 type
   MixMessage* = object
-    message: string
+    message: seq[byte]
     protocol: ProtocolType
 
-proc initMixMessage*(message: string, protocol: ProtocolType): MixMessage =
-  result.message = message
+proc initMixMessage*(message: openArray[byte], protocol: ProtocolType): MixMessage =
+  result.message = @message
   result.protocol = protocol
 
-proc getMixMessage*(mixMsg: MixMessage): (string, ProtocolType) =
+proc getMixMessage*(mixMsg: MixMessage): (seq[byte], ProtocolType) =
   (mixMsg.message, mixMsg.protocol)
 
 proc serializeMixMessage*(mixMsg: MixMessage): seq[byte] =
-  let msgBytes = cast[seq[byte]](mixMsg.message)
+  let msgBytes = mixMsg.message
   let protocolBytes = uint16ToBytes(uint16(mixMsg.protocol))
   result = msgBytes & protocolBytes
 
 proc deserializeMixMessage*(data: openArray[byte]): MixMessage =
-  result.message = cast[string](data[0..^(protocolTypeSize+1)])
+  result.message = data[0..^(protocolTypeSize+1)]
   result.protocol = ProtocolType(bytesToUInt16(data[^protocolTypeSize..^1]))
 
 proc serializeMixMessageAndDestination*(mixMsg: MixMessage, dest: string): seq[byte] =
-  let msgBytes = cast[seq[byte]](mixMsg.message)
+  let msgBytes = mixMsg.message
   let protocolBytes = uint16ToBytes(uint16(mixMsg.protocol))
   let destBytes = multiAddrToBytes(dest)
   assert len(destBytes) == addrSize, "Destination address must be exactly " &

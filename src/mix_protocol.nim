@@ -6,7 +6,7 @@ import libp2p/[protocols/ping, protocols/protocol, stream/connection,
     stream/lpstream, switch]
 import std/sysrand, strutils
 
-const MixProtocolID* = "/mix/proto/1.0.0"
+const MixProtocolID* = "/mix/1.0.0"
 
 type
   MixProtocol* = ref object of LPProtocol
@@ -32,17 +32,15 @@ proc loadAllButIndexMixPubInfo*(index, numNodes: int): Table[PeerId, MixPubInfo]
         pubInfoTable[peerId] = pubInfo
   return pubInfoTable
 
-proc isMixNode(peerId: PeerId, pubNodeInfo: Table[PeerId, MixPubInfo]): bool =
-  return peerId in pubNodeInfo
-
 # ToDo: Change to a more secure random number generator for production.
 proc cryptoRandomInt(max: int): int =
   var bytes: array[8, byte]
+  discard urandom(bytes)
   let value = cast[uint64](bytes)
   result = int(value mod uint64(max))
 
 proc sendMessage(mixProto: MixProtocol, message: seq[byte],
-    dest: string) {.async.} =
+    destMultiAddr: MultiAddress, destPeerId: PeerId) {.async.} =
   var multiAddrs: seq[string] = @[]
   var publicKeys: seq[FieldElement] = @[]
   var hop: seq[Hop] = @[]
@@ -54,12 +52,15 @@ proc sendMessage(mixProto: MixProtocol, message: seq[byte],
 
   var pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
   var randPeerId: PeerId
+  var availableIndices = toSeq(0..<numMixNodes)
   for i in 0..<L:
     if i == L - 1:
-      randPeerId = getPeerIdFromMultiAddr(dest)
+      randPeerId = destPeerId
     else:
-      let randomIndex = cryptoRandomInt(numMixNodes)
-      randPeerId = pubNodeInfoKeys[randomIndex]
+      let randomIndexPosition = cryptoRandomInt(availableIndices.len)
+      let selectedIndex = availableIndices[randomIndexPosition]
+      randPeerId = pubNodeInfoKeys[selectedIndex]
+      availableIndices.del(randomIndexPosition)
 
     # Extract multiaddress, mix public key, and hop
     let (multiAddr, mixPubKey, _) = getMixPubInfo(mixProto.pubNodeInfo[randPeerId])
@@ -79,8 +80,9 @@ proc sendMessage(mixProto: MixProtocol, message: seq[byte],
   var nextHopConn: Connection
   try:
     nextHopConn = await mixProto.switch.dial(getPeerIdFromMultiAddr(
-        firstMixNode), @[MultiAddress.init(firstMixNode).get()], @[MixProtocolID])
+        firstMixNode), @[MultiAddress.init(firstMixNode.split("/p2p/")[0]).get()], @[MixProtocolID])
     await nextHopConn.writeLp(sphinxPacket)
+    await sleepAsync(milliseconds(100))
   except CatchableError as e:
     echo "Failed to send message to next hop: ", e.msg
   finally:
@@ -96,7 +98,7 @@ proc handleMixNodeConnection(mixProto: MixProtocol,
       break # No data, end of stream
 
     # Process the packet
-    let (_, _, mixPrivKey, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
+    let (multiAddr, _, mixPrivKey, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
     let (nextHop, delay, processedPkt, status) = processSphinxPacket(
         receivedBytes, mixPrivKey, mixProto.tagManager)
 
@@ -108,6 +110,8 @@ proc handleMixNodeConnection(mixProto: MixProtocol,
         let unpaddedMsg = unpadMessage(msgChunk)
         let mixMsg = deserializeMixMessage(unpaddedMsg)
         let (message, protocol) = getMixMessage(mixMsg)
+        echo "Receiver: ", multiAddr
+        echo "Message received: ", cast[string](message)
         case protocol:
         of Ping:
           try:
@@ -123,6 +127,7 @@ proc handleMixNodeConnection(mixProto: MixProtocol,
         of OtherProtocol:
           discard
       else:
+        echo "Intermediate: ", multiAddr
         # Add delay
         let delayMillis = (delay[0].int shl 8) or delay[1].int
         await sleepAsync(milliseconds(delayMillis))
@@ -130,7 +135,7 @@ proc handleMixNodeConnection(mixProto: MixProtocol,
         # Forward to next hop
         let nextHopBytes = getHop(nextHop)
         let fullAddrStr = bytesToMultiAddr(nextHopBytes)
-        let parts = fullAddrStr.split("/mix/")
+        let parts = fullAddrStr.split("/p2p/")
         if parts.len != 2:
           echo "Invalid multiaddress format: ", fullAddrStr
           return
@@ -170,32 +175,17 @@ proc handleMixNodeConnection(mixProto: MixProtocol,
   # Close the current connection after processing
   await conn.close()
 
-proc handleLocalProtocolInstanceConnection(mixProto: MixProtocol,
-    conn: Connection) {.async.} =
-  var message: seq[byte] = @[]
-  while true:
-    var receivedBytes = await conn.readLp(1024)
-    if receivedBytes.len == 0:
-      break # No more data, end of stream
-    message.add(receivedBytes)
-
-  if message.len == 0:
-    await conn.close()
-    return
-
-  # Split into mix message and destination
-  let (mixMsg, dest) = deserializeMixMessageAndDestination(message)
-
+proc anonymizeLocalProtocolSend*(mixProto: MixProtocol,
+    mixMsg: seq[byte], destMultiAddr: MultiAddress, destPeerId: PeerId) {.async.} =
   # Pad the incoming message
   # ToDo: Split large messages
   let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
   let peerID = getPeerIdFromMultiAddr(multiAddr)
   let paddedMsg = padMessage(mixMsg, peerID)
 
-  await sendMessage(mixProto, serializeMessageChunk(paddedMsg), dest)
-
-  # Close the connection after processing
-  await conn.close()
+  echo "Sender: ", multiAddr
+  echo "Message sent: ", cast[string](mixMsg)
+  await sendMessage(mixProto, serializeMessageChunk(paddedMsg), destMultiAddr, destPeerId)
 
 proc new*(T: typedesc[MixProtocol], index, numNodes: int, switch: Switch): T =
   let mixNodeInfo = loadMixNodeInfo(index)
@@ -208,16 +198,12 @@ proc new*(T: typedesc[MixProtocol], index, numNodes: int, switch: Switch): T =
     switch: switch,
     tagManager: tagManager
   )
-
-  proc handle(conn: Connection, proto: string) {.async.} =
-    let remotePeerId = conn.peerId
-    if isMixNode(remotePeerId, pubNodeInfo):
-      await handleMixNodeConnection(mixProto, conn)
-    else:
-      await handleLocalProtocolInstanceConnection(mixProto, conn)
-
   mixProto.init()
-  mixProto.codecs = @[MixProtocolID]
-  mixProto.handler = handle
-
   return mixProto
+
+method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
+  proc handle(conn: Connection, proto: string) {.async.} =
+    await mixProtocol.handleMixNodeConnection(conn)
+
+  mixProtocol.codecs = @[MixProtocolID]
+  mixProtocol.handler = handle
