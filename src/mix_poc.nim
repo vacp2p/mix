@@ -1,10 +1,11 @@
-import chronos, std/enumerate
+import chronos, std/enumerate, std/sysrand, strutils
 import libp2p
 import libp2p/[crypto/secp, multiaddress, builders, protocols/ping,  switch]
 import ../src/[config, mix_message, mix_node, mix_protocol]
 
 proc cryptoRandomInt(max: int): int =
   var bytes: array[8, byte]
+  discard urandom(bytes)
   let value = cast[uint64](bytes)
   result = int(value mod uint64(max))
 
@@ -45,14 +46,14 @@ proc setUpNodes(numNodes: int): seq[Switch] =
         
       # Extract private key and multiaddress
       let (multiAddrStr, _, _, _, libp2pPrivKey) = getMixNodeInfo(node)
-      let multiAddr = MultiAddress.init(multiAddrStr).value()
+      let multiAddr = MultiAddress.init(multiAddrStr.split("/p2p/")[0]).value()
 
       # Create switch
       nodes.add(createSwitch(libp2pPrivKey, multiAddr))
 
     return nodes
 
-proc mixnet_with_ping() {.async.} =
+proc mixnetSimulation() {.async.} =
 
   let
     numberOfNodes = 10
@@ -65,24 +66,19 @@ proc mixnet_with_ping() {.async.} =
     # Mount Mix
     mixProto.add(MixProtocol.new(index, numberOfNodes, nodes[index]))
     nodes[index].mount(mixProto[index])
-
-    #[ Mount Ping
-    let
-      rng = newRng()
-      ping = Ping.new(rng = rng)
-    nodes[index].mount(ping) ]#
-
     await nodes[index].start()
+  await sleepAsync(1.seconds)
 
   let senderIndex = cryptoRandomInt(numberOfNodes)
   var receiverIndex = 0
   if senderIndex < numberOfNodes - 1:
     receiverIndex = senderIndex + 1
-  echo "##################### senderIndex: ", senderIndex, " receiverIndex: ", receiverIndex, " #####################"
   let mixMsg = initMixMessage(cast[seq[byte]]("Hello World!"), OtherProtocol)
   let serializedMsg = serializeMixMessage(mixMsg)
-  await mixProto[senderIndex].anonymizeLocalProtocolSend(serializedMsg, $nodes[receiverIndex].peerInfo.addrs[0])
+  await mixProto[senderIndex].anonymizeLocalProtocolSend(serializedMsg, nodes[receiverIndex].peerInfo.addrs[0], nodes[receiverIndex].peerInfo.peerId)
 
+  deleteNodeInfoFolder()
+  deletePubInfoFolder()
 
 when isMainModule:
-  waitFor(mixnet_with_ping())
+  waitFor(mixnetSimulation())
