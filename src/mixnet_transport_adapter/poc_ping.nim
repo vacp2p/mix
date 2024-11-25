@@ -1,5 +1,5 @@
 import std/enumerate, chronos, strutils
-import ./[transport, upgrade]
+import ./[transport]
 import libp2p/[crypto/secp, multiaddress, builders, protocols/ping, transports/tcptransport]
 import ../[mix_node]
 
@@ -55,8 +55,7 @@ proc mixnet_with_transport_adapter_poc() {.async.} =
         proc(upgrade: Upgrade): Transport =
           let
             wrappedTransport = TcpTransport.new(transportFlags, upgrade)
-            wrappedUpgrade = MixnetUpgradeAdapter.new(upgrade)
-          MixnetTransportAdapter.new(wrappedTransport, wrappedUpgrade, nodeIndexA, numberOfNodes)
+          MixnetTransportAdapter.new(wrappedTransport, upgrade, nodeIndexA, numberOfNodes)
       )
       .withNoise()
       .build()
@@ -71,8 +70,7 @@ proc mixnet_with_transport_adapter_poc() {.async.} =
         proc(upgrade: Upgrade): Transport =
           let
             wrappedTransport = TcpTransport.new(transportFlags, upgrade)
-            wrappedUpgrade = MixnetUpgradeAdapter.new(upgrade)
-          MixnetTransportAdapter.new(wrappedTransport, wrappedUpgrade, nodeIndexB, numberOfNodes)
+          MixnetTransportAdapter.new(wrappedTransport, upgrade, nodeIndexB, numberOfNodes)
       )
       .withNoise()
       .build()
