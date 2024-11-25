@@ -14,7 +14,6 @@ method join*(
 ): Future[void] {.async: (raises: [CancelledError], raw: true), public.} =
   self.connection.join()
 
-method readExactly*(
     self: MixnetConnectionAdapter, pbytes: pointer, nbytes: int
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError]), public.} =
   await self.connection.readExactly(pbytes, nbytes)

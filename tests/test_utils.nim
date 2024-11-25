@@ -29,6 +29,26 @@ suite "Utils tests":
     expect AssertionDefect:
       discard bytesToMultiAddr(invalidBytes)
 
+  test "invalid_ip_address_format":
+    expect AssertionDefect:
+      discard multiAddrToBytes("/ip4/127.0.0/tcp/4242/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC")
+
+  test "invalid_ip_address_part":
+    expect AssertionDefect:
+      discard multiAddrToBytes("/ip4/127.0.0.256/tcp/4242/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC")
+
+  test "invalid_base58_encoding":
+    let result = multiAddrToBytes("/ip4/127.0.0.1/tcp/4242/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgV!")
+    assert result == newSeq[byte](), "Invalid Base58 encoding not recognized"
+
+  test "invalid_multiaddress_format":
+    expect AssertionDefect:
+      discard multiAddrToBytes("/ip4/127.0.0.1/tcp/4242")
+
+  test "invalid_port_number":
+    expect AssertionDefect:
+      discard multiAddrToBytes("/ip4/127.0.0.1/tcp/65536/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC")
+
   test "bytes_to_uint16_conversion":
     check bytesToUInt16([0x12'u8, 0x34'u8]) == 0x1234'u16
     check bytesToUInt16([0x00'u8, 0x01'u8]) == 0x0001'u16
