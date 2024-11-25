@@ -33,10 +33,18 @@ proc multiAddrToBytes*(multiAddr: string): seq[byte] =
     var parts = multiAddr.split('/')
     result = @[]
 
+    assert parts.len == 7, "Invalid multiaddress format"
+
     # IP address (4 bytes) ToDo: Add support for ipv6. Supporting ipv4 only for testing purposes
     let ipParts = parts[2].split('.')
+    assert ipParts.len == 4, "Invalid IP address format"
     for part in ipParts:
-        result.add(byte(parseInt(part)))
+        try:
+            let ipPart = parseInt(part)
+            assert ipPart >= 0 and ipPart <= 255, "Invalid IP address format"
+            result.add(byte(ipPart))
+        except ValueError:
+            return @[]
 
     # Protocol (1 byte) ToDo: TLS or QUIC
     assert parts[3] == "tcp" or parts[3] == "quic", "Unsupported protocol"
@@ -46,15 +54,22 @@ proc multiAddrToBytes*(multiAddr: string): seq[byte] =
         result.add(byte(1))
 
     # Port (2 bytes)
-    let port = parseInt(parts[4])
-    result.add(uint16ToBytes(uint16(port)))
+    try:
+        let port = parseInt(parts[4])
+        assert port >= 0 and port <= 65535, "Invalid port"
+        result.add(uint16ToBytes(uint16(port)))
+    except ValueError:
+        return @[]
 
     # PeerID (39 bytes)
     let peerIdBase58 = parts[6]
     assert peerIdBase58.len == 53, "Peer ID must be exactly 53 characters"
-    let peerIdBytes = Base58.decode(peerIdBase58)
-    assert peerIdBytes.len == 39, "Peer ID must be exactly 39 bytes"
-    result.add(peerIdBytes)
+    try:
+        let peerIdBytes = Base58.decode(peerIdBase58)
+        assert peerIdBytes.len == 39, "Peer ID must be exactly 39 bytes"
+        result.add(peerIdBytes)
+    except Base58Error:
+        return @[]
 
     assert result.len == addrSize, "Address must be exactly " & $addrSize & " bytes"
 
