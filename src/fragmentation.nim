@@ -54,6 +54,13 @@ proc padMessage*(messageBytes: seq[byte], peerId: PeerId): MessageChunk =
 
   result = initMessageChunk(paddingLength, paddedData, seqNoGen.getSeqNo())
 
+proc unpadMessage*(msgChunk: MessageChunk): seq[byte] =
+  let msgLength = len(msgChunk.data) - int(msgChunk.paddingLength)
+
+  assert msgLength >= 0, "Invalid padding length"
+
+  return msgChunk.data[msgChunk.paddingLength..^1]
+
 proc padAndChunkMessage*(messageBytes: seq[byte], peerId: PeerId): seq[MessageChunk] =
   var seqNoGen = initSeqNo(peerId)
   seqNoGen.generateSeqNo(messageBytes)
