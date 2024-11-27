@@ -13,7 +13,6 @@ type MixnetTransportAdapter* = ref object of Transport
   pubNodeInfo: Table[PeerId, MixPubInfo]
   transport: Transport
   tagManager: TagManager
-  mixDialer: MixDialer
 
 proc isMixNode(peerId: PeerId, pubNodeInfo: Table[PeerId, MixPubInfo]): bool =
   return peerId in pubNodeInfo
@@ -202,7 +201,12 @@ method dialWithMixnet*(
   echo "> MixnetTransportAdapter::dialWithMixnet1 - ", $peerId
   if not handlesDial(address):
     raise newException(LPError, fmt"Address not supported: {address}")
-  MixLogicalConnection.new(address, self.mixDialer)
+  var sendFunc = proc(
+      msg: seq[byte], destination: MultiAddress
+  ): Future[void] {.async.} =
+    discard self.sendThroughMixnet(msg, destination)
+
+  MixLogicalConnection.new(address, sendFunc)
 
 method dial*(
     self: MixnetTransportAdapter,
@@ -234,11 +238,5 @@ proc new*(
     transport: transport,
     tagManager: tagManager,
     upgrader: upgrade,
-    mixDialer: nil,
-  )
-  instance.mixDialer = proc(
-      msg: seq[byte], destination: MultiAddress
-  ): Future[void] {.async.} =
-    await instance.sendThroughMixnet(msg, destination)
-
+    )
   return result
