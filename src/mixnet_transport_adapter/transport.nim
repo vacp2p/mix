@@ -45,7 +45,7 @@ proc cryptoRandomInt(max: int): int =
 
 method sendThroughMixnet*(
     self: MixnetTransportAdapter, mixMsg: seq[byte], destination: MultiAddress
-): Future[void] {.async.} =
+): Future[void] {.base, async.} =
   let (multiAddr, _, _, _, _) = getMixNodeInfo(self.mixNodeInfo)
   let peerID = getPeerIdFromMultiAddr(multiAddr)
   let paddedMsg = padMessage(mixMsg, peerID)
@@ -232,11 +232,9 @@ proc new*(
     mixNodeInfo = loadMixNodeInfo(index)
     pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes)
     tagManager = initTagManager()
-  var instance = T(
-    mixNodeInfo: mixNodeInfo,
+  return T(mixNodeInfo: mixNodeInfo,
     pubNodeInfo: pubNodeInfo,
     transport: transport,
     tagManager: tagManager,
     upgrader: upgrade,
     )
-  return result
