@@ -211,10 +211,14 @@ proc new*(
     mixNodeInfo = loadMixNodeInfo(index)
     pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes)
     tagManager = initTagManager()
-    result = T(mixNodeInfo: mixNodeInfo,
+  var instance = T(mixNodeInfo: mixNodeInfo,
     pubNodeInfo: pubNodeInfo,
     transport: transport,
     tagManager: tagManager,
     upgrader: upgrade,
-    mixDialer: sendThroughMixnet
+    mixDialer: nil
     )
+  instance.mixDialer = proc(msg: seq[byte], destination: MultiAddress): Future[void] {.async.} = 
+    await instance.sendThroughMixnet(msg, destination)
+  
+  return result
