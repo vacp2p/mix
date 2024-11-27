@@ -1,9 +1,8 @@
 import tables, curve25519, locks
 
-type
-  TagManager* = ref object
-    lock: Lock
-    seenTags: Table[FieldElement, bool]
+type TagManager* = ref object
+  lock: Lock
+  seenTags: Table[FieldElement, bool]
 
 proc initTagManager*(): TagManager =
   new(result)

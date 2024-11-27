@@ -1,6 +1,7 @@
 import std/enumerate, chronos, strutils
 import ./[transport]
-import libp2p/[crypto/secp, multiaddress, builders, protocols/ping, transports/tcptransport]
+import
+  libp2p/[crypto/secp, multiaddress, builders, protocols/ping, transports/tcptransport]
 import ../[mix_node]
 
 proc setUpMixNet(numberOfNodes: int): (seq[string], seq[SkPrivateKey]) =
@@ -25,7 +26,7 @@ proc setUpMixNet(numberOfNodes: int): (seq[string], seq[SkPrivateKey]) =
 
       multiAddrs.add(multiAddr)
       libp2pPrivKeys.add(libp2pPrivKey)
-      
+
     return (multiAddrs, libp2pPrivKeys)
 
 proc mixnet_with_transport_adapter_poc() {.async.} =
@@ -53,9 +54,10 @@ proc mixnet_with_transport_adapter_poc() {.async.} =
       .withMplex(inTimeout, outTimeout)
       .withTransport(
         proc(upgrade: Upgrade): Transport =
-          let
-            wrappedTransport = TcpTransport.new(transportFlags, upgrade)
-          MixnetTransportAdapter.new(wrappedTransport, upgrade, nodeIndexA, numberOfNodes)
+          let wrappedTransport = TcpTransport.new(transportFlags, upgrade)
+          MixnetTransportAdapter.new(
+            wrappedTransport, upgrade, nodeIndexA, numberOfNodes
+          )
       )
       .withNoise()
       .build()
@@ -68,9 +70,10 @@ proc mixnet_with_transport_adapter_poc() {.async.} =
       .withMplex(inTimeout, outTimeout)
       .withTransport(
         proc(upgrade: Upgrade): Transport =
-          let
-            wrappedTransport = TcpTransport.new(transportFlags, upgrade)
-          MixnetTransportAdapter.new(wrappedTransport, upgrade, nodeIndexB, numberOfNodes)
+          let wrappedTransport = TcpTransport.new(transportFlags, upgrade)
+          MixnetTransportAdapter.new(
+            wrappedTransport, upgrade, nodeIndexB, numberOfNodes
+          )
       )
       .withNoise()
       .build()

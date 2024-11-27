@@ -2,18 +2,20 @@ import config, crypto, curve25519, pow, serialization, tag_manager
 import std/math, sequtils
 
 # Define possible outcomes of processing a Sphinx packet
-type
-  ProcessingStatus* = enum
-    Success,    # Packet processed successfully
-    Duplicate,  # Packet was discarded due to duplicate tag
-    InvalidMAC, # Packet was discarded due to MAC verification failure
-    InvalidPoW  # Packet was discarded due to PoW verification failure
+type ProcessingStatus* = enum
+  Success # Packet processed successfully
+  Duplicate # Packet was discarded due to duplicate tag
+  InvalidMAC # Packet was discarded due to MAC verification failure
+  InvalidPoW
+    # Packet was discarded due to PoW verification failure
 
-             # const lambda* = 500 # Parameter for exp distribution for generating random delay
+    # const lambda* = 500 # Parameter for exp distribution for generating random delay
 
-                # Function to compute alphas, shared secrets, and blinders
-proc computeAlpha(publicKeys: openArray[FieldElement]): tuple[alpha_0: seq[
-    byte], s: seq[seq[byte]], errorMsg: string] =
+    # Function to compute alphas, shared secrets, and blinders
+
+proc computeAlpha(
+    publicKeys: openArray[FieldElement]
+): tuple[alpha_0: seq[byte], s: seq[seq[byte]], errorMsg: string] =
   if publicKeys.len == 0:
     return (@[], @[@[]], "No public keys provided")
 
@@ -26,7 +28,7 @@ proc computeAlpha(publicKeys: openArray[FieldElement]): tuple[alpha_0: seq[
   let x = generateRandomFieldElement()
   blinders.add(x)
 
-  for i in 0..<publicKeys.len:
+  for i in 0 ..< publicKeys.len:
     if publicKeys[i].len != FieldElementSize:
       return (@[], @[@[]], "Invalid public key " & $i)
 
@@ -37,11 +39,14 @@ proc computeAlpha(publicKeys: openArray[FieldElement]): tuple[alpha_0: seq[
     else:
       alpha = multiplyPointWithScalars(alpha, [blinders[i]])
 
-    secret = multiplyPointWithScalars(publicKeys[i],
-        blinders) # ToDo: Optimize point multiplication by multiplying scalars first
+    secret = multiplyPointWithScalars(publicKeys[i], blinders)
+      # ToDo: Optimize point multiplication by multiplying scalars first
 
-    blinders.add(bytesToFieldElement(sha256_hash(fieldElementToBytes(alpha) &
-        fieldElementToBytes(secret))))
+    blinders.add(
+      bytesToFieldElement(
+        sha256_hash(fieldElementToBytes(alpha) & fieldElementToBytes(secret))
+      )
+    )
 
     s[i] = fieldElementToBytes(secret)
 
@@ -56,16 +61,17 @@ proc deriveKeyMaterial(keyName: string, s: seq[byte]): seq[byte] =
 proc computeFillerStrings(s: seq[seq[byte]]): seq[byte] =
   var filler: seq[byte] = @[] # Start with an empty filler string
 
-  for i in 1..<s.len:
+  for i in 1 ..< s.len:
     # Derive AES key and IV
-    let aes_key = kdf(deriveKeyMaterial("aes_key", s[i-1]))
-    let iv = kdf(deriveKeyMaterial("iv", s[i-1]))
+    let aes_key = kdf(deriveKeyMaterial("aes_key", s[i - 1]))
+    let iv = kdf(deriveKeyMaterial("iv", s[i - 1]))
 
     # Compute filler string
     let fillerLength = (t + 1) * k
     let zeroPadding = newSeq[byte](fillerLength)
-    filler = aes_ctr_start_index(aes_key, iv, filler & zeroPadding, (((t + 1) *
-        (r - i)) + t + 2) * k)
+    filler = aes_ctr_start_index(
+      aes_key, iv, filler & zeroPadding, (((t + 1) * (r - i)) + t + 2) * k
+    )
 
   return filler
 
@@ -92,8 +98,9 @@ proc generateRandomDelay(): seq[byte] =
 ]#
 
 # Function to compute betas, gammas, and deltas
-proc computeBetaGammaDelta(s: seq[seq[byte]], hop: openArray[Hop], msg: Message,
-    delay: openArray[seq[byte]]): tuple[beta, gamma, delta: seq[byte]] =
+proc computeBetaGammaDelta(
+    s: seq[seq[byte]], hop: openArray[Hop], msg: Message, delay: openArray[seq[byte]]
+): tuple[beta, gamma, delta: seq[byte]] =
   let sLen = s.len
   var beta: seq[byte]
   var gamma: seq[byte]
@@ -102,7 +109,7 @@ proc computeBetaGammaDelta(s: seq[seq[byte]], hop: openArray[Hop], msg: Message,
   # Compute filler strings
   let filler = computeFillerStrings(s)
 
-  for i in countdown(sLen-1, 0):
+  for i in countdown(sLen - 1, 0):
     # Derive AES keys, MAC key, and IVs
     let beta_aes_key = kdf(deriveKeyMaterial("aes_key", s[i]))
     let mac_key = kdf(deriveKeyMaterial("mac_key", s[i]))
@@ -119,8 +126,9 @@ proc computeBetaGammaDelta(s: seq[seq[byte]], hop: openArray[Hop], msg: Message,
 
       delta = aes_ctr(delta_aes_key, delta_iv, serializeMessage(msg))
     else:
-      let routingInfo = initRoutingInfo(hop[i+1], delay[i+1], gamma, beta[0..(((
-          r * (t+1)) - t) * k) - 1])
+      let routingInfo = initRoutingInfo(
+        hop[i + 1], delay[i + 1], gamma, beta[0 .. (((r * (t + 1)) - t) * k) - 1]
+      )
       beta = aes_ctr(beta_aes_key, beta_iv, serializeRoutingInfo(routingInfo))
 
       delta = aes_ctr(delta_aes_key, delta_iv, delta)
@@ -129,8 +137,12 @@ proc computeBetaGammaDelta(s: seq[seq[byte]], hop: openArray[Hop], msg: Message,
 
   return (beta, gamma, delta)
 
-proc wrapInSphinxPacket*(msg: Message, publicKeys: openArray[FieldElement],
-    delay: seq[seq[byte]], hop: openArray[Hop]): seq[byte] =
+proc wrapInSphinxPacket*(
+    msg: Message,
+    publicKeys: openArray[FieldElement],
+    delay: seq[seq[byte]],
+    hop: openArray[Hop],
+): seq[byte] =
   # Compute PoW
   let msgPow = initMessage(attachPow(getMessage(msg)))
 
@@ -146,8 +158,9 @@ proc wrapInSphinxPacket*(msg: Message, publicKeys: openArray[FieldElement],
   let sphinxPacket = initSphinxPacket(initHeader(alpha_0, beta_0, gamma_0), delta_0)
   return serializeSphinxPacket(sphinxPacket)
 
-proc processSphinxPacket*(serSphinxPacket: seq[byte], privateKey: FieldElement,
-    tm: var TagManager): (Hop, seq[byte], seq[byte], ProcessingStatus) =
+proc processSphinxPacket*(
+    serSphinxPacket: seq[byte], privateKey: FieldElement, tm: var TagManager
+): (Hop, seq[byte], seq[byte], ProcessingStatus) =
   # Deserialize the Sphinx packet
   let sphinxPacket = deserializeSphinxPacket(serSphinxPacket)
   let (header, payload) = getSphinxPacket(sphinxPacket)
@@ -193,10 +206,10 @@ proc processSphinxPacket*(serSphinxPacket: seq[byte], privateKey: FieldElement,
   paddingLength = (((t + 1) * (r - L)) + t + 2) * k
   zeroPadding = newSeq[byte](paddingLength)
 
-  if B[0..paddingLength - 1] == zeroPadding:
+  if B[0 .. paddingLength - 1] == zeroPadding:
     let msgPow = getMessage(deserializeMessage(delta_prime))
     if verifyPow(msgPow):
-      return (Hop(), @[], msgPow[0..messageSize - 1], Success)
+      return (Hop(), @[], msgPow[0 .. messageSize - 1], Success)
     else:
       return (Hop(), @[], @[], InvalidPoW)
   else:
@@ -209,6 +222,7 @@ proc processSphinxPacket*(serSphinxPacket: seq[byte], privateKey: FieldElement,
     let alpha_prime = multiplyPointWithScalars(bytesToFieldElement(alpha), [blinder])
 
     # Serialize sphinx packet
-    let sphinxPkt = initSphinxPacket(initHeader(fieldElementToBytes(
-        alpha_prime), beta_prime, gamma_prime), delta_prime)
+    let sphinxPkt = initSphinxPacket(
+      initHeader(fieldElementToBytes(alpha_prime), beta_prime, gamma_prime), delta_prime
+    )
     return (address, delay, serializeSphinxPacket(sphinxPkt), Success)

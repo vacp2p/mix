@@ -5,50 +5,42 @@ import unittest, random
 # Helper function to pad/truncate message
 proc padMessage(message: openArray[byte], size: int): seq[byte] =
   if message.len >= size:
-    return message[0..size-1] # Truncate if larger
+    return message[0 .. size - 1] # Truncate if larger
   else:
     result = @message
     let paddingLength = size - message.len
     result.add(newSeq[byte](paddingLength)) # Pad with zeros
 
 # Helper function to check if a mix node is the exit in some message path
-proc ifExit(address: Hop, delay: seq[byte], processedPacket: seq[byte],
-    status: ProcessingStatus): bool =
+proc ifExit(
+    address: Hop, delay: seq[byte], processedPacket: seq[byte], status: ProcessingStatus
+): bool =
   if (address == Hop()) and (delay == @[]) and (status == Success):
     return true
   else:
     return false
 
 # Helper function to create dummy data
-proc createDummyData(): (Message, seq[FieldElement], seq[FieldElement], seq[seq[
-    byte]], seq[Hop]) =
+proc createDummyData(): (
+  Message, seq[FieldElement], seq[FieldElement], seq[seq[byte]], seq[Hop]
+) =
   let (privateKey1, publicKey1) = generateKeyPair()
   let (privateKey2, publicKey2) = generateKeyPair()
   let (privateKey3, publicKey3) = generateKeyPair()
 
-  let privateKeys = @[
-    privateKey1,
-    privateKey2,
-    privateKey3
-  ]
+  let privateKeys = @[privateKey1, privateKey2, privateKey3]
 
-  let publicKeys = @[
-    publicKey1,
-    publicKey2,
-    publicKey3
-  ]
+  let publicKeys = @[publicKey1, publicKey2, publicKey3]
 
-  let delay = @[
-    newSeq[byte](delaySize),
-    newSeq[byte](delaySize),
-    newSeq[byte](delaySize)
-  ]
+  let delay =
+    @[newSeq[byte](delaySize), newSeq[byte](delaySize), newSeq[byte](delaySize)]
 
-  let hops = @[
-    initHop(newSeq[byte](addrSize)),
-    initHop(newSeq[byte](addrSize)),
-    initHop(newSeq[byte](addrSize))
-  ]
+  let hops =
+    @[
+      initHop(newSeq[byte](addrSize)),
+      initHop(newSeq[byte](addrSize)),
+      initHop(newSeq[byte](addrSize)),
+    ]
   let message = initMessage(newSeq[byte](messageSize))
   return (message, privateKeys, publicKeys, delay, hops)
 
@@ -67,24 +59,27 @@ suite "Sphinx Tests":
     let packet = wrapInSphinxPacket(message, publicKeys, delay, hops)
     assert packet.len == packetSize, "Packet size be exactly " & $packetSize & " bytes"
 
-    let (address1, delay1, processedPacket1, status1) = processSphinxPacket(
-        packet, privateKeys[0], tm)
+    let (address1, delay1, processedPacket1, status1) =
+      processSphinxPacket(packet, privateKeys[0], tm)
     assert status1 == Success, "Processing status should be Success"
-    assert processedPacket1.len == packetSize, "Packet size be exactly " &
-        $packetSize & " bytes"
-    assert not ifExit(address1, delay1, processedPacket1, status1), "Packet processing failed"
+    assert processedPacket1.len == packetSize,
+      "Packet size be exactly " & $packetSize & " bytes"
+    assert not ifExit(address1, delay1, processedPacket1, status1),
+      "Packet processing failed"
 
-    let (address2, delay2, processedPacket2, status2) = processSphinxPacket(
-        processedPacket1, privateKeys[1], tm)
+    let (address2, delay2, processedPacket2, status2) =
+      processSphinxPacket(processedPacket1, privateKeys[1], tm)
     assert status2 == Success, "Processing status should be Success"
-    assert processedPacket2.len == packetSize, "Packet size be exactly " &
-        $packetSize & " bytes"
-    assert not ifExit(address2, delay2, processedPacket2, status2), "Packet processing failed"
+    assert processedPacket2.len == packetSize,
+      "Packet size be exactly " & $packetSize & " bytes"
+    assert not ifExit(address2, delay2, processedPacket2, status2),
+      "Packet processing failed"
 
-    let (address3, delay3, processedPacket3, status3) = processSphinxPacket(
-        processedPacket2, privateKeys[2], tm)
+    let (address3, delay3, processedPacket3, status3) =
+      processSphinxPacket(processedPacket2, privateKeys[2], tm)
     assert status3 == Success, "Processing status should be Success"
-    assert ifExit(address3, delay3, processedPacket3, status3), "Packet processing failed"
+    assert ifExit(address3, delay3, processedPacket3, status3),
+      "Packet processing failed"
 
     let processedMessage = initMessage(processedPacket3)
     assert processedMessage == message, "Packet processing failed"
@@ -122,31 +117,35 @@ suite "Sphinx Tests":
       let (_, privateKeys, publicKeys, delay, hops) = createDummyData()
       var message = newSeq[byte](size)
       randomize()
-      for i in 0..<size:
+      for i in 0 ..< size:
         message[i] = byte(rand(256))
       let paddedMessage = padMessage(message, messageSize)
-      let packet = wrapInSphinxPacket(initMessage(paddedMessage), publicKeys,
-          delay, hops)
-      assert packet.len == packetSize, "Packet size be exactly " & $packetSize &
-          " bytes for message size " & $messageSize
+      let packet =
+        wrapInSphinxPacket(initMessage(paddedMessage), publicKeys, delay, hops)
+      assert packet.len == packetSize,
+        "Packet size be exactly " & $packetSize & " bytes for message size " &
+          $messageSize
 
-      let (address1, delay1, processedPacket1, status1) = processSphinxPacket(
-          packet, privateKeys[0], tm)
+      let (address1, delay1, processedPacket1, status1) =
+        processSphinxPacket(packet, privateKeys[0], tm)
       assert status1 == Success, "Processing status should be Success"
-      assert processedPacket1.len == packetSize, "Packet size be exactly " &
-          $packetSize & " bytes"
-      assert not ifExit(address1, delay1, processedPacket1, status1), "Packet processing failed"
+      assert processedPacket1.len == packetSize,
+        "Packet size be exactly " & $packetSize & " bytes"
+      assert not ifExit(address1, delay1, processedPacket1, status1),
+        "Packet processing failed"
 
-      let (address2, delay2, processedPacket2, status2) = processSphinxPacket(
-          processedPacket1, privateKeys[1], tm)
+      let (address2, delay2, processedPacket2, status2) =
+        processSphinxPacket(processedPacket1, privateKeys[1], tm)
       assert status2 == Success, "Processing status should be Success"
-      assert processedPacket2.len == packetSize, "Packet size be exactly " &
-          $packetSize & " bytes"
-      assert not ifExit(address2, delay2, processedPacket2, status2), "Packet processing failed"
+      assert processedPacket2.len == packetSize,
+        "Packet size be exactly " & $packetSize & " bytes"
+      assert not ifExit(address2, delay2, processedPacket2, status2),
+        "Packet processing failed"
 
-      let (address3, delay3, processedPacket3, status3) = processSphinxPacket(
-          processedPacket2, privateKeys[2], tm)
+      let (address3, delay3, processedPacket3, status3) =
+        processSphinxPacket(processedPacket2, privateKeys[2], tm)
       assert status3 == Success, "Processing status should be Success"
-      assert ifExit(address3, delay3, processedPacket3, status3), "Packet processing failed"
+      assert ifExit(address3, delay3, processedPacket3, status3),
+        "Packet processing failed"
 
       assert processedPacket3 == paddedMessage, "Packet processing failed"

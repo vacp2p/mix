@@ -6,9 +6,8 @@ import libp2p/crypto/crypto
 import strutils
 import options
 
-type
-  NetworkManager* = ref object
-    switch*: Switch
+type NetworkManager* = ref object
+  switch*: Switch
 
 proc newNetworkManager*(): NetworkManager =
   let rng = newRng()
@@ -18,7 +17,7 @@ proc newNetworkManager*(): NetworkManager =
       privKey = some(seckey),
       addrs = @[MultiAddress.init("/ip4/127.0.0.1/tcp/0").tryGet()],
       secureManagers = [SecureProtocol.Noise],
-      rng = rng
+      rng = rng,
     )
   )
 
@@ -28,8 +27,9 @@ proc start*(nm: NetworkManager) {.async.} =
 proc stop*(nm: NetworkManager) {.async.} =
   await nm.switch.stop()
 
-proc dialPeer*(nm: NetworkManager, peerMultiaddr: string,
-    protocolId: string): Future[Connection] {.async.} =
+proc dialPeer*(
+    nm: NetworkManager, peerMultiaddr: string, protocolId: string
+): Future[Connection] {.async.} =
   let ma = MultiAddress.init(peerMultiaddr).tryGet()
   let parts = peerMultiaddr.split("/")
   let peerIdStr = parts[^1]

@@ -7,8 +7,7 @@ import libp2p/errors
 import ../src/network_manager
 
 # Example protocol for testing
-type
-  TestProtocol = ref object of LPProtocol
+type TestProtocol = ref object of LPProtocol
 
 proc newTestProtocol(): TestProtocol =
   let testProto = TestProtocol(codecs: @["/test/1.0.0"])
@@ -22,7 +21,6 @@ proc newTestProtocol(): TestProtocol =
   testProto
 
 suite "NetworkManager Tests":
-
   test "Create NetworkManager":
     let nm = newNetworkManager()
     check(nm != nil)
@@ -61,8 +59,7 @@ suite "NetworkManager Tests":
 
     echo "Attempting to dial: ", multiAddr2
 
-    proc tryDial(nm: NetworkManager, multiAddr: string): Future[
-        bool] {.async.} =
+    proc tryDial(nm: NetworkManager, multiAddr: string): Future[bool] {.async.} =
       try:
         echo "Dialing peer..."
         let conn = await nm.dialPeer(multiAddr, "/test/1.0.0")
@@ -109,8 +106,7 @@ suite "NetworkManager Tests":
     let peerInfo = nm.getPeerInfo()
     let multiAddr = $peerInfo.addrs[0] & "/p2p/" & $peerInfo.peerId
 
-    proc trySelfDial(manager: NetworkManager, address: string): Future[
-        bool] {.async.} =
+    proc trySelfDial(manager: NetworkManager, address: string): Future[bool] {.async.} =
       try:
         discard await manager.dialPeer(address, "/test/1.0.0")
         return false

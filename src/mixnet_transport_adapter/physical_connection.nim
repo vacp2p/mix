@@ -52,10 +52,9 @@ func hash*(self: MixPhysicalConnection): Hash =
   self.connection.hash()
 
 proc new*(
-    T: typedesc[MixPhysicalConnection], processedMessage: seq[byte]): MixPhysicalConnection =
-  let instance = T(
-    processedMessage: processedMessage
-  )
+    T: typedesc[MixPhysicalConnection], processedMessage: seq[byte]
+): MixPhysicalConnection =
+  let instance = T(processedMessage: processedMessage)
 
   when defined(libp2p_agents_metrics):
     instance.shortAgent = connection.shortAgent

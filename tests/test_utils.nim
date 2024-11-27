@@ -7,7 +7,7 @@ suite "Utils tests":
     let multiAddrs = [
       "/ip4/127.0.0.1/tcp/4242/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC",
       "/ip4/192.168.1.1/quic/8080/mix/16Uiu2HAm6WNzw8AssyPscYYi8x1bY5wXyQrGTShRH75bh5dPCjBQ",
-      "/ip4/10.0.0.1/tcp/1234/mix/16Uiu2HAmDHw4mwBdEjxjJPhrt8Eq1kvDjXAuwkqCmhNiz363AFV2"
+      "/ip4/10.0.0.1/tcp/1234/mix/16Uiu2HAmDHw4mwBdEjxjJPhrt8Eq1kvDjXAuwkqCmhNiz363AFV2",
     ]
 
     for multiAddr in multiAddrs:
@@ -18,7 +18,9 @@ suite "Utils tests":
 
   test "invalid_protocol":
     expect AssertionDefect:
-      discard multiAddrToBytes("/ip4/127.0.0.1/udp/4242/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC")
+      discard multiAddrToBytes(
+        "/ip4/127.0.0.1/udp/4242/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
+      )
 
   test "invalid_peerid_length":
     expect AssertionDefect:
@@ -31,14 +33,20 @@ suite "Utils tests":
 
   test "invalid_ip_address_format":
     expect AssertionDefect:
-      discard multiAddrToBytes("/ip4/127.0.0/tcp/4242/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC")
+      discard multiAddrToBytes(
+        "/ip4/127.0.0/tcp/4242/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
+      )
 
   test "invalid_ip_address_part":
     expect AssertionDefect:
-      discard multiAddrToBytes("/ip4/127.0.0.256/tcp/4242/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC")
+      discard multiAddrToBytes(
+        "/ip4/127.0.0.256/tcp/4242/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
+      )
 
   test "invalid_base58_encoding":
-    let result = multiAddrToBytes("/ip4/127.0.0.1/tcp/4242/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgV!")
+    let result = multiAddrToBytes(
+      "/ip4/127.0.0.1/tcp/4242/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgV!"
+    )
     assert result == newSeq[byte](), "Invalid Base58 encoding not recognized"
 
   test "invalid_multiaddress_format":
@@ -47,7 +55,9 @@ suite "Utils tests":
 
   test "invalid_port_number":
     expect AssertionDefect:
-      discard multiAddrToBytes("/ip4/127.0.0.1/tcp/65536/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC")
+      discard multiAddrToBytes(
+        "/ip4/127.0.0.1/tcp/65536/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
+      )
 
   test "bytes_to_uint16_conversion":
     check bytesToUInt16([0x12'u8, 0x34'u8]) == 0x1234'u16

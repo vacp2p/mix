@@ -1,7 +1,8 @@
 import hashes, chronos
 import libp2p/stream/connection
 
-type MixDialer* = proc(msg: seq[byte], destination: MultiAddress): Future[void] {.async}
+type MixDialer* =
+  proc(msg: seq[byte], destination: MultiAddress): Future[void] {.async.}
 
 type MixLogicalConnection* = ref object of Connection
   destination: MultiAddress
@@ -15,7 +16,8 @@ method join*(
 method readExactly*(
     self: MixLogicalConnection, pbytes: pointer, nbytes: int
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError]), public.} =
-  raise newException(LPStreamError, "readExactly not implemented for MixLogicalConnection")
+  raise
+    newException(LPStreamError, "readExactly not implemented for MixLogicalConnection")
 
 method readLine*(
     self: MixLogicalConnection, limit = 0, sep = "\r\n"
@@ -25,7 +27,8 @@ method readLine*(
 method readVarint*(
     self: MixLogicalConnection
 ): Future[uint64] {.async: (raises: [CancelledError, LPStreamError]), public.} =
-  raise newException(LPStreamError, "readVarint not implemented for MixLogicalConnection")
+  raise
+    newException(LPStreamError, "readVarint not implemented for MixLogicalConnection")
 
 method readLp*(
     self: MixLogicalConnection, maxSize: int
@@ -55,11 +58,9 @@ func hash*(self: MixLogicalConnection): Hash =
   hash(self.destination)
 
 proc new*(
-    T: typedesc[MixLogicalConnection], destination: MultiAddress, sendFunc: MixDialer): MixLogicalConnection =
-  let instance = T(
-    destination: destination,
-    mixDialer: sendFunc
-  )
+    T: typedesc[MixLogicalConnection], destination: MultiAddress, sendFunc: MixDialer
+): MixLogicalConnection =
+  let instance = T(destination: destination, mixDialer: sendFunc)
 
   when defined(libp2p_agents_metrics):
     instance.shortAgent = connection.shortAgent

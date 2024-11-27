@@ -27,19 +27,19 @@ proc generateKeyPair*(): tuple[privateKey, publicKey: FieldElement] =
   (privateKey, publicKey)
 
 # Multiply a given Curve25519 point with a set of scalars
-proc multiplyPointWithScalars*(point: FieldElement, scalars: openArray[
-    FieldElement]): FieldElement =
+proc multiplyPointWithScalars*(
+    point: FieldElement, scalars: openArray[FieldElement]
+): FieldElement =
   var res = point
   for scalar in scalars:
     Curve25519.mul(res, scalar)
   res
 
 # Multiply the Curve25519 base point with a set of scalars
-proc multiplyBasePointWithScalars*(scalars: openArray[
-    FieldElement]): FieldElement =
+proc multiplyBasePointWithScalars*(scalars: openArray[FieldElement]): FieldElement =
   assert scalars.len > 0, "Atleast one scalar must be provided"
   var res: FieldElement = public(scalars[0]) # Use the predefined base point
-  for i in 1..<scalars.len:
+  for i in 1 ..< scalars.len:
     Curve25519.mul(res, scalars[i]) # Multiply with each scalar
   res
 

@@ -9,14 +9,15 @@ proc isNotZero(key: FieldElement): bool =
   return false
 
 suite "curve25519_tests":
-
   test "generate_key_pair":
     var privateKey, publicKey: FieldElement
     (privateKey, publicKey) = generateKeyPair()
 
     # Assert the length of the keys
-    assert fieldElementToBytes(privateKey).len == FieldElementSize, "Private key size must be 32 bytes"
-    assert fieldElementToBytes(publicKey).len == FieldElementSize, "Public key size must be 32 bytes"
+    assert fieldElementToBytes(privateKey).len == FieldElementSize,
+      "Private key size must be 32 bytes"
+    assert fieldElementToBytes(publicKey).len == FieldElementSize,
+      "Public key size must be 32 bytes"
 
     # Assert that the keys are not empty (i.e., not all zeros)
     assert privateKey.isNotZero(), "Private key is empty"
@@ -24,7 +25,8 @@ suite "curve25519_tests":
 
     # Verify the public key derived from private key
     let derivedPublicKey = multiplyBasePointWithScalars(@[privateKey])
-    assert compareFieldElements(publicKey, derivedPublicKey), "Public key must be derived correctly"
+    assert compareFieldElements(publicKey, derivedPublicKey),
+      "Public key must be derived correctly"
 
   test "commutativity":
     # Test commutativity: (g^x1)^x2 == (g^x2)^x1
@@ -42,4 +44,5 @@ suite "curve25519_tests":
     var res2 = multiplyPointWithScalars(intermediate, @[x1])
 
     # Assert if results are equal
-    assert compareFieldElements(res1, res2), "Field element operations must be commutative"
+    assert compareFieldElements(res1, res2),
+      "Field element operations must be commutative"
