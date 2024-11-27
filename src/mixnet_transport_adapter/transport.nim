@@ -62,7 +62,7 @@ method sendThroughMixnet*(self: MixnetTransportAdapter, mixMsg: seq[byte], desti
       randPeerId = pubNodeInfoKeys[selectedIndex]
       availableIndices.del(randomIndexPosition)
     
-    let (multiAddr, mixPubKey, _) = getMixPubInfo(self.pubNodeInfo[randPeerId])
+    let (multiAddr, mixPubKey, _) = getMixPubInfo(self.pubNodeInfo.getOrDefault(randPeerId))
     multiAddrs.add(multiAddr)
     publicKeys.add(mixPubKey)
     hop.add(initHop(multiAddrToBytes(multiAddr)))
@@ -77,7 +77,8 @@ method sendThroughMixnet*(self: MixnetTransportAdapter, mixMsg: seq[byte], desti
   # Send the wrapped message to the first mix node in the selected path
   let parts = multiAddrs[0].split("/mix/")
   if parts.len != 2:
-    raise (ref ValueError)(msg: "Invalid multiaddress format: " & $parts)
+    trace "Invalid multiaddress format: ", parts
+    return
 
   let firstMixAddr =  MultiAddress.init(parts[0]).value()
   let firstMixPeerId = PeerId.init(parts[1]).value()
@@ -183,7 +184,7 @@ method dialWithMixnet*(
     hostname: string,
     address: MultiAddress,
     peerId: Opt[PeerId] = Opt.none(PeerId),
-): Future[Connection] {.async.} =
+): Future[Connection] {.base, async.} =
   echo "> MixnetTransportAdapter::dialWithMixnet1 - ", $peerId
   if not handlesDial(address):
     raise newException(LPError, fmt"Address not supported: {address}")
@@ -206,14 +207,14 @@ method handles*(self: MixnetTransportAdapter, address: MultiAddress): bool {.gcs
 proc new*(
     T: typedesc[MixnetTransportAdapter], transport: Transport, upgrade: Upgrade, index, numNodes: int
 ): MixnetTransportAdapter {.raises: [].} =
-  let mixNodeInfo = loadMixNodeInfo(index)
-  let pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes)
-  let tagManager = initTagManager()
-  T(mixNodeInfo: mixNodeInfo,
+  let
+    mixNodeInfo = loadMixNodeInfo(index)
+    pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes)
+    tagManager = initTagManager()
+    result = T(mixNodeInfo: mixNodeInfo,
     pubNodeInfo: pubNodeInfo,
     transport: transport,
     tagManager: tagManager,
     upgrader: upgrade,
-    mixDialer: proc(msg: seq[byte], destination: MultiAddress): Future[void] {.async.} =
-      await result.sendThroughMixnet(msg, destination, peerId)
+    mixDialer: sendThroughMixnet
     )
