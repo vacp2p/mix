@@ -38,7 +38,8 @@ method readLp*(
 method writeLp*(
     self: MixLogicalConnection, msg: openArray[byte]
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
-  self.mixDialer(@msg, self.destination)
+  discard self.mixDialer(@msg, self.destination)
+  return
 
 method writeLp*(
     self: MixLogicalConnection, msg: string
