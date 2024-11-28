@@ -40,12 +40,12 @@ proc createSwitch(libp2pPrivKey: SkPrivateKey, multiAddr: MultiAddress, nodeInde
   else:
     return switch
 
-proc setUpNodes(numberOfNodes: int): (seq[MultiAddress], seq[Switch]) =
+proc setUpNodes(numberOfNodes: int): (seq[SkPrivateKey], seq[MultiAddress]) =
   # This is not actually GC-safe
   {.gcsafe.}:
     initializeMixNodes(numberOfNodes)
 
-    var nodes: seq[Switch] = @[]
+    var libp2pPrivKeys: seq[SkPrivateKey] = @[]
     var multiAddrs: seq[MultiAddress] = @[]
 
     for index, node in enumerate(mixNodes):
@@ -62,26 +62,26 @@ proc setUpNodes(numberOfNodes: int): (seq[MultiAddress], seq[Switch]) =
 
       let (multiAddrStr, _, _, _, libp2pPrivKey) = getMixNodeInfo(node)
       multiAddrs.add(MultiAddress.init(multiAddrStr).value())
-      let switch = createSwitch(libp2pPrivKey, multiAddrs[index], index, numberOfNodes)
-      if not switch.isNil:
-        nodes.add(switch)
-      else:
-        warn "Failed to set up node", nodeIndex = index
-        
-    if nodes.len != numberOfNodes:
-      warn "Not all nodes were set up successfully", expectedNodes = numberOfNodes, actualNodes = nodes.len
-      
-    return (multiAddrs, nodes)
+      libp2pPrivKeys.add(libp2pPrivKey)
+
+    return (libp2pPrivKeys, multiAddrs)
 
 proc mixnet_with_transport_adapter_poc() {.async.} =
   let
     numberOfNodes = 10
-    (multiAddrs, nodes) = setUpNodes(numberOfNodes)
+    (libp2pPrivKeys, multiAddrs) = setUpNodes(numberOfNodes)
 
   # Start nodes
   let rng = newRng()
   var pingProto: seq[Ping] = @[]
-  for index, node in enumerate(nodes):
+  var nodes: seq[Switch] = @[]
+  for index, node in enumerate(multiAddrs):
+    let switch = createSwitch(libp2pPrivKeys[index], multiAddrs[index], index, numberOfNodes)
+    if not switch.isNil:
+      nodes.add(switch)
+    else:
+      warn "Failed to set up node", nodeIndex = index
+
     pingProto.add(Ping.new(rng = rng))
     nodes[index].mount(pingProto[index])
     await nodes[index].start()
