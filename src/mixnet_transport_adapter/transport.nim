@@ -203,8 +203,13 @@ method dialWithMixnet*(
     raise newException(LPError, fmt"Address not supported: {address}")
   var sendFunc = proc(
       msg: seq[byte], destination: MultiAddress
-  ): Future[void] {.async.} =
-    discard self.sendThroughMixnet(msg, destination)
+  ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
+    try:
+      await self.sendThroughMixnet(msg, destination)
+    except CatchableError as e:
+      echo "Error during execution of sendThroughMixnet: ", e.msg
+      # TODO: handle error
+    return
 
   MixLogicalConnection.new(address, sendFunc)
 
@@ -232,9 +237,10 @@ proc new*(
     mixNodeInfo = loadMixNodeInfo(index)
     pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes)
     tagManager = initTagManager()
-  return T(mixNodeInfo: mixNodeInfo,
+  return T(
+    mixNodeInfo: mixNodeInfo,
     pubNodeInfo: pubNodeInfo,
     transport: transport,
     tagManager: tagManager,
     upgrader: upgrade,
-    )
+  )

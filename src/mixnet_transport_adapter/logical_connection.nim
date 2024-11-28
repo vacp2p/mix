@@ -1,8 +1,9 @@
 import hashes, chronos
 import libp2p/stream/connection
 
-type MixDialer* =
-  proc(msg: seq[byte], destination: MultiAddress): Future[void] {.async.}
+type MixDialer* = proc(msg: seq[byte], destination: MultiAddress): Future[void] {.
+  async: (raises: [CancelledError, LPStreamError], raw: true)
+.}
 
 type MixLogicalConnection* = ref object of Connection
   destination: MultiAddress
@@ -38,8 +39,7 @@ method readLp*(
 method writeLp*(
     self: MixLogicalConnection, msg: openArray[byte]
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
-  discard self.mixDialer(@msg, self.destination)
-  return
+  self.mixDialer(@msg, self.destination)
 
 method writeLp*(
     self: MixLogicalConnection, msg: string
