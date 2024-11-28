@@ -1,4 +1,4 @@
-import chronicles, chronos, options, sequtils, std/sysrand, strformat, strutils, tables
+import chronicles, chronos, options, results, sequtils, std/sysrand, strformat, strutils, tables
 import
   libp2p/[multiaddress, stream/connection, transports/transport, upgrademngrs/upgrade]
 import logical_connection
@@ -8,19 +8,27 @@ import
     utils,
   ]
 
-type MixnetTransportAdapter* = ref object of Transport
-  mixNodeInfo: MixNodeInfo
-  pubNodeInfo: Table[PeerId, MixPubInfo]
-  transport: Transport
-  tagManager: TagManager
+logScope:
+  topics = "libp2p mixtransport"
+
+type
+  MixnetTransportAdapter* = ref object of Transport
+    mixNodeInfo: MixNodeInfo
+    pubNodeInfo: Table[PeerId, MixPubInfo]
+    transport: Transport
+    tagManager: TagManager
+
+  MixnetTransportError* = object of CatchableError
 
 proc isMixNode(peerId: PeerId, pubNodeInfo: Table[PeerId, MixPubInfo]): bool =
   return peerId in pubNodeInfo
 
-proc loadMixNodeInfo*(index: int): MixNodeInfo {.raises: [].} =
+proc loadMixNodeInfo*(index: int): Result[MixNodeInfo, string] {.raises: [].} =
   let mixNodeInfoOpt = readMixNodeInfoFromFile(index)
-  assert mixNodeInfoOpt.isSome, "Failed to load node info from file."
-  return mixNodeInfoOpt.get()
+  if mixNodeInfoOpt.isSome:
+    ok(mixNodeInfoOpt.get())
+  else:
+    err("Failed to load node info from file.")
 
 proc loadAllButIndexMixPubInfo*(
     index, numNodes: int
@@ -30,43 +38,58 @@ proc loadAllButIndexMixPubInfo*(
     if i != index:
       let pubInfoOpt = readMixPubInfoFromFile(i)
       if pubInfoOpt.isSome:
-        let pubInfo = pubInfoOpt.get()
-        let (multiAddr, _, _) = getMixPubInfo(pubInfo)
-        let peerId = getPeerIdFromMultiAddr(multiAddr)
+        let
+          pubInfo = pubInfoOpt.get()
+          (multiAddr, _, _) = getMixPubInfo(pubInfo)
+          peerId = getPeerIdFromMultiAddr(multiAddr)
         pubInfoTable[peerId] = pubInfo
   return pubInfoTable
 
 # ToDo: Change to a more secure random number generator for production.
-proc cryptoRandomInt(max: int): int =
+proc cryptoRandomInt(max: int): Result[int, string] =
+  if max == 0:
+    return err("Max cannot be zero.")
   var bytes: array[8, byte]
   discard urandom(bytes)
   let value = cast[uint64](bytes)
-  result = int(value mod uint64(max))
+  return ok(int(value mod uint64(max)))
 
 method sendThroughMixnet*(
     self: MixnetTransportAdapter, mixMsg: seq[byte], destination: MultiAddress
 ): Future[void] {.base, async.} =
-  let (multiAddr, _, _, _, _) = getMixNodeInfo(self.mixNodeInfo)
-  let peerID = getPeerIdFromMultiAddr(multiAddr)
-  let paddedMsg = padMessage(mixMsg, peerID)
+  let
+    (multiAddr, _, _, _, _) = getMixNodeInfo(self.mixNodeInfo)
+    peerID = getPeerIdFromMultiAddr(multiAddr)
+    paddedMsg = padMessage(mixMsg, peerID)
 
-  var multiAddrs: seq[string] = @[]
-  var publicKeys: seq[FieldElement] = @[]
-  var hop: seq[Hop] = @[]
-  var delay: seq[seq[byte]] = @[]
+  var
+    multiAddrs: seq[string] = @[]
+    publicKeys: seq[FieldElement] = @[]
+    hop: seq[Hop] = @[]
+    delay: seq[seq[byte]] = @[]
 
   let numMixNodes = self.pubNodeInfo.len
-  assert numMixNodes > 0, "No public mix nodes available."
+  if numMixNodes < L:
+    error "No. of public mix nodes less than path length."
+    return
 
-  var pubNodeInfoKeys = toSeq(self.pubNodeInfo.keys)
-  var randPeerId: PeerId
-  var availableIndices = toSeq(0 ..< numMixNodes)
+  var
+    pubNodeInfoKeys = toSeq(self.pubNodeInfo.keys)
+    randPeerId: PeerId
+    availableIndices = toSeq(0 ..< numMixNodes)
   for i in 0 ..< L:
     if i == L - 1:
-      randPeerId = PeerId.init(($destination).split("/mix/")[1]).value()
+      randPeerId = PeerId.init(($destination).split("/mix/")[1]).valueOr:
+        error "Failed to initialize PeerId", err = error
+        return
     else:
-      let randomIndexPosition = cryptoRandomInt(availableIndices.len)
-      let selectedIndex = availableIndices[randomIndexPosition]
+      let cryptoRandomIntResult = cryptoRandomInt(availableIndices.len)
+      if cryptoRandomIntResult.isErr:
+        error "Failed to generate random number", err = cryptoRandomIntResult.error
+        return
+      let
+        randomIndexPosition = cryptoRandomIntResult.value
+        selectedIndex = availableIndices[randomIndexPosition]
       randPeerId = pubNodeInfoKeys[selectedIndex]
       availableIndices.del(randomIndexPosition)
 
@@ -76,26 +99,39 @@ method sendThroughMixnet*(
     publicKeys.add(mixPubKey)
     hop.add(initHop(multiAddrToBytes(multiAddr)))
 
-    let delayMilliSec = cryptoRandomInt(3)
+    let cryptoRandomIntResult = cryptoRandomInt(availableIndices.len)
+    if cryptoRandomIntResult.isErr:
+      error "Failed to generate random number", err = cryptoRandomIntResult.error
+      return
+    let delayMilliSec = cryptoRandomIntResult.value
     delay.add(uint16ToBytes(uint16(delayMilliSec)))
 
   # Wrap in Sphinx packet
-  let serializedMsg = serializeMessageChunk(paddedMsg)
-  let sphinxPacket =
-    wrapInSphinxPacket(initMessage(serializedMsg), publicKeys, delay, hop)
+  let
+    serializedMsg = serializeMessageChunk(paddedMsg)
+    sphinxPacket = wrapInSphinxPacket(initMessage(serializedMsg), publicKeys, delay, hop)
 
   # Send the wrapped message to the first mix node in the selected path
   let parts = multiAddrs[0].split("/mix/")
   if parts.len != 2:
-    trace "Invalid multiaddress format: ", parts
+    error "Invalid multiaddress format", parts = parts
     return
 
-  let firstMixAddr = MultiAddress.init(parts[0]).value()
-  let firstMixPeerId = PeerId.init(parts[1]).value()
-  let tcpConn = await self.transport.dial("", firstMixAddr, Opt.some(firstMixPeerId))
-  await tcpConn.writeLp(sphinxPacket)
-  await sleepAsync(milliseconds(100))
-  await tcpConn.close()
+  let firstMixAddr = MultiAddress.init(parts[0]).valueOr:
+    error "Failed to initialize MultiAddress", err = error
+    return
+
+  let firstMixPeerId = PeerId.init(parts[1]).valueOr:
+    error "Failed to initialize PeerId", err = error
+    return
+
+  try:
+    let tcpConn = await self.transport.dial("", firstMixAddr, Opt.some(firstMixPeerId))
+    await tcpConn.writeLp(sphinxPacket)
+    await sleepAsync(milliseconds(100))
+    await tcpConn.close()
+  except CatchableError as e:
+    error "Failed to send through mixnet", err = e.msg, address = $firstMixAddr, peerId = $firstMixPeerId
 
 method log*(self: MixnetTransportAdapter): string {.gcsafe.} =
   "<MixnetTransportAdapter>"
@@ -233,8 +269,13 @@ proc new*(
     upgrade: Upgrade,
     index, numNodes: int,
 ): MixnetTransportAdapter {.raises: [].} =
+  let mixNodeInfoResult = loadMixNodeInfo(index)
+  if mixNodeInfoResult.isErr:
+    error "Failed to load mix node info", index = index
+    return T()
+  
   let
-    mixNodeInfo = loadMixNodeInfo(index)
+    mixNodeInfo = mixNodeInfoResult.value
     pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes)
     tagManager = initTagManager()
   return T(
