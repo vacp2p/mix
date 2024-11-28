@@ -75,7 +75,7 @@ proc mixnet_with_transport_adapter_poc() {.async.} =
   let rng = newRng()
   var pingProto: seq[Ping] = @[]
   var nodes: seq[Switch] = @[]
-  for index, node in enumerate(multiAddrs):
+  for index, _ in enumerate(multiAddrs):
     let switch = createSwitch(libp2pPrivKeys[index], multiAddrs[index], index, numberOfNodes)
     if not switch.isNil:
       nodes.add(switch)
@@ -101,6 +101,12 @@ proc mixnet_with_transport_adapter_poc() {.async.} =
 
   discard await pingProto[senderIndex].ping(conn)
   await sleepAsync(1.seconds)
+
+  for index, node in enumerate(nodes):
+    await node.stop()
+  
+  deleteNodeInfoFolder()
+  deletePubInfoFolder()
 
 when isMainModule:
   waitFor(mixnet_with_transport_adapter_poc())
