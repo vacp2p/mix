@@ -1,105 +1,105 @@
-import std/enumerate, chronos, strutils
+import std/enumerate, chronos, std/sysrand, strutils
 import ./[transport]
 import
   libp2p/[crypto/secp, multiaddress, builders, protocols/ping, transports/tcptransport]
 import ../[mix_node]
 
-proc setUpMixNet(numberOfNodes: int): (seq[string], seq[SkPrivateKey]) =
+proc cryptoRandomInt(max: int): Result[int, string] =
+  if max == 0:
+    return err("Max cannot be zero.")
+  var bytes: array[8, byte]
+  discard urandom(bytes)
+  let value = cast[uint64](bytes)
+  return ok(int(value mod uint64(max)))
+
+proc createSwitch(libp2pPrivKey: SkPrivateKey, multiAddr: MultiAddress, nodeIndex, numberOfNodes: int): Switch =
+  let
+    inTimeout: Duration = 5.minutes
+    outTimeout: Duration = 5.minutes
+    transportFlags: set[ServerFlags] = {}
+  
+  let switch = SwitchBuilder
+  .new()
+  .withPrivateKey(PrivateKey(scheme: Secp256k1, skkey: libp2pPrivKey))
+  .withAddress(multiAddr)
+  .withRng(crypto.newRng())
+  .withMplex(inTimeout, outTimeout)
+  .withTransport(
+    proc(upgrade: Upgrade): Transport =
+      let wrappedTransport = TcpTransport.new(transportFlags, upgrade)
+      MixnetTransportAdapter.new(
+        wrappedTransport, upgrade, nodeIndex, numberOfNodes
+      )
+  )
+  .withNoise()
+  .build()
+
+  if switch.isNil:
+    error "Failed to create Switch", nodeIndex = nodeIndex
+    return
+  else:
+    return switch
+
+proc setUpNodes(numberOfNodes: int): (seq[MultiAddress], seq[Switch]) =
   # This is not actually GC-safe
   {.gcsafe.}:
-    var multiAddrs: seq[string] = @[]
-    var libp2pPrivKeys: seq[SkPrivateKey] = @[]
-
     initializeMixNodes(numberOfNodes)
+
+    var nodes: seq[Switch] = @[]
+    var multiAddrs: seq[MultiAddress] = @[]
 
     for index, node in enumerate(mixNodes):
       let nodeMixPubInfo = getMixPubInfoByIndex(index)
       let pubResult = writePubInfoToFile(nodeMixPubInfo, index)
       if pubResult == false:
-        echo "Failed to write pub info to file for node ", $index
+        error "Failed to write pub info to file", nodeIndex = index
+        continue
 
       let mixResult = writeMixNodeInfoToFile(node, index)
       if mixResult == false:
-        echo "Failed to write mix node info to file for node ", $index
+        error "Failed to write mix node info to file", nodeIndex = index
+        continue
 
-      let (multiAddr, _, _, _, libp2pPrivKey) = getMixNodeInfo(node)
-
-      multiAddrs.add(multiAddr)
-      libp2pPrivKeys.add(libp2pPrivKey)
-
-    return (multiAddrs, libp2pPrivKeys)
+      let (multiAddrStr, _, _, _, libp2pPrivKey) = getMixNodeInfo(node)
+      multiAddrs.add(MultiAddress.init(multiAddrStr).value())
+      let switch = createSwitch(libp2pPrivKey, multiAddrs[index], index, numberOfNodes)
+      if not switch.isNil:
+        nodes.add(switch)
+      else:
+        warn "Failed to set up node", nodeIndex = index
+        
+    if nodes.len != numberOfNodes:
+      warn "Not all nodes were set up successfully", expectedNodes = numberOfNodes, actualNodes = nodes.len
+      
+    return (multiAddrs, nodes)
 
 proc mixnet_with_transport_adapter_poc() {.async.} =
   let
-    numberOfNodes = 2
-    nodeIndexA = 0
-    nodeIndexB = 1
+    numberOfNodes = 10
+    (multiAddrs, nodes) = setUpNodes(numberOfNodes)
 
-  let (multiAddrs, libp2pPrivKeys) = setUpMixNet(numberOfNodes)
+  # Start nodes
+  let rng = newRng()
+  var pingProto: seq[Ping] = @[]
+  for index, node in enumerate(nodes):
+    pingProto.add(Ping.new(rng = rng))
+    nodes[index].mount(pingProto[index])
+    await nodes[index].start()
+  await sleepAsync(1.seconds)
 
-  let
-    inTimeout: Duration = 5.minutes
-    outTimeout: Duration = 5.minutes
-    transportFlags: set[ServerFlags] = {}
+  let cryptoRandomIntResult = cryptoRandomInt(numberOfNodes)
+  if cryptoRandomIntResult.isErr:
+    error "Failed to generate random number", err = cryptoRandomIntResult.error
+    return
+  let senderIndex = cryptoRandomIntResult.value
+  var receiverIndex = 0
+  if senderIndex < numberOfNodes - 1:
+    receiverIndex = senderIndex + 1
 
-  let
-    addressA = MultiAddress.init(multiAddrs[0]).value()
-    addressB = MultiAddress.init(multiAddrs[1]).value()
+  var conn = await nodes[senderIndex].dial(nodes[receiverIndex].peerInfo.peerId, @[multiAddrs[receiverIndex]], PingCodec)
+  echo "After dial connection type: ", conn.type
 
-    switchA = SwitchBuilder
-      .new()
-      .withPrivateKey(PrivateKey(scheme: Secp256k1, skkey: libp2pPrivKeys[0]))
-      .withAddress(addressA)
-      .withRng(crypto.newRng())
-      .withMplex(inTimeout, outTimeout)
-      .withTransport(
-        proc(upgrade: Upgrade): Transport =
-          let wrappedTransport = TcpTransport.new(transportFlags, upgrade)
-          MixnetTransportAdapter.new(
-            wrappedTransport, upgrade, nodeIndexA, numberOfNodes
-          )
-      )
-      .withNoise()
-      .build()
-
-    switchB = SwitchBuilder
-      .new()
-      .withPrivateKey(PrivateKey(scheme: Secp256k1, skkey: libp2pPrivKeys[1]))
-      .withAddress(addressB)
-      .withRng(crypto.newRng())
-      .withMplex(inTimeout, outTimeout)
-      .withTransport(
-        proc(upgrade: Upgrade): Transport =
-          let wrappedTransport = TcpTransport.new(transportFlags, upgrade)
-          MixnetTransportAdapter.new(
-            wrappedTransport, upgrade, nodeIndexB, numberOfNodes
-          )
-      )
-      .withNoise()
-      .build()
-
-  let
-    rng = newRng()
-    pingA = Ping.new(rng = rng)
-    pingB = Ping.new(rng = rng)
-
-  switchA.mount(pingA)
-  switchB.mount(pingB)
-
-  discard await allFinished(switchA.start(), switchB.start())
-
-  echo "SwitchA listening on:"
-  for addrs in switchA.peerInfo.addrs:
-    echo addrs, " ", switchA.peerInfo.peerId, " ", addressA
-
-  echo "SwitchB listening on:"
-  for addrs in switchB.peerInfo.addrs:
-    echo addrs, " ", switchB.peerInfo.peerId, " ", addressB
-
-  var conn = await switchB.dial(switchA.peerInfo.peerId, @[addressA], PingCodec)
-  echo "After switchB.dial - Connection type: ", conn.type
-
-  discard await pingB.ping(conn)
+  discard await pingProto[senderIndex].ping(conn)
   await sleepAsync(1.seconds)
 
 when isMainModule:
