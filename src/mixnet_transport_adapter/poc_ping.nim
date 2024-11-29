@@ -25,11 +25,12 @@ proc createSwitch(libp2pPrivKey: SkPrivateKey, multiAddr: MultiAddress, nodeInde
   .withRng(crypto.newRng())
   .withMplex(inTimeout, outTimeout)
   .withTransport(
-    proc(upgrade: Upgrade): Transport =
-      let wrappedTransport = TcpTransport.new(transportFlags, upgrade)
-      MixnetTransportAdapter.new(
-        wrappedTransport, upgrade, nodeIndex, numberOfNodes
-      )
+    proc(upgrade: Upgrade): Transport {.gcsafe.} =
+      {.gcsafe.}:
+        let wrappedTransport = TcpTransport.new(transportFlags, upgrade)
+        MixnetTransportAdapter.new(
+          wrappedTransport, upgrade, nodeIndex, numberOfNodes
+        )
   )
   .withNoise()
   .build()
@@ -43,6 +44,7 @@ proc createSwitch(libp2pPrivKey: SkPrivateKey, multiAddr: MultiAddress, nodeInde
 proc setUpNodes(numberOfNodes: int): (seq[SkPrivateKey], seq[MultiAddress]) =
   # This is not actually GC-safe
   {.gcsafe.}:
+    initTempDirectories()
     initializeMixNodes(numberOfNodes)
 
     var libp2pPrivKeys: seq[SkPrivateKey] = @[]
