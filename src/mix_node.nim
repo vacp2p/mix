@@ -1,12 +1,17 @@
 import curve25519, config, utils
 import libp2p/[crypto/crypto, crypto/curve25519, crypto/secp, multiaddress, peerid]
-import options, os, std/streams, strformat, strutils
+import options, os, std/streams, std/tempfiles, strformat, strutils
 
 const MixNodeInfoSize* =
   addrSize + (2 * FieldElementSize) + (SkRawPublicKeySize + SkRawPrivateKeySize)
 const MixPubInfoSize* = addrSize + FieldElementSize + SkRawPublicKeySize
-const nodeInfoFolderPath* = "nodeInfo"
-const pubInfoFolderPath* = "pubInfo"
+var
+  nodeInfoFolderPath {.threadvar.}: string
+  pubInfoFolderPath {.threadvar.}: string
+
+proc initTempDirectories*() =
+  nodeInfoFolderPath = createTempDir("nodeInfo_", "")
+  pubInfoFolderPath = createTempDir("pubInfo_", "")
 
 type MixNodeInfo* = object
   multiAddr: string
@@ -102,7 +107,7 @@ proc readMixNodeInfoFromFile*(index: int): Option[MixNodeInfo] =
   except IOError, OSError:
     return none(MixNodeInfo)
 
-proc deleteNodeInfoFolder*() =
+proc deleteNodeInfoFolder*() {.gcsafe.} =
   if dirExists(nodeInfoFolderPath):
     removeDir(nodeInfoFolderPath)
 
@@ -169,7 +174,7 @@ proc readMixPubInfoFromFile*(index: int): Option[MixPubInfo] =
   except IOError, OSError:
     return none(MixPubInfo)
 
-proc deletePubInfoFolder*() =
+proc deletePubInfoFolder*() {.gcsafe.} =
   if dirExists(pubInfoFolderPath):
     removeDir(pubInfoFolderPath)
 
