@@ -1,5 +1,5 @@
-import std/enumerate, chronos, std/sysrand, strutils
-import ./[transport]
+import sequtils, std/enumerate, chronos, options, std/sysrand, strutils
+import ./[logical_connection, transport, protocol]
 import
   libp2p/[crypto/secp, multiaddress, builders, protocols/ping, transports/tcptransport]
 import ../[mix_node]
@@ -12,32 +12,43 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   let value = cast[uint64](bytes)
   return ok(int(value mod uint64(max)))
 
-proc createSwitch(libp2pPrivKey: SkPrivateKey, multiAddr: MultiAddress, nodeIndex, numberOfNodes: int): Switch =
+proc createSwitch(
+    libp2pPrivKey: SkPrivateKey, multiAddr: MultiAddress, nodeIndex, numberOfNodes: int
+): Switch =
   let
     inTimeout: Duration = 5.minutes
     outTimeout: Duration = 5.minutes
     transportFlags: set[ServerFlags] = {}
-  
+
   let switch = SwitchBuilder
-  .new()
-  .withPrivateKey(PrivateKey(scheme: Secp256k1, skkey: libp2pPrivKey))
-  .withAddress(multiAddr)
-  .withRng(crypto.newRng())
-  .withMplex(inTimeout, outTimeout)
-  .withTransport(
-    proc(upgrade: Upgrade): Transport =
-      let wrappedTransport = TcpTransport.new(transportFlags, upgrade)
-      MixnetTransportAdapter.new(
-        wrappedTransport, upgrade, nodeIndex, numberOfNodes
-      )
-  )
-  .withNoise()
-  .build()
+    .new()
+    .withPrivateKey(PrivateKey(scheme: Secp256k1, skkey: libp2pPrivKey))
+    .withAddress(multiAddr)
+    .withRng(crypto.newRng())
+    .withMplex(inTimeout, outTimeout)
+    .withTransport(
+      proc(upgrade: Upgrade): Transport =
+        let wrappedTransport = TcpTransport.new(transportFlags, upgrade)
+        MixnetTransportAdapter.new(wrappedTransport, upgrade, nodeIndex, numberOfNodes)
+    )
+    .withNoise()
+    .build()
 
   if switch.isNil:
     error "Failed to create Switch", nodeIndex = nodeIndex
     return
   else:
+    var sendFunc = proc(conn: Connection, proto: ProtocolType): Future[void] {.async.} =
+      try:
+        await switch.callHandler(conn, proto)
+      except CatchableError as e:
+        echo "Error during execution of sendThroughMixnet: ", e.msg
+        # TODO: handle error
+      return
+    for index, transport in enumerate(switch.transports):
+      if transport of MixnetTransportAdapter:
+        MixnetTransportAdapter(transport).setCallBack(sendFunc)
+        break
     return switch
 
 proc setUpNodes(numberOfNodes: int): (seq[SkPrivateKey], seq[MultiAddress]) =
@@ -76,7 +87,8 @@ proc mixnet_with_transport_adapter_poc() {.async.} =
   var pingProto: seq[Ping] = @[]
   var nodes: seq[Switch] = @[]
   for index, _ in enumerate(multiAddrs):
-    let switch = createSwitch(libp2pPrivKeys[index], multiAddrs[index], index, numberOfNodes)
+    let switch =
+      createSwitch(libp2pPrivKeys[index], multiAddrs[index], index, numberOfNodes)
     if not switch.isNil:
       nodes.add(switch)
     else:
@@ -96,15 +108,38 @@ proc mixnet_with_transport_adapter_poc() {.async.} =
   if senderIndex < numberOfNodes - 1:
     receiverIndex = senderIndex + 1
 
-  var conn = await nodes[senderIndex].dial(nodes[receiverIndex].peerInfo.peerId, @[multiAddrs[receiverIndex]], PingCodec)
+  let transports = nodes[senderIndex].transports
+  var transportIndex = -1
+  for index, transport in enumerate(transports):
+    if transport of MixnetTransportAdapter:
+      transportIndex = index
+  if transportIndex == -1:
+    raise newException(ValueError, "Custom transport not found")
+
+  let
+    mixTransport = nodes[senderIndex].transports[transportIndex]
+    peerId = nodes[receiverIndex].peerInfo.peerId
+    peerIdOpt = Opt[PeerId](oResultPrivate: true, vResultPrivate: peerId)
+
+  try:
+    var conn = await MixnetTransportAdapter(mixTransport).dialWithProto(
+      "", multiAddrs[receiverIndex], peerIdOpt, Opt.some(PingCodec)
+    )
+
+    discard await pingProto[senderIndex].ping(conn)
+    await sleepAsync(1.seconds)
+  except Exception as e:
+    echo "An error occurred during dialing: ", e.msg
+
+  #[var conn = await nodes[senderIndex].dial(nodes[receiverIndex].peerInfo.peerId, @[multiAddrs[receiverIndex]], PingCodec)
   echo "After dial connection type: ", conn.type
 
   discard await pingProto[senderIndex].ping(conn)
-  await sleepAsync(1.seconds)
+  await sleepAsync(1.seconds)]#
 
   for index, node in enumerate(nodes):
     await node.stop()
-  
+
   deleteNodeInfoFolder()
   deletePubInfoFolder()
 
