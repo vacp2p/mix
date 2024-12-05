@@ -72,6 +72,11 @@ proc deserializeMixNodeInfo*(data: openArray[byte]): MixNodeInfo =
   assert privKeyRes.isOk, "Failed to initialize libp2p private key"
   result.libp2pPrivKey = privKeyRes.get()
 
+proc isNodeMultiaddress*(mixNodeInfo: MixNodeInfo, multiAddr: string): bool =
+  if mixNodeInfo.multiAddr == multiAddr:
+    return true
+  return false
+
 proc writeMixNodeInfoToFile*(node: MixNodeInfo, index: int): bool =
   if not dirExists(nodeInfoFolderPath):
     createDir(nodeInfoFolderPath)
