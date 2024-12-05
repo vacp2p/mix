@@ -1,9 +1,8 @@
-import ../src/mix_message
+import ../src/[mix_message, mixnet_transport_adapter/protocol]
 import chronicles, results, unittest
 
 # Define test cases
 suite "mix_message_tests":
-
   test "serialize_and_deserialize_mix_message":
     let
       message = "Hello World!"
@@ -25,13 +24,11 @@ suite "mix_message_tests":
     let (dMessage, dProtocol) = getMixMessage(deserializedMsg)
     if message != cast[string](dMessage):
       error "Deserialized message does not match the original",
-            original = message,
-            deserialized = cast[string](dMessage)
+        original = message, deserialized = cast[string](dMessage)
       fail()
     if protocol != dProtocol:
       error "Deserialized protocol does not match the original",
-            original = protocol,
-            deserialized = dProtocol
+        original = protocol, deserialized = dProtocol
       fail()
 
   test "serialize_empty_mix_message":
@@ -50,25 +47,24 @@ suite "mix_message_tests":
     if deserializedResult.isErr:
       error "Deserialization failed", err = deserializedResult.error
       fail()
-    let dMixMsg = deserializedResult.get()
+    let dMixMsg: MixMessage = deserializedResult.get()
 
     let (dMessage, dProtocol) = getMixMessage(dMixMsg)
     if emptyMessage != cast[string](dMessage):
       error "Deserialized message is not empty",
-            expected = emptyMessage,
-            actual = cast[string](dMessage)
+        expected = emptyMessage, actual = cast[string](dMessage)
       fail()
     if protocol != dProtocol:
       error "Deserialized protocol does not match the original",
-            original = protocol,
-            deserialized = dProtocol
+        original = protocol, deserialized = dProtocol
       fail()
 
   test "serialize_and_deserialize_mix_message_and_destination":
     let
       message = "Hello World!"
       protocol = ProtocolType.GossipSub
-      destination = "/ip4/127.0.0.1/tcp/4242/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
+      destination =
+        "/ip4/127.0.0.1/tcp/4242/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
       mixMsg = initMixMessage(cast[seq[byte]](message), protocol)
 
     let serializedResult = serializeMixMessageAndDestination(mixMsg, destination)
@@ -92,16 +88,13 @@ suite "mix_message_tests":
     let (dMessage, dProtocol) = getMixMessage(dMixMsg)
     if message != cast[string](dMessage):
       error "Deserialized message does not match the original",
-            original = message,
-            deserialized = cast[string](dMessage)
+        original = message, deserialized = cast[string](dMessage)
       fail()
     if protocol != dProtocol:
       error "Deserialized protocol does not match the original",
-            original = protocol,
-            deserialized = dProtocol
+        original = protocol, deserialized = dProtocol
       fail()
     if destination != dDest:
       error "Deserialized destination does not match the original",
-            original = destination,
-            deserialized = dDest
+        original = destination, deserialized = dDest
       fail()
