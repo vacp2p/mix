@@ -1,14 +1,14 @@
-import hashes, chronos
+import hashes, chronos, stew/byteutils
 import libp2p/stream/connection
-import ../mix_message
+import protocol
 
-type MixDialer* = proc(msg: seq[byte], proto: ProtocolType, destination: MultiAddress): Future[void] {.
-  async: (raises: [CancelledError, LPStreamError], raw: true)
-.}
+type MixDialer* = proc(
+  msg: seq[byte], proto: ProtocolType, destination: MultiAddress
+): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true).}
 
 type MixLogicalConnection* = ref object of Connection
   destination: MultiAddress
-  proto: ProtocolType 
+  proto: ProtocolType
   mixDialer: MixDialer
 
 method join*(
@@ -38,10 +38,20 @@ method readLp*(
 ): Future[seq[byte]] {.async: (raises: [CancelledError, LPStreamError]), public.} =
   raise newException(LPStreamError, "readLp not implemented for MixLogicalConnection")
 
+method write*(
+    self: MixLogicalConnection, msg: seq[byte]
+): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
+  self.mixDialer(@msg, self.proto, self.destination)
+
+proc write*(
+    self: MixLogicalConnection, msg: string
+): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
+  self.write(msg.toBytes())
+
 method writeLp*(
     self: MixLogicalConnection, msg: openArray[byte]
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
-  self.mixDialer(@msg, self.proto, self.destination) # proto need to be initialized
+  self.mixDialer(@msg, self.proto, self.destination)
 
 method writeLp*(
     self: MixLogicalConnection, msg: string
@@ -61,9 +71,12 @@ func hash*(self: MixLogicalConnection): Hash =
   hash(self.destination)
 
 proc new*(
-    T: typedesc[MixLogicalConnection], destination: MultiAddress, sendFunc: MixDialer
+    T: typedesc[MixLogicalConnection],
+    destination: MultiAddress,
+    proto: ProtocolType,
+    sendFunc: MixDialer,
 ): MixLogicalConnection =
-  let instance = T(destination: destination, mixDialer: sendFunc)
+  let instance = T(destination: destination, proto: proto, mixDialer: sendFunc)
 
   when defined(libp2p_agents_metrics):
     instance.shortAgent = connection.shortAgent
