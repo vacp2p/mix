@@ -1,11 +1,20 @@
-import chronicles, chronos, options, results, sequtils, std/sysrand, strformat, strutils, tables
+import
+  chronicles,
+  chronos,
+  options,
+  results,
+  sequtils,
+  std/sysrand,
+  strformat,
+  strutils,
+  tables
 import
   libp2p/[multiaddress, stream/connection, transports/transport, upgrademngrs/upgrade]
-import logical_connection
+import exit_connection, logical_connection, physical_connection, protocol
 import
   ../[
-    config, curve25519, fragmentation, mix_message, mix_node, serialization, sphinx, tag_manager,
-    utils,
+    config, curve25519, fragmentation, mix_message, mix_node, serialization, sphinx,
+    tag_manager, utils,
   ]
 
 logScope:
@@ -17,11 +26,9 @@ type
     pubNodeInfo: Table[PeerId, MixPubInfo]
     transport: Transport
     tagManager: TagManager
+    handler: ProtocolHandler
 
   MixnetTransportError* = object of CatchableError
-
-proc isMixNode(peerId: PeerId, pubNodeInfo: Table[PeerId, MixPubInfo]): bool =
-  return peerId in pubNodeInfo
 
 proc loadMixNodeInfo*(index: int): Result[MixNodeInfo, string] {.raises: [].} =
   let mixNodeInfoOpt = readMixNodeInfoFromFile(index)
@@ -55,10 +62,13 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   return ok(int(value mod uint64(max)))
 
 method sendThroughMixnet*(
-    self: MixnetTransportAdapter, mixMsg: seq[byte], proto: ProtocolType, destination: MultiAddress
+    self: MixnetTransportAdapter,
+    mixMsg: seq[byte],
+    proto: ProtocolType,
+    destination: MultiAddress,
 ): Future[void] {.base, async.} =
   let mixMsg = initMixMessage(mixMsg, proto)
-    
+
   let serializedResult = serializeMixMessage(mixMsg)
   if serializedResult.isErr:
     error "Serialization failed", err = serializedResult.error
@@ -117,7 +127,8 @@ method sendThroughMixnet*(
   # Wrap in Sphinx packet
   let
     serializedMsg = serializeMessageChunk(paddedMsg)
-    sphinxPacket = wrapInSphinxPacket(initMessage(serializedMsg), publicKeys, delay, hop)
+    sphinxPacket =
+      wrapInSphinxPacket(initMessage(serializedMsg), publicKeys, delay, hop)
 
   # Send the wrapped message to the first mix node in the selected path
   let parts = multiAddrs[0].split("/mix/")
@@ -125,7 +136,7 @@ method sendThroughMixnet*(
     error "Invalid multiaddress format", parts = parts
     return
 
-  let firstMixAddr = MultiAddress.init(parts[0]).valueOr:
+  let firstMixAddr = MultiAddress.init(multiAddrs[0]).valueOr:
     error "Failed to initialize MultiAddress", err = error
     return
 
@@ -134,12 +145,14 @@ method sendThroughMixnet*(
     return
 
   try:
-    let tcpConn = await self.transport.dial("", firstMixAddr, Opt.some(firstMixPeerId))
-    await tcpConn.writeLp(sphinxPacket)
-    await sleepAsync(milliseconds(100))
-    await tcpConn.close()
+    let mixConn = await self.dial("", firstMixAddr, Opt.some(firstMixPeerId))
+    await mixConn.writeLp(getHop(hop[0]))
+    await mixConn.writeLp(sphinxPacket)
+    await sleepAsync(milliseconds(10))
+    await mixConn.close()
   except CatchableError as e:
-    error "Failed to send through mixnet", err = e.msg, address = $firstMixAddr, peerId = $firstMixPeerId
+    error "Failed to send through mixnet",
+      err = e.msg, address = $firstMixAddr, peerId = $firstMixPeerId
 
 method log*(self: MixnetTransportAdapter): string {.gcsafe.} =
   "<MixnetTransportAdapter>"
@@ -174,83 +187,120 @@ method stop*(self: MixnetTransportAdapter) {.async.} =
   await procCall self.Transport.stop()
 
 proc acceptWithMixnet(self: MixnetTransportAdapter): Future[Connection] {.async.} =
+  var acceptedConn: Connection
   echo "> MixnetTransportAdapter::accept"
-  let conn = await self.transport.accept()
-  echo "< MixnetTransportAdapter::accept"
-  let remotePeerId = conn.peerID
-  if isMixNode(remotePeerId, self.pubNodeInfo):
-    while true:
-      var receivedBytes = await conn.readLp(packetSize)
+  let
+    conn = await self.transport.accept()
+    hopBytes = await conn.readLp(addrSize)
+    multiAddr = bytesToMultiAddr(hopBytes)
 
-      if receivedBytes.len == 0:
-        break # No data, end of stream
+  if isNodeMultiaddress(self.mixNodeInfo, multiAddr):
+    var receivedBytes = await conn.readLp(packetSize)
 
-      # Process the packet
-      let
-        (multiAddr, _, mixPrivKey, _, _) = getMixNodeInfo(self.mixNodeInfo)
-        (nextHop, delay, processedPkt, status) =
-          processSphinxPacket(receivedBytes, mixPrivKey, self.tagManager)
+    if receivedBytes.len == 0:
+      error "End of stream"
+      return
 
-      case status
-      of Success:
-        if (nextHop == Hop()) and (delay == @[]):
-          # This is the exit node, forward to local protocol instance
-          let
-            msgChunk = deserializeMessageChunk(processedPkt)
-            unpaddedMsg = unpadMessage(msgChunk)
+    # Process the packet
+    let
+      (multiAddr, _, mixPrivKey, _, _) = getMixNodeInfo(self.mixNodeInfo)
+      (nextHop, delay, processedPkt, status) =
+        processSphinxPacket(receivedBytes, mixPrivKey, self.tagManager)
 
-          let deserializedResult = deserializeMixMessage(unpaddedMsg)
-          if deserializedResult.isErr:
-            error "Deserialization failed", err = deserializedResult.error
-            return
-          let mixMsg = deserializedResult.get()
-          let (message, protocol) = getMixMessage(mixMsg)
-          echo "Receiver: ", multiAddr
-          echo "Message received: ", message
-          # protocol need to be returned to codec
-        else:
-          echo "Intermediate: ", multiAddr
-          # Add delay
-          let delayMillis = (delay[0].int shl 8) or delay[1].int
-          await sleepAsync(milliseconds(delayMillis))
+    case status
+    of Success:
+      if (nextHop == Hop()) and (delay == @[]):
+        # This is the exit node, forward to local protocol instance
+        let
+          msgChunk = deserializeMessageChunk(processedPkt)
+          unpaddedMsg = unpadMessage(msgChunk)
 
-          # Forward to next hop
-          let
-            nextHopBytes = getHop(nextHop)
-            fullAddrStr = bytesToMultiAddr(nextHopBytes)
-            parts = fullAddrStr.split("/mix/")
-          if parts.len != 2:
-            raise (ref ValueError)(msg: "Invalid multiaddress format: " & $parts)
+        let deserializedResult = deserializeMixMessage(unpaddedMsg)
+        if deserializedResult.isErr:
+          error "Deserialization failed", err = deserializedResult.error
+          return
+        let
+          mixMsg = deserializedResult.get()
+          (message, protocol) = getMixMessage(mixMsg)
+          exitConn = MixExitConnection.new(message)
+        echo "Receiver: ", multiAddr
+        echo "Message received: ", message
+      else:
+        echo "Intermediate: ", multiAddr
+        # Add delay
+        let delayMillis = (delay[0].int shl 8) or delay[1].int
+        await sleepAsync(milliseconds(delayMillis))
 
-          let
-            nextMixAddr = MultiAddress.init(parts[0]).value()
-            nextMixPeerId = PeerId.init(parts[1]).value()
-            tcpConn =
-              await self.transport.dial("", nextMixAddr, Opt.some(nextMixPeerId))
-          await tcpConn.writeLp(processedPkt)
-          await tcpConn.close()
-      of Duplicate:
-        discard
-      of InvalidMAC:
-        discard
-      of InvalidPoW:
-        discard
+        # Forward to next hop
+        let
+          nextHopBytes = getHop(nextHop)
+          fullAddrStr = bytesToMultiAddr(nextHopBytes)
+          parts = fullAddrStr.split("/mix/")
+        if parts.len != 2:
+          error "Invalid multiaddress format", parts = parts
+          return
+
+        let nextMixAddr = MultiAddress.init(fullAddrStr).valueOr:
+          error "Failed to initialize MultiAddress", err = error
+          return
+
+        let nextMixPeerId = PeerId.init(parts[1]).valueOr:
+          error "Failed to initialize PeerId", err = error
+          return
+
+        try:
+          let mixConn = await self.dial("", nextMixAddr, Opt.some(nextMixPeerId))
+          await mixConn.writeLp(nextHopBytes)
+          await mixConn.writeLp(processedPkt)
+          await sleepAsync(milliseconds(10))
+          #await mixConn.close()
+        except CatchableError as e:
+          error "Failed to send through mixnet",
+            err = e.msg, address = $nextMixAddr, peerId = $nextMixPeerId
+    of Duplicate:
+      discard
+    of InvalidMAC:
+      discard
+    of InvalidPoW:
+      discard
 
     # Close the current connection after processing
     await conn.close()
+
   return conn
 
 method accept*(self: MixnetTransportAdapter): Future[Connection] {.gcsafe.} =
   echo "# Accept"
   self.acceptWithMixnet()
 
-method dialWithMixnet*(
+method dialMixPhysicalConn*(
     self: MixnetTransportAdapter,
     hostname: string,
     address: MultiAddress,
     peerId: Opt[PeerId] = Opt.none(PeerId),
 ): Future[Connection] {.base, async.} =
-  echo "> MixnetTransportAdapter::dialWithMixnet1 - ", $peerId
+  echo "> MixnetTransportAdapter::dialMixPhysicalConn - ", $peerId
+  if not handlesDial(address):
+    raise newException(LPError, fmt"Address not supported: {address}")
+
+  let parts = ($address).split("/mix/")
+
+  let tcpAddr = MultiAddress.init(parts[0]).valueOr:
+    error "Failed to initialize MultiAddress", err = error
+    return
+
+  let connection = await self.transport.dial("", tcpAddr, peerId)
+
+  MixPhysicalConnection.new(connection, Opt.some(address), peerId)
+
+method dialMixLogicalConn*(
+    self: MixnetTransportAdapter,
+    hostname: string,
+    address: MultiAddress,
+    peerId: Opt[PeerId] = Opt.none(PeerId),
+    proto: string,
+): Future[Connection] {.base, async.} =
+  echo "> MixnetTransportAdapter::dialMixLogicalConn - ", $peerId
   if not handlesDial(address):
     raise newException(LPError, fmt"Address not supported: {address}")
   var sendFunc = proc(
@@ -263,7 +313,20 @@ method dialWithMixnet*(
       # TODO: handle error
     return
 
-  MixLogicalConnection.new(address, sendFunc)
+  MixLogicalConnection.new(address, protocolFromString(proto), sendFunc)
+
+method dialWithProto*(
+    self: MixnetTransportAdapter,
+    hostname: string,
+    address: MultiAddress,
+    peerId: Opt[PeerId] = Opt.none(PeerId),
+    proto: Opt[string] = Opt.none(string),
+): Future[Connection] {.gcsafe, raises: [].} =
+  echo "> MixnetTransportAdapter::dialWithProto"
+  if proto.isSome:
+    self.dialMixLogicalConn(hostname, address, peerId, proto.get())
+  else:
+    self.dialMixPhysicalConn(hostname, address, peerId)
 
 method dial*(
     self: MixnetTransportAdapter,
@@ -271,8 +334,8 @@ method dial*(
     address: MultiAddress,
     peerId: Opt[PeerId] = Opt.none(PeerId),
 ): Future[Connection] {.gcsafe.} =
-  echo "> MixnetTransportAdapter::dial1"
-  self.dialWithMixnet(hostname, address, peerId)
+  echo "> MixnetTransportAdapter::dial"
+  self.dialWithProto(hostname, address, peerId, Opt.none(string))
 
 method handles*(self: MixnetTransportAdapter, address: MultiAddress): bool {.gcsafe.} =
   echo "# Handles"
@@ -289,7 +352,7 @@ proc new*(
   if mixNodeInfoResult.isErr:
     error "Failed to load mix node info", index = index
     return T()
-  
+
   let
     mixNodeInfo = mixNodeInfoResult.value
     pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes)
@@ -301,3 +364,6 @@ proc new*(
     tagManager: tagManager,
     upgrader: upgrade,
   )
+
+proc setCallback*(self: MixnetTransportAdapter, cb: ProtocolHandler) =
+  self.handler = cb
