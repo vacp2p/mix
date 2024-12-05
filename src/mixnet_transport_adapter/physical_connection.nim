@@ -31,16 +31,16 @@ method readLp*(
 
 method writeLp*(
     self: MixPhysicalConnection, msg: openArray[byte]
-): Future[void] {.async: (raises: [CancelledError, LPStreamError]), public.} =
-  raise newException(LPStreamError, "writeLp not implemented for MixPhysicalConnection")
+): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
+  self.connection.writeLp(msg)
 
 method writeLp*(
     self: MixPhysicalConnection, msg: string
-): Future[void] {.async: (raises: [CancelledError, LPStreamError]), public.} =
-  raise newException(LPStreamError, "writeLp not implemented for MixPhysicalConnection")
+): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
+  self.connection.writeLp(msg.toOpenArrayByte(0, msg.high))
 
 method shortLog*(self: MixPhysicalConnection): string {.raises: [].} =
-  "[MixnetConnectionAdapter] " & self.connection.shortLog()
+  "[MixPhysicalConnection] " & self.connection.shortLog()
 
 method initStream*(self: MixPhysicalConnection) =
   self.connection.initStream()
@@ -52,9 +52,21 @@ func hash*(self: MixPhysicalConnection): Hash =
   self.connection.hash()
 
 proc new*(
-    T: typedesc[MixPhysicalConnection], processedMessage: seq[byte]
+    T: typedesc[MixPhysicalConnection],
+    connection: Connection,
+    address: Opt[MultiAddress] = Opt.none(Multiaddress),
+    peerId: Opt[PeerId] = Opt.none(PeerId),
 ): MixPhysicalConnection =
-  let instance = T(processedMessage: processedMessage)
+  let instance = T(
+    connection: connection,
+    activity: connection.activity,
+    timeout: connection.timeout,
+    timeoutHandler: connection.timeoutHandler,
+    peerId: peerId.get(),
+    observedAddr: address,
+    protocol: connection.protocol,
+    transportDir: connection.transportDir,
+  )
 
   when defined(libp2p_agents_metrics):
     instance.shortAgent = connection.shortAgent
