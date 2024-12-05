@@ -40,7 +40,7 @@ proc createSwitch(
   else:
     var sendFunc = proc(conn: Connection, proto: ProtocolType): Future[void] {.async.} =
       try:
-        await switch.callHandler(conn, proto)
+        await callHandler(switch, conn, proto)
       except CatchableError as e:
         echo "Error during execution of sendThroughMixnet: ", e.msg
         # TODO: handle error
@@ -94,7 +94,7 @@ proc mixnet_with_transport_adapter_poc() {.async.} =
     else:
       warn "Failed to set up node", nodeIndex = index
 
-    pingProto.add(Ping.new(rng = rng))
+    pingProto.add(ping.Ping.new(rng = rng))
     nodes[index].mount(pingProto[index])
     await nodes[index].start()
   await sleepAsync(1.seconds)

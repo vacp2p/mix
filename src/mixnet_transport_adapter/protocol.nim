@@ -9,7 +9,7 @@ type ProtocolType* = enum
   OtherProtocol = 2 # Placeholder for other protocols
 
 type ProtocolHandler* =
-  proc(switch: Switch, conn: Connection, proto: ProtocolType): Future[void] {.async.}
+  proc(conn: Connection, proto: ProtocolType): Future[void] {.async.}
 
 proc protocolFromString*(proto: string): ProtocolType =
   case proto
