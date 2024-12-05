@@ -24,8 +24,10 @@ method readExactly*(
   for i in 0 ..< nbytes:
     pbuffer[i] = self.message[i]
 
-  # Remove the read bytes from the buffer
-  self.message = self.message[nbytes ..^ self.message.len]
+  if nbytes < self.message.len:
+    self.message = self.message[nbytes .. ^1]
+  else:
+    self.message = @[]
 
 method readLine*(
     self: MixExitConnection, limit = 0, sep = "\r\n"
