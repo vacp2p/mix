@@ -4,7 +4,7 @@ import
 import logical_connection
 import
   ../[
-    config, curve25519, fragmentation, mix_node, serialization, sphinx, tag_manager,
+    config, curve25519, fragmentation, mix_message, mix_node, serialization, sphinx, tag_manager,
     utils,
   ]
 
@@ -55,12 +55,20 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   return ok(int(value mod uint64(max)))
 
 method sendThroughMixnet*(
-    self: MixnetTransportAdapter, mixMsg: seq[byte], destination: MultiAddress
+    self: MixnetTransportAdapter, mixMsg: seq[byte], proto: ProtocolType, destination: MultiAddress
 ): Future[void] {.base, async.} =
+  let mixMsg = initMixMessage(mixMsg, proto)
+    
+  let serializedResult = serializeMixMessage(mixMsg)
+  if serializedResult.isErr:
+    error "Serialization failed", err = serializedResult.error
+    return
+  let serialized = serializedResult.get()
+
   let
     (multiAddr, _, _, _, _) = getMixNodeInfo(self.mixNodeInfo)
     peerID = getPeerIdFromMultiAddr(multiAddr)
-    paddedMsg = padMessage(mixMsg, peerID)
+    paddedMsg = padMessage(serialized, peerID)
 
   var
     multiAddrs: seq[string] = @[]
@@ -99,7 +107,7 @@ method sendThroughMixnet*(
     publicKeys.add(mixPubKey)
     hop.add(initHop(multiAddrToBytes(multiAddr)))
 
-    let cryptoRandomIntResult = cryptoRandomInt(availableIndices.len)
+    let cryptoRandomIntResult = cryptoRandomInt(5)
     if cryptoRandomIntResult.isErr:
       error "Failed to generate random number", err = cryptoRandomIntResult.error
       return
@@ -190,8 +198,16 @@ proc acceptWithMixnet(self: MixnetTransportAdapter): Future[Connection] {.async.
           let
             msgChunk = deserializeMessageChunk(processedPkt)
             unpaddedMsg = unpadMessage(msgChunk)
+
+          let deserializedResult = deserializeMixMessage(unpaddedMsg)
+          if deserializedResult.isErr:
+            error "Deserialization failed", err = deserializedResult.error
+            return
+          let mixMsg = deserializedResult.get()
+          let (message, protocol) = getMixMessage(mixMsg)
           echo "Receiver: ", multiAddr
-          echo "Message received: ", cast[string](unpaddedMsg)
+          echo "Message received: ", message
+          # protocol need to be returned to codec
         else:
           echo "Intermediate: ", multiAddr
           # Add delay
@@ -238,10 +254,10 @@ method dialWithMixnet*(
   if not handlesDial(address):
     raise newException(LPError, fmt"Address not supported: {address}")
   var sendFunc = proc(
-      msg: seq[byte], destination: MultiAddress
+      msg: seq[byte], proto: ProtocolType, destination: MultiAddress
   ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
     try:
-      await self.sendThroughMixnet(msg, destination)
+      await self.sendThroughMixnet(msg, proto, destination)
     except CatchableError as e:
       echo "Error during execution of sendThroughMixnet: ", e.msg
       # TODO: handle error
