@@ -30,8 +30,7 @@ method readLine*(
 method readVarint*(
     self: MixEntryConnection
 ): Future[uint64] {.async: (raises: [CancelledError, LPStreamError]), public.} =
-  raise
-    newException(LPStreamError, "readVarint not implemented for MixEntryConnection")
+  raise newException(LPStreamError, "readVarint not implemented for MixEntryConnection")
 
 method readLp*(
     self: MixEntryConnection, maxSize: int

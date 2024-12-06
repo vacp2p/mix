@@ -123,7 +123,7 @@ proc mixnet_with_transport_adapter_poc() {.async.} =
     peerIdOpt = Opt[PeerId](oResultPrivate: true, vResultPrivate: peerId)
 
   let pingFuture = newFuture[void]()
-  
+
   proc runPing() {.async.} =
     try:
       var conn = await MixnetTransportAdapter(mixTransport).dialWithProto(
@@ -139,7 +139,7 @@ proc mixnet_with_transport_adapter_poc() {.async.} =
       pingFuture.complete()
 
   asyncCheck runPing()
-  
+
   await pingFuture
 
   for index, node in enumerate(nodes):
