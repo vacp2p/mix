@@ -29,6 +29,7 @@ method readExactly*(
   else:
     self.message = @[]
 
+# ToDo: Check readLine, readVarint, readLp implementations
 method readLine*(
     self: MixExitConnection, limit = 0, sep = "\r\n"
 ): Future[string] {.async: (raises: [CancelledError, LPStreamError]), public.} =
