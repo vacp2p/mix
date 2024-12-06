@@ -10,7 +10,7 @@ import
   tables
 import
   libp2p/[multiaddress, stream/connection, transports/transport, upgrademngrs/upgrade]
-import exit_connection, logical_connection, physical_connection, protocol
+import exit_connection, entry_connection, middle_connection, protocol
 import
   ../[
     config, curve25519, fragmentation, mix_message, mix_node, serialization, sphinx,
@@ -164,7 +164,7 @@ proc handlesStart(address: MultiAddress): bool {.gcsafe.} =
   return TcpMix.match(address)
 
 method start*(self: MixnetTransportAdapter, mixAddrs: seq[MultiAddress]) {.async.} =
-  echo "# Start"
+  trace "# Start"
   var tcpAddrs: seq[MultiAddress]
   for i, ma in mixAddrs:
     if not handlesStart(ma):
@@ -182,13 +182,13 @@ method start*(self: MixnetTransportAdapter, mixAddrs: seq[MultiAddress]) {.async
     )
 
 method stop*(self: MixnetTransportAdapter) {.async.} =
-  echo "# Stop"
+  trace "# Stop"
   await self.transport.stop()
   await procCall self.Transport.stop()
 
 proc acceptWithMixnet(self: MixnetTransportAdapter): Future[Connection] {.async.} =
   var acceptedConn: Connection
-  echo "> MixnetTransportAdapter::accept"
+  trace "# Accept with mixnet"
   let
     conn = await self.transport.accept()
     hopBytes = await conn.readLp(addrSize)
@@ -223,11 +223,11 @@ proc acceptWithMixnet(self: MixnetTransportAdapter): Future[Connection] {.async.
           mixMsg = deserializedResult.get()
           (message, protocol) = getMixMessage(mixMsg)
           exitConn = MixExitConnection.new(message)
+        trace "# Receiver: ", multiAddr
+        trace "# Message received: ", message
         await self.handler(exitConn, protocol)
-        echo "Receiver: ", multiAddr
-        echo "Message received: ", message
       else:
-        echo "Intermediate: ", multiAddr
+        trace "# Intermediate: ", multiAddr
         # Add delay
         let delayMillis = (delay[0].int shl 8) or delay[1].int
         await sleepAsync(milliseconds(delayMillis))
@@ -271,16 +271,16 @@ proc acceptWithMixnet(self: MixnetTransportAdapter): Future[Connection] {.async.
   return conn
 
 method accept*(self: MixnetTransportAdapter): Future[Connection] {.gcsafe.} =
-  echo "# Accept"
+  trace "# Accept"
   self.acceptWithMixnet()
 
-method dialMixPhysicalConn*(
+method dialMixMiddleConn*(
     self: MixnetTransportAdapter,
     hostname: string,
     address: MultiAddress,
     peerId: Opt[PeerId] = Opt.none(PeerId),
 ): Future[Connection] {.base, async.} =
-  echo "> MixnetTransportAdapter::dialMixPhysicalConn - ", $peerId
+  trace "# Dial mix middle connection", peerId = $peerId
   if not handlesDial(address):
     raise newException(LPError, fmt"Address not supported: {address}")
 
@@ -292,16 +292,16 @@ method dialMixPhysicalConn*(
 
   let connection = await self.transport.dial("", tcpAddr, peerId)
 
-  MixPhysicalConnection.new(connection, Opt.some(address), peerId)
+  MixMiddleConnection.new(connection, Opt.some(address), peerId)
 
-method dialMixLogicalConn*(
+method dialMixEntryConn*(
     self: MixnetTransportAdapter,
     hostname: string,
     address: MultiAddress,
     peerId: Opt[PeerId] = Opt.none(PeerId),
     proto: string,
 ): Future[Connection] {.base, async.} =
-  echo "> MixnetTransportAdapter::dialMixLogicalConn - ", $peerId
+  trace "# Dial mix entry connection", peerid = $peerId
   if not handlesDial(address):
     raise newException(LPError, fmt"Address not supported: {address}")
   var sendFunc = proc(
@@ -310,11 +310,11 @@ method dialMixLogicalConn*(
     try:
       await self.sendThroughMixnet(msg, proto, destination)
     except CatchableError as e:
-      echo "Error during execution of sendThroughMixnet: ", e.msg
+      error "Error during execution of sendThroughMixnet: ", err = e.msg
       # TODO: handle error
     return
 
-  MixLogicalConnection.new(address, protocolFromString(proto), sendFunc)
+  MixEntryConnection.new(address, protocolFromString(proto), sendFunc)
 
 method dialWithProto*(
     self: MixnetTransportAdapter,
@@ -323,11 +323,11 @@ method dialWithProto*(
     peerId: Opt[PeerId] = Opt.none(PeerId),
     proto: Opt[string] = Opt.none(string),
 ): Future[Connection] {.gcsafe, raises: [].} =
-  echo "> MixnetTransportAdapter::dialWithProto"
+  trace "# Dial with proto"
   if proto.isSome:
-    self.dialMixLogicalConn(hostname, address, peerId, proto.get())
+    self.dialMixEntryConn(hostname, address, peerId, proto.get())
   else:
-    self.dialMixPhysicalConn(hostname, address, peerId)
+    self.dialMixMiddleConn(hostname, address, peerId)
 
 method dial*(
     self: MixnetTransportAdapter,
@@ -335,11 +335,11 @@ method dial*(
     address: MultiAddress,
     peerId: Opt[PeerId] = Opt.none(PeerId),
 ): Future[Connection] {.gcsafe.} =
-  echo "> MixnetTransportAdapter::dial"
+  trace "# Dial"
   self.dialWithProto(hostname, address, peerId, Opt.none(string))
 
 method handles*(self: MixnetTransportAdapter, address: MultiAddress): bool {.gcsafe.} =
-  echo "# Handles"
+  trace "# Handles"
   if procCall Transport(self).handles(address):
     return handlesDial(address) or handlesStart(address)
 
