@@ -1,62 +1,62 @@
 import hashes, chronos
 import libp2p/stream/connection
 
-type MixPhysicalConnection* = ref object of Connection
+type MixMiddleConnection* = ref object of Connection
   connection: Connection
 
 method join*(
-    self: MixPhysicalConnection
+    self: MixMiddleConnection
 ): Future[void] {.async: (raises: [CancelledError], raw: true), public.} =
   self.connection.join()
 
 method readExactly*(
-    self: MixPhysicalConnection, pbytes: pointer, nbytes: int
+    self: MixMiddleConnection, pbytes: pointer, nbytes: int
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError]), public.} =
   await self.connection.readExactly(pbytes, nbytes)
 
 method readLine*(
-    self: MixPhysicalConnection, limit = 0, sep = "\r\n"
+    self: MixMiddleConnection, limit = 0, sep = "\r\n"
 ): Future[string] {.async: (raises: [CancelledError, LPStreamError]), public.} =
   await self.connection.readLine(limit, sep)
 
 method readVarint*(
-    self: MixPhysicalConnection
+    self: MixMiddleConnection
 ): Future[uint64] {.async: (raises: [CancelledError, LPStreamError]), public.} =
   await self.connection.readVarint()
 
 method readLp*(
-    self: MixPhysicalConnection, maxSize: int
+    self: MixMiddleConnection, maxSize: int
 ): Future[seq[byte]] {.async: (raises: [CancelledError, LPStreamError]), public.} =
   await self.connection.readLp(maxSize)
 
 method writeLp*(
-    self: MixPhysicalConnection, msg: openArray[byte]
+    self: MixMiddleConnection, msg: openArray[byte]
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
   self.connection.writeLp(msg)
 
 method writeLp*(
-    self: MixPhysicalConnection, msg: string
+    self: MixMiddleConnection, msg: string
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
   self.connection.writeLp(msg.toOpenArrayByte(0, msg.high))
 
-method shortLog*(self: MixPhysicalConnection): string {.raises: [].} =
-  "[MixPhysicalConnection] " & self.connection.shortLog()
+method shortLog*(self: MixMiddleConnection): string {.raises: [].} =
+  "[MixMiddleConnection] " & self.connection.shortLog()
 
-method initStream*(self: MixPhysicalConnection) =
+method initStream*(self: MixMiddleConnection) =
   self.connection.initStream()
 
-method closeImpl*(self: MixPhysicalConnection): Future[void] {.async: (raises: []).} =
+method closeImpl*(self: MixMiddleConnection): Future[void] {.async: (raises: []).} =
   self.connection.closeImpl()
 
-func hash*(self: MixPhysicalConnection): Hash =
+func hash*(self: MixMiddleConnection): Hash =
   self.connection.hash()
 
 proc new*(
-    T: typedesc[MixPhysicalConnection],
+    T: typedesc[MixMiddleConnection],
     connection: Connection,
     address: Opt[MultiAddress] = Opt.none(Multiaddress),
     peerId: Opt[PeerId] = Opt.none(PeerId),
-): MixPhysicalConnection =
+): MixMiddleConnection =
   let instance = T(
     connection: connection,
     activity: connection.activity,
@@ -74,5 +74,5 @@ proc new*(
   instance
 
 when defined(libp2p_agents_metrics):
-  proc setShortAgent*(self: MixPhysicalConnection, shortAgent: string) =
+  proc setShortAgent*(self: MixMiddleConnection, shortAgent: string) =
     discard
