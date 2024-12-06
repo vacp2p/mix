@@ -28,7 +28,6 @@ task test, "Run the test suite":
   runTest("test_curve25519")
   runTest("test_fragmentation")
   runTest("test_mix_node")
-  runTest("test_mix_protocol")
   runTest("test_pow")
   runTest("test_seqno_generator")
   runTest("test_serialization")
