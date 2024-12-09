@@ -1,4 +1,4 @@
-import std/enumerate, chronos, std/sysrand
+import chronicles, std/enumerate, chronos, std/sysrand
 import ../mixnet_transport_adapter/[transport, protocol]
 import ../protocols/[noresp_ping]
 import
@@ -43,7 +43,7 @@ proc createSwitch(
       try:
         await callHandler(switch, conn, proto)
       except CatchableError as e:
-        echo "Error during execution of sendThroughMixnet: ", e.msg
+        error "Error during execution of sendThroughMixnet: ", err = e.msg
         # TODO: handle error
       return
     for index, transport in enumerate(switch.transports):
@@ -131,10 +131,10 @@ proc mixnet_with_transport_adapter_poc() {.async.} =
       )
 
       let ping = await noRespPingProto[senderIndex].noRespPing(conn)
-      echo "received ping: ", ping
+      info "Received ping: ", ping = ping
       await sleepAsync(1.seconds)
     except Exception as e:
-      echo "An error occurred during dialing: ", e.msg
+      error "An error occurred during dialing: ", err = e.msg
     finally:
       pingFuture.complete()
 
