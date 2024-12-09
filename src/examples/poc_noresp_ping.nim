@@ -121,7 +121,7 @@ proc mixnet_with_transport_adapter_poc() {.async.} =
   let
     mixTransport = nodes[senderIndex].transports[transportIndex]
     peerId = nodes[receiverIndex].peerInfo.peerId
-    peerIdOpt = Opt[PeerId](oResultPrivate: true, vResultPrivate: peerId)
+    peerIdOpt = Opt[PeerId].some(peerId)
 
   let pingFuture = newFuture[void]()
 
