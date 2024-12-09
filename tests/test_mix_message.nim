@@ -62,7 +62,7 @@ suite "mix_message_tests":
   test "serialize_and_deserialize_mix_message_and_destination":
     let
       message = "Hello World!"
-      protocol = ProtocolType.GossipSub
+      protocol = ProtocolType.GossipSub12
       destination =
         "/ip4/127.0.0.1/tcp/4242/mix/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
       mixMsg = initMixMessage(cast[seq[byte]](message), protocol)
