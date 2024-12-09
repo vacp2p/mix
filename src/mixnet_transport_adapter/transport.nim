@@ -314,7 +314,7 @@ method dialMixEntryConn*(
       # TODO: handle error
     return
 
-  MixEntryConnection.new(address, protocolFromString(proto), sendFunc)
+  MixEntryConnection.new(address, ProtocolType.fromString(proto), sendFunc)
 
 method dialWithProto*(
     self: MixnetTransportAdapter,
