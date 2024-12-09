@@ -223,8 +223,7 @@ proc acceptWithMixnet(self: MixnetTransportAdapter): Future[Connection] {.async.
           mixMsg = deserializedResult.get()
           (message, protocol) = getMixMessage(mixMsg)
           exitConn = MixExitConnection.new(message)
-        trace "# Receiver: ", multiAddr
-        trace "# Message received: ", message
+        trace "# Received: ", receiver = multiAddr, message
         await self.handler(exitConn, protocol)
       else:
         trace "# Intermediate: ", multiAddr
