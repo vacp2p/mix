@@ -73,9 +73,7 @@ proc deserializeMixNodeInfo*(data: openArray[byte]): MixNodeInfo =
   result.libp2pPrivKey = privKeyRes.get()
 
 proc isNodeMultiaddress*(mixNodeInfo: MixNodeInfo, multiAddr: string): bool =
-  if mixNodeInfo.multiAddr == multiAddr:
-    return true
-  return false
+  return mixNodeInfo.multiAddr == multiAddr
 
 proc writeMixNodeInfoToFile*(node: MixNodeInfo, index: int): bool =
   if not dirExists(nodeInfoFolderPath):
