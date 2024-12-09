@@ -114,6 +114,7 @@ proc mixnet_with_transport_adapter_poc() {.async.} =
   for index, transport in enumerate(transports):
     if transport of MixnetTransportAdapter:
       transportIndex = index
+      break
   if transportIndex == -1:
     raise newException(ValueError, "Custom transport not found")
 
