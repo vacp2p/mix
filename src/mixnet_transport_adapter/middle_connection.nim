@@ -62,7 +62,7 @@ proc new*(
     activity: connection.activity,
     timeout: connection.timeout,
     timeoutHandler: connection.timeoutHandler,
-    peerId: peerId.get(),
+    peerId: peerId.get(PeerId.default()),
     observedAddr: address,
     protocol: connection.protocol,
     transportDir: connection.transportDir,
