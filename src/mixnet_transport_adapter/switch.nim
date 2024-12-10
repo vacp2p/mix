@@ -1,4 +1,4 @@
-import chronicles, std/enumerate, chronos, std/sysrand
+import chronicles, std/enumerate, chronos, options, std/sysrand
 import ../mixnet_transport_adapter/[transport, protocol]
 import
   libp2p/[crypto/secp, multiaddress, builders, protocols/ping, transports/tcptransport]
@@ -19,8 +19,17 @@ proc createSwitch*(
     .withMplex(inTimeout, outTimeout)
     .withTransport(
       proc(upgrade: Upgrade): Transport =
-        let wrappedTransport = TcpTransport.new(transportFlags, upgrade)
-        MixnetTransportAdapter.new(wrappedTransport, upgrade, nodeIndex, numberOfNodes)
+        let
+          wrappedTransport = TcpTransport.new(transportFlags, upgrade)
+          mixnetAdapterResult = MixnetTransportAdapter.new(
+            wrappedTransport, upgrade, nodeIndex, numberOfNodes
+          )
+        if mixnetAdapterResult.isOk:
+          return mixnetAdapterResult.get
+        else:
+          error "Failed to create MixnetTransportAdapter",
+            err = mixnetAdapterResult.error
+          return wrappedTransport
     )
     .withNoise()
     .build()

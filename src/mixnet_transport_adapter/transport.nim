@@ -148,7 +148,6 @@ method sendThroughMixnet*(
     let mixConn = await self.dial("", firstMixAddr, Opt.some(firstMixPeerId))
     await mixConn.writeLp(getHop(hop[0]))
     await mixConn.writeLp(sphinxPacket)
-    await sleepAsync(milliseconds(10))
     await mixConn.close()
   except CatchableError as e:
     error "Failed to send through mixnet",
@@ -252,7 +251,6 @@ proc acceptWithMixnet(self: MixnetTransportAdapter): Future[Connection] {.async.
           let mixConn = await self.dial("", nextMixAddr, Opt.some(nextMixPeerId))
           await mixConn.writeLp(nextHopBytes)
           await mixConn.writeLp(processedPkt)
-          await sleepAsync(milliseconds(10))
           #await mixConn.close()
         except CatchableError as e:
           error "Failed to send through mixnet",
@@ -347,22 +345,23 @@ proc new*(
     transport: Transport,
     upgrade: Upgrade,
     index, numNodes: int,
-): MixnetTransportAdapter {.raises: [].} =
+): Result[MixnetTransportAdapter, string] {.raises: [].} =
   let mixNodeInfoResult = loadMixNodeInfo(index)
   if mixNodeInfoResult.isErr:
-    error "Failed to load mix node info", index = index
-    return T()
+    return err("Failed to load mix node info for index " & $index)
 
   let
     mixNodeInfo = mixNodeInfoResult.value
     pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes)
     tagManager = initTagManager()
-  return T(
-    mixNodeInfo: mixNodeInfo,
-    pubNodeInfo: pubNodeInfo,
-    transport: transport,
-    tagManager: tagManager,
-    upgrader: upgrade,
+  return ok(
+    T(
+      mixNodeInfo: mixNodeInfo,
+      pubNodeInfo: pubNodeInfo,
+      transport: transport,
+      tagManager: tagManager,
+      upgrader: upgrade,
+    )
   )
 
 proc setCallback*(self: MixnetTransportAdapter, cb: ProtocolHandler) =
