@@ -1,5 +1,6 @@
 import chronos, std/enumerate, strutils
-import libp2p/[builders, protocols/ping, protocols/pubsub/gossipsub/types, stream/connection]
+import
+  libp2p/[builders, protocols/ping, protocols/pubsub/gossipsub/types, stream/connection]
 import ../protocols/[noresp_ping]
 
 const protocolTypeSize* = 2
