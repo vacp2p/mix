@@ -84,25 +84,16 @@ proc mixnet_with_transport_adapter_poc() {.async.} =
     peerId = nodes[receiverIndex].peerInfo.peerId
     peerIdOpt = Opt[PeerId].some(peerId)
 
-  let pingFuture = newFuture[void]()
+  try:
+    var conn = await MixnetTransportAdapter(mixTransport).dialWithProto(
+      "", multiAddrs[receiverIndex], peerIdOpt, Opt.some(NoRespPingCodec)
+    )
 
-  proc runPing() {.async.} =
-    try:
-      var conn = await MixnetTransportAdapter(mixTransport).dialWithProto(
-        "", multiAddrs[receiverIndex], peerIdOpt, Opt.some(NoRespPingCodec)
-      )
-
-      let ping = await noRespPingProto[senderIndex].noRespPing(conn)
-      info "Received ping: ", ping = ping
-      await sleepAsync(1.seconds)
-    except Exception as e:
-      error "An error occurred during dialing: ", err = e.msg
-    finally:
-      pingFuture.complete()
-
-  asyncCheck runPing()
-
-  await pingFuture
+    let ping = await noRespPingProto[senderIndex].noRespPing(conn)
+    info "Received ping: ", ping = ping
+    await sleepAsync(1.seconds)
+  except Exception as e:
+    error "An error occurred during dialing: ", err = e.msg
 
   for index, node in enumerate(nodes):
     await node.stop()

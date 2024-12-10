@@ -148,7 +148,6 @@ method sendThroughMixnet*(
     let mixConn = await self.dial("", firstMixAddr, Opt.some(firstMixPeerId))
     await mixConn.writeLp(getHop(hop[0]))
     await mixConn.writeLp(sphinxPacket)
-    await sleepAsync(milliseconds(10))
     await mixConn.close()
   except CatchableError as e:
     error "Failed to send through mixnet",
@@ -252,8 +251,7 @@ proc acceptWithMixnet(self: MixnetTransportAdapter): Future[Connection] {.async.
           let mixConn = await self.dial("", nextMixAddr, Opt.some(nextMixPeerId))
           await mixConn.writeLp(nextHopBytes)
           await mixConn.writeLp(processedPkt)
-          await sleepAsync(milliseconds(10))
-          #await mixConn.close()
+          await mixConn.close()
         except CatchableError as e:
           error "Failed to send through mixnet",
             err = e.msg, address = $nextMixAddr, peerId = $nextMixPeerId
