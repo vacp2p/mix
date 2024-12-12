@@ -1,26 +1,67 @@
 import chronicles, sequtils, std/enumerate, strutils, chronos, std/strformat, std/sysrand, stew/byteutils
-import ../mixnet_transport_adapter/[switch, transport]
+import ../mixnet_transport_adapter/[protocol, transport]
 import libp2p/[crypto/secp, multiaddress, builders, protocols/pubsub/gossipsub, transports/tcptransport]
 import ../[mix_node]
 
-proc connectNodesTCP(nodes: seq[tuple[switch: Switch, gossip: GossipSub]]): Future[seq[Connection]] {.async.} =
-  var connections: seq[Connection] = @[]
+proc createSwitch*(
+    libp2pPrivKey: SkPrivateKey, multiAddr: MultiAddress, nodeIndex, numberOfNodes: int
+): Switch =
+  let
+    inTimeout: Duration = 5.minutes
+    outTimeout: Duration = 5.minutes
+    transportFlags: set[ServerFlags] = {}
+
+  let switch = SwitchBuilder
+    .new()
+    .withPrivateKey(PrivateKey(scheme: Secp256k1, skkey: libp2pPrivKey))
+    .withAddress(multiAddr)
+    .withRng(crypto.newRng())
+    .withMplex(inTimeout, outTimeout)
+    .withTransport(
+      proc(upgrade: Upgrade): Transport =
+        let
+          wrappedTransport = TcpTransport.new(transportFlags, upgrade)
+          mixnetAdapterResult = MixnetTransportAdapter.new(
+            wrappedTransport, upgrade, nodeIndex, numberOfNodes
+          )
+        if mixnetAdapterResult.isOk:
+          return mixnetAdapterResult.get
+        else:
+          error "Failed to create MixnetTransportAdapter",
+            err = mixnetAdapterResult.error
+          return wrappedTransport
+    )
+    .withTcpTransport()
+    .withNoise()
+    .build()
+
+  if switch.isNil:
+    error "Failed to create Switch", nodeIndex = nodeIndex
+    return
+  else:
+    var sendFunc = proc(conn: Connection, proto: ProtocolType): Future[void] {.async.} =
+      try:
+        await callHandler(switch, conn, proto)
+      except CatchableError as e:
+        error "Error during execution of sendThroughMixnet: ", err = e.msg
+        # TODO: handle error
+      return
+    for index, transport in enumerate(switch.transports):
+      if transport of MixnetTransportAdapter:
+        MixnetTransportAdapter(transport).setCallBack(sendFunc)
+        break
+    return switch
+
+proc connectNodesTCP(nodes: seq[tuple[switch: Switch, gossip: GossipSub]]) {.async.} =
   for i in 0 ..< nodes.len:
     for j in max(0, i-2) .. min(nodes.len-1, i+2):
       if i != j:
-        var tcpTransport: TcpTransport
-        for index, transport in enumerate(nodes[i].switch.transports):
-          if transport of TcpTransport:
-            tcpTransport = TcpTransport(transport)
-            break
         let tcpAddr = nodes[j].switch.peerInfo.addrs.filterIt(TCP.match(it))
         if tcpAddr.len > 0:
           try:
-            let conn = await tcpTransport.dial("", tcpAddr[0], Opt[PeerId].some(nodes[j].switch.peerInfo.peerId))
-            connections.add(conn)
+            await nodes[i].switch.connect(nodes[j].switch.peerInfo.peerId, tcpAddr)
           except CatchableError as e:
             warn "Failed to connect nodes", src = i, dst = j, error = e.msg
-  return connections
 
 proc setUpNodes(numberOfNodes: int): (seq[SkPrivateKey], seq[MultiAddress]) =
   # This is not actually GC-safe
@@ -44,6 +85,14 @@ proc setUpNodes(numberOfNodes: int): (seq[SkPrivateKey], seq[MultiAddress]) =
 
       let (multiAddrStr, _, _, _, libp2pPrivKey) = getMixNodeInfo(node)
       multiAddrs.add(MultiAddress.init(multiAddrStr).value())
+      let parts = (multiAddrStr).split("/mix/")
+      if parts.len != 2:
+        error "Invalid multiaddress format", parts = parts
+        return
+      let tcpAddr = MultiAddress.init(parts[0]).valueOr:
+        error "Failed to initialize MultiAddress", err = error
+        return
+      multiAddrs.add(tcpAddr)
       libp2pPrivKeys.add(libp2pPrivKey)
 
     return (libp2pPrivKeys, multiAddrs)
@@ -59,27 +108,15 @@ proc mixnet_gossipsub_test() {.async.} =
     if not switch.isNil:
       let
         gossip = GossipSub.init(switch = switch, triggerSelf = true)
-        transportFlags: set[ServerFlags] = {}
-        upgrade = Upgrade.new()
-        tcpTransport = TcpTransport.new(transportFlags, upgrade)
       switch.mount(gossip)
-      switch.addTransport(tcpTransport)
-      let parts = ($multiAddrs[i]).split("/mix/")
-      if parts.len != 2:
-        error "Invalid multiaddress format", parts = parts
-        return
-      let tcpAddr = MultiAddress.init(parts[0]).valueOr:
-        error "Failed to initialize MultiAddress", err = error
-        return
       nodes.add((switch, gossip))
       await switch.start()
-      switch.peerInfo.addrs.add(tcpAddr)
     else:
       warn "Failed to set up node", nodeIndex = i
 
   await sleepAsync(1.seconds)
 
-  let connections = await connectNodesTCP(nodes)
+  await connectNodesTCP(nodes)
 
   for i, node in nodes:
     node.gossip.subscribe("chat", proc(topic: string, data: seq[byte]) {.async.} = 
