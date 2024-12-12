@@ -3,16 +3,24 @@ import ../mixnet_transport_adapter/[switch, transport]
 import libp2p/[crypto/secp, multiaddress, builders, protocols/pubsub/gossipsub, transports/tcptransport]
 import ../[mix_node]
 
-proc connectNodesTCP(nodes: seq[tuple[switch: Switch, gossip: GossipSub]]) {.async.} =
+proc connectNodesTCP(nodes: seq[tuple[switch: Switch, gossip: GossipSub]]): Future[seq[Connection]] {.async.} =
+  var connections: seq[Connection] = @[]
   for i in 0 ..< nodes.len:
     for j in max(0, i-2) .. min(nodes.len-1, i+2):
       if i != j:
+        var tcpTransport: TcpTransport
+        for index, transport in enumerate(nodes[i].switch.transports):
+          if transport of TcpTransport:
+            tcpTransport = TcpTransport(transport)
+            break
         let tcpAddr = nodes[j].switch.peerInfo.addrs.filterIt(TCP.match(it))
         if tcpAddr.len > 0:
           try:
-            await nodes[i].switch.connect(nodes[j].switch.peerInfo.peerId, tcpAddr)
+            let conn = await tcpTransport.dial("", tcpAddr[0], Opt[PeerId].some(nodes[j].switch.peerInfo.peerId))
+            connections.add(conn)
           except CatchableError as e:
             warn "Failed to connect nodes", src = i, dst = j, error = e.msg
+  return connections
 
 proc setUpNodes(numberOfNodes: int): (seq[SkPrivateKey], seq[MultiAddress]) =
   # This is not actually GC-safe
@@ -71,7 +79,7 @@ proc mixnet_gossipsub_test() {.async.} =
 
   await sleepAsync(1.seconds)
 
-  await connectNodesTCP(nodes)
+  let connections = await connectNodesTCP(nodes)
 
   for i, node in nodes:
     node.gossip.subscribe("chat", proc(topic: string, data: seq[byte]) {.async.} = 
