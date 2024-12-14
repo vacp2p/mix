@@ -1,4 +1,4 @@
-import config, seqno_generator, utils
+import config, seqno_generator, results, utils
 import libp2p/peerid
 
 const paddingLengthSize* = 2
@@ -13,26 +13,28 @@ type MessageChunk* = object
 proc initMessageChunk*(
     paddingLength: uint16, data: seq[byte], seqNo: uint32
 ): MessageChunk =
-  result.paddingLength = paddingLength
-  result.data = data
-  result.seqNo = seqNo
+  MessageChunk(paddingLength: paddingLength, data: data, seqNo: seqNo)
 
 proc getMessageChunk*(msgChunk: MessageChunk): (uint16, seq[byte], uint32) =
   (msgChunk.paddingLength, msgChunk.data, msgChunk.seqNo)
 
-proc serializeMessageChunk*(msgChunk: MessageChunk): seq[byte] =
-  let paddingBytes = uint16ToBytes(msgChunk.paddingLength)
-  let seqNoBytes = uint32ToBytes(msgChunk.seqNo)
-  assert len(msgChunk.data) == dataSize,
-    "Padded data must be exactly " & $dataSize & " bytes"
-  result = paddingBytes & msgChunk.data & seqNoBytes
+proc serializeMessageChunk*(msgChunk: MessageChunk): Result[seq[byte], string] =
+  let
+    paddingBytes = uint16ToBytes(msgChunk.paddingLength)
+    seqNoBytes = uint32ToBytes(msgChunk.seqNo)
+  if len(msgChunk.data) != dataSize:
+    return err("Padded data must be exactly " & $dataSize & " bytes")
+  return ok(paddingBytes & msgChunk.data & seqNoBytes)
 
-proc deserializeMessageChunk*(data: openArray[byte]): MessageChunk =
-  assert len(data) == messageSize, "Data must be exactly " & $messageSize & " bytes"
+proc deserializeMessageChunk*(data: openArray[byte]): Result[MessageChunk, string] =
+  if len(data) != messageSize:
+    return err("Data must be exactly " & $messageSize & " bytes")
 
-  result.paddingLength = bytesToUInt16(data[0 .. paddingLengthSize - 1])
-  result.data = data[paddingLengthSize .. (paddingLengthSize + dataSize - 1)]
-  result.seqNo = bytesToUInt32(data[paddingLengthSize + dataSize ..^ 1])
+  let
+    paddingLength = bytesToUInt16(data[0 .. paddingLengthSize - 1])
+    chunk = data[paddingLengthSize .. (paddingLengthSize + dataSize - 1)]
+    seqNo = bytesToUInt32(data[paddingLengthSize + dataSize ..^ 1])
+  ok(MessageChunk(paddingLength: paddingLength, data: @chunk, seqNo: seqNo))
 
 proc ceilDiv*(a, b: int): int =
   (a + b - 1) div b
@@ -42,25 +44,25 @@ proc padMessage*(messageBytes: seq[byte], peerId: PeerId): MessageChunk =
   var seqNoGen = initSeqNo(peerId)
   seqNoGen.generateSeqNo(messageBytes)
 
-  # Calculate padding length
   let paddingLength = uint16(dataSize - len(messageBytes))
 
   let paddedData =
     if paddingLength > 0:
-      # Create padding bytes
       let paddingBytes = newSeq[byte](paddingLength)
       paddingBytes & messageBytes
     else:
       messageBytes
 
-  result = initMessageChunk(paddingLength, paddedData, seqNoGen.getSeqNo())
+  MessageChunk(
+    paddingLength: paddingLength, data: paddedData, seqNo: seqNoGen.getSeqNo()
+  )
 
-proc unpadMessage*(msgChunk: MessageChunk): seq[byte] =
+proc unpadMessage*(msgChunk: MessageChunk): Result[seq[byte], string] =
   let msgLength = len(msgChunk.data) - int(msgChunk.paddingLength)
+  if msgLength < 0:
+    return err("Invalid padding length")
 
-  assert msgLength >= 0, "Invalid padding length"
-
-  return msgChunk.data[msgChunk.paddingLength ..^ 1]
+  ok(msgChunk.data[msgChunk.paddingLength ..^ 1])
 
 proc padAndChunkMessage*(messageBytes: seq[byte], peerId: PeerId): seq[MessageChunk] =
   var seqNoGen = initSeqNo(peerId)
@@ -72,16 +74,14 @@ proc padAndChunkMessage*(messageBytes: seq[byte], peerId: PeerId): seq[MessageCh
   let totalChunks = max(1, ceilDiv(len(messageBytes), dataSize))
     # Ensure at least one chunk is generated
   for i in 0 ..< totalChunks:
-    let startIdx = i * dataSize
-    let endIdx = min(startIdx + dataSize, len(messageBytes))
-    let chunkData = messageBytes[startIdx .. endIdx - 1]
-
-    # Calculate padding length
-    let paddingLength = uint16(dataSize - len(chunkData))
+    let
+      startIdx = i * dataSize
+      endIdx = min(startIdx + dataSize, len(messageBytes))
+      chunkData = messageBytes[startIdx .. endIdx - 1]
+      paddingLength = uint16(dataSize - len(chunkData))
 
     let paddedData =
       if paddingLength > 0:
-        # Create padding bytes
         let paddingBytes = newSeq[byte](paddingLength)
         paddingBytes & chunkData
       else:

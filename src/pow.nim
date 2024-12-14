@@ -1,4 +1,4 @@
-import crypto, std/times
+import crypto, results, std/times
 
 const
   difficultyLevel* = 18 # Difficulty level
@@ -7,9 +7,10 @@ const
   timestampSize = 8 # Timestamp size
 
 # Helper function to convert integer to sequence of bytes
-proc intToBytes*(value: int64, byteSize: int): seq[byte] =
+proc intToBytes*(value: int64, byteSize: int): Result[seq[byte], string] =
   # Ensure byteSize is within the acceptable range
-  assert byteSize >= 1 and byteSize <= 8, "Byte size must be between 1 and 8 inclusive"
+  if byteSize < 1 or byteSize > 8:
+    return err("Byte size must be between 1 and 8 inclusive")
 
   # Calculate the maximum value that can be represented with byteSize bytes
   let maxValue =
@@ -18,11 +19,14 @@ proc intToBytes*(value: int64, byteSize: int): seq[byte] =
     else:
       (1 shl (byteSize * 8)) - 1
 
-  assert value >= 0 and value <= maxValue, "Value too large for the specified byte size"
+  if value < 0 or value > maxValue:
+    return err("Value too large for the specified byte size")
 
-  result = newSeq[byte](byteSize)
+  var res = newSeq[byte](byteSize)
   for i in 0 ..< byteSize:
-    result[i] = byte((value shr (i * 8)) and 0xFF)
+    res[i] = byte((value shr (i * 8)) and 0xFF)
+
+  return ok(res)
 
 # Function to check if the computed hash meets the difficulty level
 proc isValidHash*(hash: array[32, byte]): bool =
@@ -38,27 +42,36 @@ proc isValidHash*(hash: array[32, byte]): bool =
   return false
 
 # Function to find a valid nonce that produces a hash with at least 'difficultyLevel' leading zeros. Attaches PoW to the input.
-proc attachPow*(message: seq[byte]): seq[byte] =
-  var nonce = 0
-  var hash: array[32, byte]
-  let timestamp = intToBytes(getTime().toUnix, 8)
+proc attachPow*(message: seq[byte]): Result[seq[byte], string] =
+  var
+    nonce = 0
+    hash: array[32, byte]
+
+  let timestampRes = intToBytes(getTime().toUnix, 8)
+  if timestampRes.isErr:
+    return err("Timestamp conversion error: " & $timestampRes.error)
+  let timestamp = timestampRes.get()
 
   while true:
-    let nonceBytes = intToBytes(nonce, 4)
+    let nonceBytesRes = intToBytes(nonce, 4)
+    if nonceBytesRes.isErr:
+      return err("Nonce conversion error: " & $timestampRes.error)
+    let nonceBytes = nonceBytesRes.get()
+
     let inputData = message & timestamp & nonceBytes
     hash = sha256_hash(inputData)
 
     # Check if hash meets the difficulty level
     if isValidHash(hash):
-      return inputData
+      return ok(inputData)
 
     nonce.inc() # Increment nonce if hash does not meet criteria
 
 # Function to verify the Proof of Work (PoW)
-proc verifyPow*(inputData: openArray[byte]): bool =
+proc verifyPow*(inputData: openArray[byte]): Result[bool, string] =
   # Ensure inputData is at least as long as timestamp + nonceBytes
-  assert inputData.len >= (timestampSize + nonceSize),
-    "Input data must be at least as long as the timestamp + nonce size"
+  if inputData.len < (timestampSize + nonceSize):
+    return err("Input data must be at least as long as the timestamp + nonce size")
 
   # Extract timestamp from inputData
   let extractedTimestamp = inputData[^(nonceSize + timestampSize) ..^ nonceSize]
@@ -70,8 +83,8 @@ proc verifyPow*(inputData: openArray[byte]): bool =
     timestamp = timestamp or (int64(extractedTimestamp[i]) shl (i * 8))
   let timeWindow = currentTime - timestamp
   if timeWindow < 0 or timeWindow > acceptanceWindow:
-    return false
+    return ok(false)
 
   # Recompute hash and verify it
   let hash = sha256_hash(inputData)
-  return isValidHash(hash)
+  return ok(isValidHash(hash))
