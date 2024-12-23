@@ -1,5 +1,5 @@
-import ../src/[mix_message, mixnet_transport_adapter/protocol]
 import chronicles, results, unittest
+import ../src/[mix_message, mixnet_transport_adapter/protocol]
 
 # Define test cases
 suite "mix_message_tests":

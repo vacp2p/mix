@@ -16,21 +16,26 @@ proc cryptoRandomInt(max: int): Result[int, string] =
 proc setUpNodes(numberOfNodes: int): (seq[SkPrivateKey], seq[MultiAddress]) =
   # This is not actually GC-safe
   {.gcsafe.}:
-    initializeMixNodes(numberOfNodes)
+    discard initializeMixNodes(numberOfNodes)
 
     var libp2pPrivKeys: seq[SkPrivateKey] = @[]
     var multiAddrs: seq[MultiAddress] = @[]
 
     for index, node in enumerate(mixNodes):
-      let nodeMixPubInfo = getMixPubInfoByIndex(index)
-      let pubResult = writePubInfoToFile(nodeMixPubInfo, index)
-      if pubResult == false:
+      let nodePubInfoRes = getMixPubInfoByIndex(index)
+      if nodePubInfoRes.isErr:
+        error "Get mix pub info by index error", err = nodePubInfoRes.error
+        continue
+      let nodePubInfo = nodePubInfoRes.get()
+
+      let writePubRes = writePubInfoToFile(nodePubInfo, index)
+      if writePubRes.isErr:
         error "Failed to write pub info to file", nodeIndex = index
         continue
 
-      let mixResult = writeMixNodeInfoToFile(node, index)
-      if mixResult == false:
-        error "Failed to write mix node info to file", nodeIndex = index
+      let writeNodeRes = writeMixNodeInfoToFile(node, index)
+      if writeNodeRes.isErr:
+        error "Failed to write mix info to file", nodeIndex = index
         continue
 
       let (multiAddrStr, _, _, _, libp2pPrivKey) = getMixNodeInfo(node)

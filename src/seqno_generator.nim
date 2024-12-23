@@ -1,17 +1,21 @@
-import crypto
-import libp2p/peerid, std/endians, times
+import crypto, times
+import std/endians
+import libp2p/peerid
 
 type SeqNo* = object
   counter: uint32
 
 proc initSeqNo*(peerId: PeerId): SeqNo =
+  var seqNo: SeqNo
   let peerIdHash = sha256_hash(peerId.data)
   for i in 0 .. 3:
-    result.counter = result.counter or (uint32(peerIdHash[i]) shl (8 * (3 - i)))
+    seqNo.counter = seqNo.counter or (uint32(peerIdHash[i]) shl (8 * (3 - i)))
+  return seqNo
 
 proc generateSeqNo*(seqNo: var SeqNo, messageBytes: seq[byte]) =
-  let currentTime = getTime().toUnix() * 1000
-  let currentTimeBytes = newSeq[byte](8)
+  let
+    currentTime = getTime().toUnix() * 1000
+    currentTimeBytes = newSeq[byte](8)
   bigEndian64(addr currentTimeBytes[0], unsafeAddr currentTime)
   let messageHash = sha256_hash(messageBytes & currentTimeBytes)
   var cnt: uint32

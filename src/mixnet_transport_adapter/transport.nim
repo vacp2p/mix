@@ -31,26 +31,33 @@ type
   MixnetTransportError* = object of CatchableError
 
 proc loadMixNodeInfo*(index: int): Result[MixNodeInfo, string] {.raises: [].} =
-  let mixNodeInfoOpt = readMixNodeInfoFromFile(index)
-  if mixNodeInfoOpt.isSome:
-    ok(mixNodeInfoOpt.get())
+  let readNodeRes = readMixNodeInfoFromFile(index)
+  if readNodeRes.isErr:
+    return err("Failed to load node info from file.")
   else:
-    err("Failed to load node info from file.")
+    ok(readNodeRes.get())
 
 proc loadAllButIndexMixPubInfo*(
     index, numNodes: int
-): Table[PeerId, MixPubInfo] {.raises: [].} =
+): Result[Table[PeerId, MixPubInfo], string] {.raises: [].} =
   var pubInfoTable = initTable[PeerId, MixPubInfo]()
   for i in 0 ..< numNodes:
     if i != index:
-      let pubInfoOpt = readMixPubInfoFromFile(i)
-      if pubInfoOpt.isSome:
+      let pubInfoRes = readMixPubInfoFromFile(i)
+      if pubInfoRes.isErr:
+        return err("Failed to load pub info from file.")
+      else:
         let
-          pubInfo = pubInfoOpt.get()
+          pubInfo = pubInfoRes.get()
           (multiAddr, _, _) = getMixPubInfo(pubInfo)
-          peerId = getPeerIdFromMultiAddr(multiAddr)
+
+        let peerIdRes = getPeerIdFromMultiAddr(multiAddr)
+        if peerIdRes.isErr:
+          return err("Failed to get peer id from multiaddress: " & peerIdRes.error)
+        let peerId = peerIdRes.get()
+
         pubInfoTable[peerId] = pubInfo
-  return pubInfoTable
+  return ok(pubInfoTable)
 
 # ToDo: Change to a more secure random number generator for production.
 proc cryptoRandomInt(max: int): Result[int, string] =
@@ -75,10 +82,15 @@ method sendThroughMixnet*(
     return
   let serialized = serializedResult.get()
 
-  let
-    (multiAddr, _, _, _, _) = getMixNodeInfo(self.mixNodeInfo)
-    peerID = getPeerIdFromMultiAddr(multiAddr)
-    paddedMsg = padMessage(serialized, peerID)
+  let (multiAddr, _, _, _, _) = getMixNodeInfo(self.mixNodeInfo)
+
+  let peerIdRes = getPeerIdFromMultiAddr(multiAddr)
+  if peerIdRes.isErr:
+    error "Failed to get peer id from multiaddress", err = peerIdRes.error
+    return
+  let peerId = peerIdRes.get()
+
+  let paddedMsg = padMessage(serialized, peerID)
 
   var
     multiAddrs: seq[string] = @[]
@@ -115,7 +127,13 @@ method sendThroughMixnet*(
       getMixPubInfo(self.pubNodeInfo.getOrDefault(randPeerId))
     multiAddrs.add(multiAddr)
     publicKeys.add(mixPubKey)
-    hop.add(initHop(multiAddrToBytes(multiAddr)))
+
+    let multiAddrBytesRes = multiAddrToBytes(multiAddr)
+    if multiAddrBytesRes.isErr:
+      error "Failed to convert multiaddress to bytes", err = multiAddrBytesRes.error
+      return
+
+    hop.add(initHop(multiAddrBytesRes.get()))
 
     let cryptoRandomIntResult = cryptoRandomInt(5)
     if cryptoRandomIntResult.isErr:
@@ -125,10 +143,17 @@ method sendThroughMixnet*(
     delay.add(uint16ToBytes(uint16(delayMilliSec)))
 
   # Wrap in Sphinx packet
-  let
-    serializedMsg = serializeMessageChunk(paddedMsg)
-    sphinxPacket =
-      wrapInSphinxPacket(initMessage(serializedMsg), publicKeys, delay, hop)
+  let serializedRes = serializeMessageChunk(paddedMsg)
+  if serializedRes.isErr:
+    error "Failed to serialize padded message", err = serializedRes.error
+    return
+
+  let sphinxPacketRes =
+    wrapInSphinxPacket(initMessage(serializedRes.get()), publicKeys, delay, hop)
+  if sphinxPacketRes.isErr:
+    error "Failed to wrap in sphinx packet", err = sphinxPacketRes.error
+    return
+  let sphinxPacket = sphinxPacketRes.get()
 
   # Send the wrapped message to the first mix node in the selected path
   let parts = multiAddrs[0].split("/mix/")
@@ -191,9 +216,13 @@ proc acceptWithMixnet(self: MixnetTransportAdapter): Future[Connection] {.async.
   let
     conn = await self.transport.accept()
     hopBytes = await conn.readLp(addrSize)
-    multiAddr = bytesToMultiAddr(hopBytes)
 
-  if isNodeMultiaddress(self.mixNodeInfo, multiAddr):
+  let multiAddrRes = bytesToMultiAddr(hopBytes)
+  if multiAddrRes.isErr:
+    error "Failed to convert bytes to multiaddress", err = multiAddrRes.error
+    return
+
+  if isNodeMultiaddress(self.mixNodeInfo, multiAddrRes.get()):
     var receivedBytes = await conn.readLp(packetSize)
 
     if receivedBytes.len == 0:
@@ -201,18 +230,30 @@ proc acceptWithMixnet(self: MixnetTransportAdapter): Future[Connection] {.async.
       return
 
     # Process the packet
-    let
-      (multiAddr, _, mixPrivKey, _, _) = getMixNodeInfo(self.mixNodeInfo)
-      (nextHop, delay, processedPkt, status) =
-        processSphinxPacket(receivedBytes, mixPrivKey, self.tagManager)
+    let (multiAddr, _, mixPrivKey, _, _) = getMixNodeInfo(self.mixNodeInfo)
+
+    let processedPktRes =
+      processSphinxPacket(receivedBytes, mixPrivKey, self.tagManager)
+    if processedPktRes.isErr:
+      error "Failed to process Sphinx packet", err = processedPktRes.error
+      return
+    let (nextHop, delay, processedPkt, status) = processedPktRes.get()
 
     case status
     of Success:
       if (nextHop == Hop()) and (delay == @[]):
         # This is the exit node, forward to local protocol instance
-        let
-          msgChunk = deserializeMessageChunk(processedPkt)
-          unpaddedMsg = unpadMessage(msgChunk)
+        let msgChunkRes = deserializeMessageChunk(processedPkt)
+        if msgChunkRes.isErr:
+          error "Deserialization failed", err = msgChunkRes.error
+          return
+        let msgChunk = msgChunkRes.get()
+
+        let unpaddedMsgRes = unpadMessage(msgChunk)
+        if unpaddedMsgRes.isErr:
+          error "Unpadding message failed", err = unpaddedMsgRes.error
+          return
+        let unpaddedMsg = unpaddedMsgRes.get()
 
         let deserializedResult = deserializeMixMessage(unpaddedMsg)
         if deserializedResult.isErr:
@@ -231,10 +272,15 @@ proc acceptWithMixnet(self: MixnetTransportAdapter): Future[Connection] {.async.
         await sleepAsync(milliseconds(delayMillis))
 
         # Forward to next hop
-        let
-          nextHopBytes = getHop(nextHop)
-          fullAddrStr = bytesToMultiAddr(nextHopBytes)
-          parts = fullAddrStr.split("/mix/")
+        let nextHopBytes = getHop(nextHop)
+
+        let fullAddrStrRes = bytesToMultiAddr(nextHopBytes)
+        if fullAddrStrRes.isErr:
+          error "Failed to convert bytes to multiaddress", err = multiAddrRes.error
+          return
+        let fullAddrStr = fullAddrStrRes.get()
+
+        let parts = fullAddrStr.split("/mix/")
         if parts.len != 2:
           error "Invalid multiaddress format", parts = parts
           return
@@ -346,13 +392,17 @@ proc new*(
     upgrade: Upgrade,
     index, numNodes: int,
 ): Result[MixnetTransportAdapter, string] {.raises: [].} =
-  let mixNodeInfoResult = loadMixNodeInfo(index)
-  if mixNodeInfoResult.isErr:
+  let mixNodeInfoRes = loadMixNodeInfo(index)
+  if mixNodeInfoRes.isErr:
     return err("Failed to load mix node info for index " & $index)
 
+  let pubNodeInfoRes = loadAllButIndexMixPubInfo(index, numNodes)
+  if pubNodeInfoRes.isErr:
+    return err("Failed to load mix pub info for index " & $index)
+
   let
-    mixNodeInfo = mixNodeInfoResult.value
-    pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes)
+    mixNodeInfo = mixNodeInfoRes.value
+    pubNodeInfo = pubNodeInfoRes.value
     tagManager = initTagManager()
   return ok(
     T(

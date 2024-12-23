@@ -30,10 +30,17 @@ proc deserializeMessageChunk*(data: openArray[byte]): Result[MessageChunk, strin
   if len(data) != messageSize:
     return err("Data must be exactly " & $messageSize & " bytes")
 
-  let
-    paddingLength = bytesToUInt16(data[0 .. paddingLengthSize - 1])
-    chunk = data[paddingLengthSize .. (paddingLengthSize + dataSize - 1)]
-    seqNo = bytesToUInt32(data[paddingLengthSize + dataSize ..^ 1])
+  let paddingLengthRes = bytesToUInt16(data[0 .. paddingLengthSize - 1])
+  if paddingLengthRes.isErr:
+    return err(paddingLengthRes.error)
+  let paddingLength = paddingLengthRes.get()
+
+  let chunk = data[paddingLengthSize .. (paddingLengthSize + dataSize - 1)]
+
+  let seqNoRes = bytesToUInt32(data[paddingLengthSize + dataSize ..^ 1])
+  if seqNoRes.isErr:
+    return err(seqNoRes.error)
+  let seqNo = seqNoRes.get()
   ok(MessageChunk(paddingLength: paddingLength, data: @chunk, seqNo: seqNo))
 
 proc ceilDiv*(a, b: int): int =

@@ -1,5 +1,6 @@
+import chronicles, results, unittest
+import pkg/libp2p/crypto/curve25519
 import ../src/curve25519
-import chronicles, pkg/libp2p/crypto/curve25519, results, unittest
 
 # Helper function for non-zero check
 proc isNotZero(key: FieldElement): bool =

@@ -1,4 +1,5 @@
-import crypto, results, std/times
+import crypto, results
+import std/times
 
 const
   difficultyLevel* = 18 # Difficulty level

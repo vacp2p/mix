@@ -1,4 +1,4 @@
-import chronos, std/sysrand
+import chronicles, chronos, std/sysrand
 import libp2p/[crypto/secp, multiaddress, builders, transports/tcptransport]
 import noresp_ping
 
@@ -29,7 +29,9 @@ proc noresp_ping_test() {.async.} =
   discard await allFinished(switchA.start(), switchB.start())
   var conn =
     await switchA.dial(switchB.peerInfo.peerId, @[addressB], @[NoRespPingCodec])
-  discard await norespPingA.noRespPing(conn)
+
+  let ping = await norespPingA.noRespPing(conn)
+  info "Received ping: ", ping = ping
   await sleepAsync(1.seconds)
 
 when isMainModule:
