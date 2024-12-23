@@ -1,6 +1,7 @@
-import curve25519, config, utils
+import options, os, results, strformat, strutils, config, utils
+import std/streams
 import libp2p/[crypto/crypto, crypto/curve25519, crypto/secp, multiaddress, peerid]
-import options, os, std/streams, results, strformat, strutils
+import curve25519
 
 const MixNodeInfoSize* =
   addrSize + (2 * FieldElementSize) + (SkRawPublicKeySize + SkRawPrivateKeySize)
@@ -39,22 +40,31 @@ proc getMixNodeInfo*(
     info.libp2pPrivKey,
   )
 
-proc serializeMixNodeInfo*(nodeInfo: MixNodeInfo): seq[byte] =
+proc serializeMixNodeInfo*(nodeInfo: MixNodeInfo): Result[seq[byte], string] =
+  let addrBytesRes = multiAddrToBytes(nodeInfo.multiAddr)
+  if addrBytesRes.isErr:
+    return err(addrBytesRes.error)
+  let addrBytes = addrBytesRes.get()
+
   let
-    addrBytes = multiAddrToBytes(nodeInfo.multiAddr)
     mixPubKeyBytes = fieldElementToBytes(nodeInfo.mixPubKey)
     mixPrivKeyBytes = fieldElementToBytes(nodeInfo.mixPrivKey)
     libp2pPubKeyBytes = nodeInfo.libp2pPubKey.getBytes()
     libp2pPrivKeyBytes = nodeInfo.libp2pPrivKey.getBytes()
 
-  return
+  return ok(
     addrBytes & mixPubKeyBytes & mixPrivKeyBytes & libp2pPubKeyBytes & libp2pPrivKeyBytes
+  )
 
 proc deserializeMixNodeInfo*(data: openArray[byte]): Result[MixNodeInfo, string] =
   if len(data) != MixNodeInfoSize:
     return
       err("Serialized Mix node info must be exactly " & $MixNodeInfoSize & " bytes")
-  let multiAddr = bytesToMultiAddr(data[0 .. addrSize - 1])
+
+  let multiAddrRes = bytesToMultiAddr(data[0 .. addrSize - 1])
+  if multiAddrRes.isErr:
+    return err(multiAddrRes.error)
+  let multiAddr = multiAddrRes.get()
 
   let mixPubKeyRes =
     bytesToFieldElement(data[addrSize .. (addrSize + FieldElementSize - 1)])
@@ -99,18 +109,23 @@ proc deserializeMixNodeInfo*(data: openArray[byte]): Result[MixNodeInfo, string]
 proc isNodeMultiaddress*(mixNodeInfo: MixNodeInfo, multiAddr: string): bool =
   return mixNodeInfo.multiAddr == multiAddr
 
-proc writeMixNodeInfoToFile*(node: MixNodeInfo, index: int): bool =
+proc writeMixNodeInfoToFile*(node: MixNodeInfo, index: int): Result[void, string] =
   if not dirExists(nodeInfoFolderPath):
     createDir(nodeInfoFolderPath)
   let filename = nodeInfoFolderPath / fmt"mixNode_{index}"
   var file = newFileStream(filename, fmWrite)
   if file == nil:
-    return false
+    return err("Failed to create file stream for " & filename)
   defer:
     file.close()
-  let serializedData = serializeMixNodeInfo(node)
+
+  let serializedRes = serializeMixNodeInfo(node)
+  if serializedRes.isErr:
+    return err("Failed to serialize mix node info: " & serializedRes.error)
+  let serializedData = serializedRes.get()
+
   file.writeData(addr serializedData[0], serializedData.len)
-  return true
+  return ok()
 
 proc readMixNodeInfoFromFile*(index: int): Result[MixNodeInfo, string] =
   try:
@@ -157,19 +172,27 @@ proc initMixPubInfo*(
 proc getMixPubInfo*(info: MixPubInfo): (string, FieldElement, SkPublicKey) =
   (info.multiAddr, info.mixPubKey, info.libp2pPubKey)
 
-proc serializeMixPubInfo*(nodeInfo: MixPubInfo): seq[byte] =
+proc serializeMixPubInfo*(nodeInfo: MixPubInfo): Result[seq[byte], string] =
+  let addrBytesRes = multiAddrToBytes(nodeInfo.multiAddr)
+  if addrBytesRes.isErr:
+    return err(addrBytesRes.error)
+  let addrBytes = addrBytesRes.get()
+
   let
-    addrBytes = multiAddrToBytes(nodeInfo.multiAddr)
     mixPubKeyBytes = fieldElementToBytes(nodeInfo.mixPubKey)
     libp2pPubKeyBytes = nodeInfo.libp2pPubKey.getBytes()
 
-  return addrBytes & mixPubKeyBytes & libp2pPubKeyBytes
+  return ok(addrBytes & mixPubKeyBytes & libp2pPubKeyBytes)
 
 proc deserializeMixPubInfo*(data: openArray[byte]): Result[MixPubInfo, string] =
   if len(data) != MixPubInfoSize:
     return
       err("Serialized mix public info must be exactly " & $MixPubInfoSize & " bytes")
-  let multiAddr = bytesToMultiAddr(data[0 .. addrSize - 1])
+
+  let multiAddrRes = bytesToMultiAddr(data[0 .. addrSize - 1])
+  if multiAddrRes.isErr:
+    return err(multiAddrRes.error)
+  let multiAddr = multiAddrRes.get()
 
   let mixPubKeyRes =
     bytesToFieldElement(data[addrSize .. (addrSize + FieldElementSize - 1)])
@@ -184,18 +207,23 @@ proc deserializeMixPubInfo*(data: openArray[byte]): Result[MixPubInfo, string] =
 
   ok(MixPubInfo(multiAddr: multiAddr, mixPubKey: mixPubKey, libp2pPubKey: libp2pPubKey))
 
-proc writePubInfoToFile*(node: MixPubInfo, index: int): bool =
+proc writePubInfoToFile*(node: MixPubInfo, index: int): Result[void, string] =
   if not dirExists(pubInfoFolderPath):
     createDir(pubInfoFolderPath)
   let filename = pubInfoFolderPath / fmt"mixNode_{index}"
   var file = newFileStream(filename, fmWrite)
   if file == nil:
-    return false
+    return err("Failed to create file stream for " & filename)
   defer:
     file.close()
-  let serializedData = serializeMixPubInfo(node)
+
+  let serializedRes = serializeMixPubInfo(node)
+  if serializedRes.isErr:
+    return err("Failed to serialize mix pub info: " & serializedRes.error)
+  let serializedData = serializedRes.get()
+
   file.writeData(addr serializedData[0], serializedData.len)
-  return true
+  return ok()
 
 proc readMixPubInfoFromFile*(index: int): Result[MixPubInfo, string] =
   try:

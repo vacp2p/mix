@@ -1,7 +1,6 @@
 import chronicles, options, os, strformat, results, strutils, unittest
 import libp2p/[crypto/crypto, crypto/secp, multiaddress, peerid]
-import ../src/mix_node
-import ../src/curve25519
+import ../src/[curve25519, mix_node]
 
 suite "Mix Node Tests":
   setup:
@@ -147,7 +146,8 @@ suite "Mix Node Tests":
       let (multiAddr, mixPubKey, mixPrivKey, libp2pPubKey, libp2pPrivKey) =
         getMixNodeInfo(node)
 
-      if not writeMixNodeInfoToFile(node, i):
+      let writeNodeRes = writeMixNodeInfoToFile(node, i)
+      if writeNodeRes.isErr:
         error "File write error", index = i
         fail()
 
@@ -199,7 +199,8 @@ suite "Mix Node Tests":
 
       let (multiAddr, mixPubKey, libp2pPubKey) = getMixPubInfo(node)
 
-      if not writePubInfoToFile(node, i):
+      let writeNodeRes = writePubInfoToFile(node, i)
+      if writeNodeRes.isErr:
         error "File write error", index = i
         fail()
 

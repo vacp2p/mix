@@ -1,6 +1,6 @@
 import chronicles, results, unittest
 import libp2p/peerid
-import ../src/config, ../src/fragmentation
+import ../src/[config, fragmentation]
 
 suite "Fragmentation":
   let peerId =

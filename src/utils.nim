@@ -1,24 +1,27 @@
-import config
-import strutils
+import results, strutils
 import stew/base58
+import config
 
 const addrBytesSize* = 46
 
-proc bytesToUInt16*(data: openArray[byte]): uint16 =
-  assert len(data) == 2, "Data must be exactly 2 bytes long to convert to uint16"
-  result = uint16(data[0]) shl 8 or uint16(data[1])
+proc bytesToUInt16*(data: openArray[byte]): Result[uint16, string] =
+  if len(data) != 2:
+    return err("Data must be exactly 2 bytes long to convert to uint16")
+  return ok(uint16(data[0]) shl 8 or uint16(data[1]))
 
 proc uint16ToBytes*(value: uint16): seq[byte] =
-  result = @[byte(value shr 8), byte(value and 0xFF)]
+  return @[byte(value shr 8), byte(value and 0xFF)]
 
-proc bytesToUInt32*(data: openArray[byte]): uint32 =
-  assert len(data) == 4, "Data must be exactly 4 bytes long to convert to uint32"
-  result =
+proc bytesToUInt32*(data: openArray[byte]): Result[uint32, string] =
+  if len(data) != 4:
+    return err("Data must be exactly 4 bytes long to convert to uint32")
+  return ok(
     uint32(data[0]) shl 24 or uint32(data[1]) shl 16 or uint32(data[2]) shl 8 or
-    uint32(data[3])
+      uint32(data[3])
+  )
 
 proc uint32ToBytes*(value: uint32): seq[byte] =
-  result =
+  return
     @[
       byte(value shr 24),
       byte(value shr 16 and 0xFF),
@@ -26,54 +29,66 @@ proc uint32ToBytes*(value: uint32): seq[byte] =
       byte(value and 0xFF),
     ]
 
-proc multiAddrToBytes*(multiAddr: string): seq[byte] =
-  var parts = multiAddr.split('/')
-  result = @[]
+proc multiAddrToBytes*(multiAddr: string): Result[seq[byte], string] =
+  var
+    parts = multiAddr.split('/')
+    res: seq[byte] = @[]
 
-  assert parts.len == 7, "Invalid multiaddress format"
+  if parts.len != 7:
+    return err("Invalid multiaddress format")
 
   # IP address (4 bytes) ToDo: Add support for ipv6. Supporting ipv4 only for testing purposes
   let ipParts = parts[2].split('.')
-  assert ipParts.len == 4, "Invalid IP address format"
+  if ipParts.len != 4:
+    return err("Invalid IP address format")
   for part in ipParts:
     try:
       let ipPart = parseInt(part)
-      assert ipPart >= 0 and ipPart <= 255, "Invalid IP address format"
-      result.add(byte(ipPart))
+      if ipPart < 0 or ipPart > 255:
+        return err("Invalid IP address format")
+      res.add(byte(ipPart))
     except ValueError:
-      return @[]
+      return err("Invalid IP address format")
 
   # Protocol (1 byte) ToDo: TLS or QUIC
-  assert parts[3] == "tcp" or parts[3] == "quic", "Unsupported protocol"
-  if parts[3] == "tcp": # Using TCP for testing purposes
-    result.add(byte(0))
-  elif parts[3] == "quic":
-    result.add(byte(1))
+  if parts[3] != "tcp" and parts[3] != "quic":
+    return err("Unsupported protocol")
+  res.add(
+    if parts[3] == "tcp":
+      byte(0)
+    else:
+      byte(1)
+  ) # Using TCP for testing purposes
 
   # Port (2 bytes)
   try:
     let port = parseInt(parts[4])
-    assert port >= 0 and port <= 65535, "Invalid port"
-    result.add(uint16ToBytes(uint16(port)))
+    if port < 0 or port > 65535:
+      return err("Invalid port")
+    res.add(uint16ToBytes(uint16(port)))
   except ValueError:
-    return @[]
+    return err("Invalid port")
 
   # PeerID (39 bytes)
   let peerIdBase58 = parts[6]
-  assert peerIdBase58.len == 53, "Peer ID must be exactly 53 characters"
+  if peerIdBase58.len != 53:
+    return err("Peer ID must be exactly 53 characters")
   try:
     let peerIdBytes = Base58.decode(peerIdBase58)
-    assert peerIdBytes.len == 39, "Peer ID must be exactly 39 bytes"
-    result.add(peerIdBytes)
+    if peerIdBytes.len != 39:
+      return err("Peer ID must be exactly 39 bytes")
+    res.add(peerIdBytes)
   except Base58Error:
-    return @[]
+    return err("Invalid Peer ID")
 
-  assert result.len == addrSize, "Address must be exactly " & $addrSize & " bytes"
+  if res.len != addrSize:
+    return err("Address must be exactly " & $addrSize & " bytes")
 
-  return result
+  return ok(res)
 
-proc bytesToMultiAddr*(bytes: openArray[byte]): string =
-  assert bytes.len == addrSize, "Address must be exactly " & $addrSize & " bytes"
+proc bytesToMultiAddr*(bytes: openArray[byte]): Result[string, string] =
+  if bytes.len != addrSize:
+    return err("Address must be exactly " & $addrSize & " bytes")
 
   var ipParts: seq[string] = @[]
   for i in 0 .. 3:
@@ -83,9 +98,13 @@ proc bytesToMultiAddr*(bytes: openArray[byte]): string =
   let protocol = if bytes[4] == 0: "tcp" else: "quic"
     # ToDo: TLS or QUIC (Using TCP for testing purposes)
 
-  let port = bytesToUInt16(bytes[5 .. 6])
+  let portRes = bytesToUInt16(bytes[5 .. 6])
+  if portRes.isErr:
+    return err(portRes.error)
+  let port = portRes.get()
 
   let peerIdBase58 = Base58.encode(bytes[7 ..^ 1])
 
-  return
+  return ok(
     "/ip4/" & ipParts.join(".") & "/" & protocol & "/" & $port & "/mix/" & peerIdBase58
+  )

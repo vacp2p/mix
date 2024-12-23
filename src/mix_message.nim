@@ -1,5 +1,4 @@
-import config, utils
-import chronicles, results
+import chronicles, config, results, utils
 import mixnet_transport_adapter/protocol
 
 type MixMessage* = object
@@ -25,7 +24,12 @@ proc serializeMixMessage*(mixMsg: MixMessage): Result[seq[byte], string] =
 proc deserializeMixMessage*(data: openArray[byte]): Result[MixMessage, string] =
   try:
     let message = data[0 ..^ (protocolTypeSize + 1)]
-    let protocol = ProtocolType(bytesToUInt16(data[^protocolTypeSize ..^ 1]))
+
+    let res = bytesToUInt16(data[^protocolTypeSize ..^ 1])
+    if res.isErr:
+      return err(res.error)
+    let protocol = ProtocolType(res.get())
+
     return ok(MixMessage(message: message, protocol: protocol))
   except Exception as e:
     error "Failed to deserialize MixMessage", err = e.msg
@@ -35,9 +39,14 @@ proc serializeMixMessageAndDestination*(
     mixMsg: MixMessage, dest: string
 ): Result[seq[byte], string] =
   try:
-    let msgBytes = mixMsg.message
-    let protocolBytes = uint16ToBytes(uint16(mixMsg.protocol))
-    let destBytes = multiAddrToBytes(dest)
+    let
+      msgBytes = mixMsg.message
+      protocolBytes = uint16ToBytes(uint16(mixMsg.protocol))
+
+    let destBytesRes = multiAddrToBytes(dest)
+    if destBytesRes.isErr:
+      return err(destBytesRes.error)
+    let destBytes = destBytesRes.get()
 
     if len(destBytes) != addrSize:
       error "Destination address must be exactly " & $addrSize & " bytes"
@@ -53,9 +62,12 @@ proc deserializeMixMessageAndDestination*(
 ): Result[(seq[byte], string), string] =
   try:
     let mixMsg = data[0 ..^ (addrSize + 1)]
-    let dest = bytesToMultiAddr(data[^addrSize ..^ 1])
+
+    let destRes = bytesToMultiAddr(data[^addrSize ..^ 1])
+    if destRes.isErr:
+      return err(destRes.error)
+    let dest = destRes.get()
 
     return ok((mixMsg, dest))
   except Exception as e:
-    error "Failed to deserialize MixMessage and destination", err = e.msg
     return err("Deserialization with destination failed: " & e.msg)
