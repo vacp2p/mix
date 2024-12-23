@@ -1,48 +1,100 @@
-import ../src/mix_message
-import unittest
+import chronicles, results, unittest
+import ../src/[mix_message, protocol]
 
 # Define test cases
 suite "mix_message_tests":
-
   test "serialize_and_deserialize_mix_message":
-    let message = "Hello World!"
-    let protocol = ProtocolType.Ping
-    let mixMsg = initMixMessage(cast[seq[byte]](message), protocol)
+    let
+      message = "Hello World!"
+      protocol = ProtocolType.Ping
+      mixMsg = initMixMessage(cast[seq[byte]](message), protocol)
 
-    let serialized = serializeMixMessage(mixMsg)
+    let serializedResult = serializeMixMessage(mixMsg)
+    if serializedResult.isErr:
+      error "Serialization failed", err = serializedResult.error
+      fail()
+    let serialized = serializedResult.get()
 
-    let deserializedMsg = deserializeMixMessage(serialized)
+    let deserializedResult = deserializeMixMessage(serialized)
+    if deserializedResult.isErr:
+      error "Deserialization failed", err = deserializedResult.error
+      fail()
+    let deserializedMsg = deserializedResult.get()
 
     let (dMessage, dProtocol) = getMixMessage(deserializedMsg)
-    assert message == cast[string](dMessage), "Deserialized message does not match the original"
-    assert protocol == dProtocol, "Deserialized protocol does not match the original"
+    if message != cast[string](dMessage):
+      error "Deserialized message does not match the original",
+        original = message, deserialized = cast[string](dMessage)
+      fail()
+    if protocol != dProtocol:
+      error "Deserialized protocol does not match the original",
+        original = protocol, deserialized = dProtocol
+      fail()
 
   test "serialize_empty_mix_message":
-    let emptyMessage = ""
-    let protocol = ProtocolType.OtherProtocol
-    let mixMsg = initMixMessage(cast[seq[byte]](emptyMessage), protocol)
+    let
+      emptyMessage = ""
+      protocol = ProtocolType.OtherProtocol
+      mixMsg = initMixMessage(cast[seq[byte]](emptyMessage), protocol)
 
-    let serialized = serializeMixMessage(mixMsg)
+    let serializedResult = serializeMixMessage(mixMsg)
+    if serializedResult.isErr:
+      error "Serialization failed", err = serializedResult.error
+      fail()
+    let serialized = serializedResult.get()
 
-    let dMixMsg = deserializeMixMessage(serialized)
+    let deserializedResult = deserializeMixMessage(serialized)
+    if deserializedResult.isErr:
+      error "Deserialization failed", err = deserializedResult.error
+      fail()
+    let dMixMsg: MixMessage = deserializedResult.get()
 
     let (dMessage, dProtocol) = getMixMessage(dMixMsg)
-    assert emptyMessage == cast[string](dMessage), "Deserialized message is not empty"
-    assert protocol == dProtocol, "Deserialized protocol does not match the original"
+    if emptyMessage != cast[string](dMessage):
+      error "Deserialized message is not empty",
+        expected = emptyMessage, actual = cast[string](dMessage)
+      fail()
+    if protocol != dProtocol:
+      error "Deserialized protocol does not match the original",
+        original = protocol, deserialized = dProtocol
+      fail()
 
   test "serialize_and_deserialize_mix_message_and_destination":
-    let message = "Hello World!"
-    let protocol = ProtocolType.GossipSub
-    let destination = "/ip4/127.0.0.1/tcp/4242/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
-    let mixMsg = initMixMessage(cast[seq[byte]](message), protocol)
+    let
+      message = "Hello World!"
+      protocol = ProtocolType.GossipSub12
+      destination =
+        "/ip4/127.0.0.1/tcp/4242/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
+      mixMsg = initMixMessage(cast[seq[byte]](message), protocol)
 
-    let serialized = serializeMixMessageAndDestination(mixMsg, destination)
+    let serializedResult = serializeMixMessageAndDestination(mixMsg, destination)
+    if serializedResult.isErr:
+      error "Serialization with destination failed", err = serializedResult.error
+      fail()
+    let serialized = serializedResult.get()
 
-    let (mixMsgBytes, dDest) = deserializeMixMessageAndDestination(serialized)
+    let deserializedResult = deserializeMixMessageAndDestination(serialized)
+    if deserializedResult.isErr:
+      error "Deserialization with destination failed", err = deserializedResult.error
+      fail()
+    let (mixMsgBytes, dDest) = deserializedResult.get()
 
-    let dMixMsg = deserializeMixMessage(mixMsgBytes)
+    let dMixMsgResult = deserializeMixMessage(mixMsgBytes)
+    if dMixMsgResult.isErr:
+      error "Deserialization of MixMessage failed", err = dMixMsgResult.error
+      fail()
+    let dMixMsg = dMixMsgResult.get()
 
     let (dMessage, dProtocol) = getMixMessage(dMixMsg)
-    assert message == cast[string](dMessage), "Deserialized message does not match the original"
-    assert protocol == dProtocol, "Deserialized protocol does not match the original"
-    assert destination == dDest, "Deserialized destination does not match the original"
+    if message != cast[string](dMessage):
+      error "Deserialized message does not match the original",
+        original = message, deserialized = cast[string](dMessage)
+      fail()
+    if protocol != dProtocol:
+      error "Deserialized protocol does not match the original",
+        original = protocol, deserialized = dProtocol
+      fail()
+    if destination != dDest:
+      error "Deserialized destination does not match the original",
+        original = destination, deserialized = dDest
+      fail()

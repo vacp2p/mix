@@ -1,7 +1,8 @@
-import chronos, std/enumerate, std/sysrand, strutils
+import chronicles, chronos, results, strutils
+import std/[enumerate, sysrand]
 import libp2p
-import libp2p/[crypto/secp, multiaddress, builders, protocols/ping,  switch]
-import ../src/[config, mix_message, mix_node, mix_protocol]
+import libp2p/[crypto/secp, multiaddress, builders, protocols/ping, switch]
+import ../src/[mix_message, mix_node, mix_protocol, protocol]
 
 proc cryptoRandomInt(max: int): int =
   var bytes: array[8, byte]
@@ -24,26 +25,33 @@ proc createSwitch(libp2pPrivKey: SkPrivateKey, multiAddr: MultiAddress): Switch 
     .build()
 
 # Set up nodes
-proc setUpNodes(numNodes: int): seq[Switch] = 
+proc setUpNodes(numNodes: int): seq[Switch] =
   # This is not actually GC-safe
   {.gcsafe.}:
     # Initialize mix nodes
-    initializeMixNodes(numNodes)
-    
+    discard initializeMixNodes(numNodes)
+
     var nodes: seq[Switch] = @[]
-  
+
     for index, node in enumerate(mixNodes):
       # Write public info of all mix nodes
-      let nodeMixPubInfo = getMixPubInfoByIndex(index)
-      let pubResult = writePubInfoToFile(nodeMixPubInfo, index)
-      if pubResult == false:
-        echo "Failed to write pub info to file for node ", $index
-        
+      let nodePubInfoRes = getMixPubInfoByIndex(index)
+      if nodePubInfoRes.isErr:
+        error "Get mix pub info by index error", err = nodePubInfoRes.error
+        continue
+      let nodePubInfo = nodePubInfoRes.get()
+
+      let writePubRes = writePubInfoToFile(nodePubInfo, index)
+      if writePubRes.isErr:
+        error "Failed to write pub info to file", nodeIndex = index
+        continue
+
       # Write info of all mix nodes
-      let mixResult = writeMixNodeInfoToFile(node, index)
-      if mixResult == false:
-        echo "Failed to write mix node info to file for node ", $index
-        
+      let writeNodeRes = writeMixNodeInfoToFile(node, index)
+      if writeNodeRes.isErr:
+        error "Failed to write mix info to file", nodeIndex = index
+        continue
+
       # Extract private key and multiaddress
       let (multiAddrStr, _, _, _, libp2pPrivKey) = getMixNodeInfo(node)
       let multiAddr = MultiAddress.init(multiAddrStr.split("/p2p/")[0]).value()
@@ -54,7 +62,6 @@ proc setUpNodes(numNodes: int): seq[Switch] =
     return nodes
 
 proc mixnetSimulation() {.async.} =
-
   let
     numberOfNodes = 10
     nodes = setUpNodes(numberOfNodes)
@@ -64,7 +71,11 @@ proc mixnetSimulation() {.async.} =
   # Start nodes
   for index, node in enumerate(nodes):
     # Mount Mix
-    mixProto.add(MixProtocol.new(index, numberOfNodes, nodes[index]))
+    let protoRes = MixProtocol.new(index, numberOfNodes, nodes[index])
+    if protoRes.isErr:
+      error "Mix protocol initialization failed", err = protoRes.error
+      return
+    mixProto.add(protoRes.get())
     nodes[index].mount(mixProto[index])
     await nodes[index].start()
   await sleepAsync(1.seconds)
@@ -74,8 +85,18 @@ proc mixnetSimulation() {.async.} =
   if senderIndex < numberOfNodes - 1:
     receiverIndex = senderIndex + 1
   let mixMsg = initMixMessage(cast[seq[byte]]("Hello World!"), OtherProtocol)
-  let serializedMsg = serializeMixMessage(mixMsg)
-  await mixProto[senderIndex].anonymizeLocalProtocolSend(serializedMsg, nodes[receiverIndex].peerInfo.addrs[0], nodes[receiverIndex].peerInfo.peerId)
+
+  let serializedRes = serializeMixMessage(mixMsg)
+  if serializedRes.isErr:
+    error "Serialization failed", err = serializedRes.error
+    return
+  let serializedMsg = serializedRes.get()
+
+  await mixProto[senderIndex].anonymizeLocalProtocolSend(
+    serializedMsg,
+    nodes[receiverIndex].peerInfo.addrs[0],
+    nodes[receiverIndex].peerInfo.peerId,
+  )
 
   deleteNodeInfoFolder()
   deletePubInfoFolder()
