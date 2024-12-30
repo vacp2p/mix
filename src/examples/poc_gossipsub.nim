@@ -1,7 +1,18 @@
-import chronicles, sequtils, std/enumerate, strutils, chronos, std/strformat, std/sysrand, stew/byteutils
+import chronicles, sequtils, std/enumerate, strutils, chronos
+import std/[strformat, sysrand]
 import ../mixnet_transport_adapter/[protocol, transport]
-import libp2p/[crypto/secp, multiaddress, builders, protocols/pubsub/gossipsub, transports/tcptransport]
+import
+  libp2p/[
+    crypto/secp,
+    multiaddress,
+    builders,
+    protocols/pubsub/gossipsub,
+    protocols/pubsub/rpc/messages,
+    transports/tcptransport,
+  ]
 import ../[mix_node]
+
+type Node = tuple[switch: Switch, gossip: GossipSub, id: int]
 
 proc createSwitch*(
     libp2pPrivKey: SkPrivateKey, multiAddr: MultiAddress, nodeIndex, numberOfNodes: int
@@ -17,6 +28,7 @@ proc createSwitch*(
     .withAddress(multiAddr)
     .withRng(crypto.newRng())
     .withMplex(inTimeout, outTimeout)
+    .withTcpTransport()
     .withTransport(
       proc(upgrade: Upgrade): Transport =
         let
@@ -31,7 +43,6 @@ proc createSwitch*(
             err = mixnetAdapterResult.error
           return wrappedTransport
     )
-    .withTcpTransport()
     .withNoise()
     .build()
 
@@ -44,7 +55,6 @@ proc createSwitch*(
         await callHandler(switch, conn, proto)
       except CatchableError as e:
         error "Error during execution of sendThroughMixnet: ", err = e.msg
-        # TODO: handle error
       return
     for index, transport in enumerate(switch.transports):
       if transport of MixnetTransportAdapter:
@@ -52,16 +62,20 @@ proc createSwitch*(
         break
     return switch
 
-proc connectNodesTCP(nodes: seq[tuple[switch: Switch, gossip: GossipSub]]) {.async.} =
-  for i in 0 ..< nodes.len:
-    for j in max(0, i-2) .. min(nodes.len-1, i+2):
-      if i != j:
-        let tcpAddr = nodes[j].switch.peerInfo.addrs.filterIt(TCP.match(it))
-        if tcpAddr.len > 0:
-          try:
-            await nodes[i].switch.connect(nodes[j].switch.peerInfo.peerId, tcpAddr)
-          except CatchableError as e:
-            warn "Failed to connect nodes", src = i, dst = j, error = e.msg
+proc connectNodesTCP(nodes: seq[Node]) {.async.} =
+  for index, node in nodes:
+    for otherNodeIdx in index - 1 .. index + 2:
+      if otherNodeIdx notin 0 ..< nodes.len or otherNodeIdx == index:
+        continue
+      let
+        otherNode = nodes[otherNodeIdx]
+        tcpAddr = otherNode.switch.peerInfo.addrs.filterIt(TCP.match(it))
+
+      if tcpAddr.len > 0:
+        try:
+          await node.switch.connect(otherNode.switch.peerInfo.peerId, tcpAddr)
+        except CatchableError as e:
+          warn "Failed to connect nodes", src = index, dst = otherNodeIdx, error = e.msg
 
 proc setUpNodes(numberOfNodes: int): (seq[SkPrivateKey], seq[MultiAddress]) =
   # This is not actually GC-safe
@@ -97,40 +111,55 @@ proc setUpNodes(numberOfNodes: int): (seq[SkPrivateKey], seq[MultiAddress]) =
 
     return (libp2pPrivKeys, multiAddrs)
 
+proc oneNode(node: Node, rng: ref HmacDrbgContext) {.async.} =
+  node.gossip.addValidator(
+    ["message"],
+    proc(topic: string, message: Message): Future[ValidationResult] {.async.} =
+      return ValidationResult.Accept,
+  )
+
+  if node.id == 0:
+    node.gossip.subscribe(
+      "message",
+      proc(topic: string, data: seq[byte]) {.async.} =
+        echo fmt"Node {node.id} received: {cast[string](data)}"
+      ,
+    )
+  else:
+    node.gossip.subscribe("message", nil)
+
+  for msgNum in 0 ..< 5:
+    await sleepAsync(500.milliseconds)
+    let msg = fmt"Hello from Node {node.id}, Message No: {msgNum + 1}"
+
+    discard await node.gossip.publish("message", cast[seq[byte]](msg))
+
+  await sleepAsync(1000.milliseconds)
+  await node.switch.stop()
+
 proc mixnet_gossipsub_test() {.async.} =
   let
-    numberOfNodes = 10
+    numberOfNodes = 5
     (libp2pPrivKeys, multiAddrs) = setUpNodes(numberOfNodes)
-  var nodes: seq[tuple[switch: Switch, gossip: GossipSub]]
-  
+  var nodes: seq[Node]
+
   for i in 0 ..< numberOfNodes:
     let switch = createSwitch(libp2pPrivKeys[i], multiAddrs[i], i, numberOfNodes)
     if not switch.isNil:
-      let
-        gossip = GossipSub.init(switch = switch, triggerSelf = true)
+      let gossip = GossipSub.init(switch = switch, triggerSelf = true)
       switch.mount(gossip)
-      nodes.add((switch, gossip))
       await switch.start()
+      nodes.add((switch, gossip, i))
     else:
       warn "Failed to set up node", nodeIndex = i
 
-  await sleepAsync(1.seconds)
-
   await connectNodesTCP(nodes)
 
-  for i, node in nodes:
-    node.gossip.subscribe("chat", proc(topic: string, data: seq[byte]) {.async.} = 
-      echo fmt"Node {i} received: {cast[string](data)}")
-
-  await sleepAsync(2.seconds)
-
-  for i, node in nodes:
-    discard await node.gossip.publish("chat", fmt"Hello from Node {i}".toBytes())
-
-  await sleepAsync(2.seconds)
-
+  var allFuts: seq[Future[void]]
   for node in nodes:
-    await node.switch.stop()
+    allFuts.add(oneNode(node, newRng()))
+
+  await allFutures(allFuts)
 
   deleteNodeInfoFolder()
   deletePubInfoFolder()
