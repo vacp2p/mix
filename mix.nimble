@@ -5,7 +5,7 @@ license = "MIT"
 
 # Dependencies
 requires "chronos >= 4.0.3"
-requires "libp2p#3fbfb8e19c9b54d46e5d3e3f26364ef84f905e43"
+requires "https://github.com/vacp2p/nim-libp2p#poc/mix-transport"
 requires "nim >= 2.0.8"
 requires "nimcrypto >= 0.6.0"
 requires "serialization >= 0.2.2"
@@ -27,8 +27,8 @@ task test, "Run the test suite":
   runTest("test_crypto")
   runTest("test_curve25519")
   runTest("test_fragmentation")
+  runTest("test_mix_message")
   runTest("test_mix_node")
-  runTest("test_mix_protocol")
   runTest("test_pow")
   runTest("test_seqno_generator")
   runTest("test_serialization")

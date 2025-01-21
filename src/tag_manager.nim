@@ -1,14 +1,15 @@
-import tables, curve25519, locks
+import tables, locks
+import curve25519
 
-type
-  TagManager* = ref object
-    lock: Lock
-    seenTags: Table[FieldElement, bool]
+type TagManager* = ref object
+  lock: Lock
+  seenTags: Table[FieldElement, bool]
 
 proc initTagManager*(): TagManager =
-  new(result)
-  result.seenTags = initTable[FieldElement, bool]()
-  initLock(result.lock)
+  let tm = new(TagManager)
+  tm.seenTags = initTable[FieldElement, bool]()
+  initLock(tm.lock)
+  return tm
 
 proc addTag*(tm: TagManager, tag: FieldElement) {.gcsafe.} =
   withLock tm.lock:
@@ -16,7 +17,7 @@ proc addTag*(tm: TagManager, tag: FieldElement) {.gcsafe.} =
 
 proc isTagSeen*(tm: TagManager, tag: FieldElement): bool {.gcsafe.} =
   withLock tm.lock:
-    result = tm.seenTags.contains(tag)
+    return tm.seenTags.contains(tag)
 
 proc removeTag*(tm: TagManager, tag: FieldElement) {.gcsafe.} =
   withLock tm.lock:

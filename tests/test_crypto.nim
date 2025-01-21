@@ -1,164 +1,208 @@
+import chronicles, nimcrypto, results, unittest
 import ../src/crypto
-import unittest, nimcrypto
 
 suite "cryptographic_functions_tests":
+  test "aes_ctr_encrypt_decrypt":
+    let
+      key = cast[array[16, byte]]("thisis16byteskey")
+      iv = cast[array[16, byte]]("thisis16bytesiv!")
+      data: seq[byte] = cast[seq[byte]]("thisisdata")
 
-    test "aes_ctr_encrypt_decrypt":
-        # Define test data
-        let key = cast[array[16, byte]]("thisis16byteskey")
-        let iv = cast[array[16, byte]]("thisis16bytesiv!")
-        let data: seq[byte] = cast[seq[byte]]("thisisdata")
+    let encryptedResult = aes_ctr(key, iv, data)
+    if encryptedResult.isErr:
+      error "Encryption failed", err = encryptedResult.error
+      fail()
+    let encrypted = encryptedResult.get()
 
-        # Encrypt data
-        let encrypted = aes_ctr(key, iv, data)
+    let decryptedResult = aes_ctr(key, iv, encrypted)
+    if decryptedResult.isErr:
+      error "Decryption failed", err = decryptedResult.error
+      fail()
+    let decrypted = decryptedResult.get()
 
-        # Decrypt data (should return to original)
-        let decrypted = aes_ctr(key, iv, encrypted)
+    if data != decrypted:
+      error "Decrypted data does not match the original data",
+        original = data, decrypted = decrypted
+      fail()
 
-        # Assertions
-        assert data == decrypted, "Decrypted data does not match the original data"
-        assert encrypted != data, "Encrypted data should not match the original data"
+    if data == encrypted:
+      error "Encrypted data should not match the original data",
+        original = data, encrypted = encrypted
+      fail()
 
-    test "sha256_hash_computation":
-        # Define test data
-        let data: seq[byte] = cast[seq[byte]]("thisisdata")
+  test "sha256_hash_computation":
+    let
+      data: seq[byte] = cast[seq[byte]]("thisisdata")
+      expectedHashHex =
+        "b53a20ecf0814267a83be82f941778ffda4b85fbf93a07847539f645ff5f1b9b"
+      expectedHash = fromHex(expectedHashHex)
+      hash = sha256_hash(data)
 
-        # Expected SHA-256 hash (hexadecimal representation)
-        let expectedHashHex = "b53a20ecf0814267a83be82f941778ffda4b85fbf93a07847539f645ff5f1b9b"
-        let expectedHash = fromHex(expectedHashHex)
+    if hash != expectedHash:
+      error "SHA-256 hash does not match the expected hash",
+        hashed = hash, expected = expectedHash
+      fail()
 
-        # Compute hash
-        let hash = sha256_hash(data)
+  test "kdf_computation":
+    let
+      key: seq[byte] = cast[seq[byte]]("thisiskey")
+      expectedKdfHex = "37c9842d37dc404854428a0a3554dcaa"
+      expectedKdf = fromHex(expectedKdfHex)
+      derivedKey = kdf(key)
 
-        # Assertions
-        assert hash == expectedHash, "SHA-256 hash does not match the expected hash"
+    if derivedKey != expectedKdf:
+      error "Derived key does not match the expected key",
+        key = derivedKey, expected = expectedKdf
+      fail()
 
-    test "kdf_computation":
-        # Define test key
-        let key: seq[byte] = cast[seq[byte]]("thisiskey")
+  test "hmac_computation":
+    let
+      key: seq[byte] = cast[seq[byte]]("thisiskey")
+      data: seq[byte] = cast[seq[byte]]("thisisdata")
+      expectedHmacHex = "b075dd302655e085d35e8cef5dfdf101"
+      expectedHmac = fromHex(expectedHmacHex)
+      hmacResult = hmac(key, data)
 
-        # Expected 16-byte hash derived from the key
-        let expectedKdfHex = "37c9842d37dc404854428a0a3554dcaa"
-        let expectedKdf = fromHex(expectedKdfHex)
+    if hmacResult != expectedHmac:
+      error "HMAC does not match the expected HMAC",
+        hmac = hmacResult, expected = expectedHmac
+      fail()
 
-        # Compute derived key
-        let derivedKey = kdf(key)
+  test "aes_ctr_empty_data":
+    let
+      key = cast[array[16, byte]]("thisis16byteskey")
+      iv = cast[array[16, byte]]("thisis16bytesiv!")
+      emptyData: array[0, byte] = []
 
-        # Assertions
-        assert derivedKey == expectedKdf, "Derived key does not match the expected key"
+    let encryptedResult = aes_ctr(key, iv, emptyData)
+    if encryptedResult.isErr:
+      error "Encryption failed", err = encryptedResult.error
+      fail()
+    let encrypted = encryptedResult.get()
 
-    test "hmac_computation":
-        # Define test key and data
-        let key: seq[byte] = cast[seq[byte]]("thisiskey")
-        let data: seq[byte] = cast[seq[byte]]("thisisdata")
+    let decryptedResult = aes_ctr(key, iv, encrypted)
+    if decryptedResult.isErr:
+      error "Decryption failed", err = decryptedResult.error
+      fail()
+    let decrypted = decryptedResult.get()
 
-        # Expected HMAC (hexadecimal representation)
-        let expectedHmacHex = "b075dd302655e085d35e8cef5dfdf101"
-        let expectedHmac = fromHex(expectedHmacHex)
+    if emptyData != decrypted:
+      error "Decrypted empty data does not match the original empty data",
+        original = emptyData, decrypted = decrypted
+      fail()
 
-        # Compute HMAC
-        let hmacResult = hmac(key, data)
+    if emptyData != encrypted:
+      error "Encrypted empty data should still be empty",
+        original = emptyData, encrypted = encrypted
+      fail()
 
-        # Assertions
-        assert hmacResult == expectedHmac, "HMAC does not match the expected HMAC"
+  test "sha256_hash_empty_data":
+    let
+      emptyData: array[0, byte] = []
+      expectedHashHex =
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      expectedHash = fromHex(expectedHashHex)
+      hash = sha256_hash(emptyData)
 
-    test "aes_ctr_empty_data":
-        # Define test data
-        let key = cast[array[16, byte]]("thisis16byteskey")
-        let iv = cast[array[16, byte]]("thisis16bytesiv!")
-        let emptyData: array[0, byte] = []
+    if hash != expectedHash:
+      error "SHA-256 hash of empty data does not match the expected hash",
+        hashed = hash, expected = expectedHash
+      fail()
 
-        # Encrypt data
-        let encrypted = aes_ctr(key, iv, emptyData)
+  test "kdf_empty_key":
+    let
+      emptyKey: array[0, byte] = []
+      expectedKdfHex = "e3b0c44298fc1c149afbf4c8996fb924"
+      expectedKdf = fromHex(expectedKdfHex)
+      derivedKey = kdf(emptyKey)
 
-        # Decrypt data
-        let decrypted = aes_ctr(key, iv, encrypted)
+    if derivedKey != expectedKdf:
+      error "Derived key from empty key does not match the expected key",
+        key = derivedKey, expected = expectedKdf
+      fail()
 
-        # Assertions
-        assert emptyData == decrypted, "Decrypted empty data does not match the original empty data"
-        assert encrypted == emptyData, "Encrypted empty data should still be empty"
+  test "hmac_empty_key_and_data":
+    let
+      emptyKey: array[0, byte] = []
+      emptyData: array[0, byte] = []
+      expectedHmacHex = "b613679a0814d9ec772f95d778c35fc5"
+      expectedHmac = fromHex(expectedHmacHex)
+      hmacResult = hmac(emptyKey, emptyData)
 
-    test "sha256_hash_empty_data":
-        # Define test data
-        let emptyData: array[0, byte] = []
-        let expectedHashHex = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" # SHA-256 hash of empty input
-        let expectedHash = fromHex(expectedHashHex)
+    if hmacResult != expectedHmac:
+      error "HMAC of empty key and data does not match the expected HMAC",
+        hmac = hmacResult, expected = expectedHmac
+      fail()
 
-        # Compute hash
-        let hash = sha256_hash(emptyData)
+  test "aes_ctr_start_index_zero_index":
+    let
+      key = cast[array[16, byte]]("thisis16byteskey")
+      iv = cast[array[16, byte]]("thisis16bytesiv!")
+      data: seq[byte] = cast[seq[byte]]("thisisdata")
+      startIndex = 0
 
-        # Assertions
-        assert hash == expectedHash, "SHA-256 hash of empty data does not match the expected hash"
+    let encryptedResult = aes_ctr_start_index(key, iv, data, startIndex)
+    if encryptedResult.isErr:
+      error "Encryption with start index failed", err = encryptedResult.error
+      fail()
+    let encrypted = encryptedResult.get()
 
-    test "kdf_empty_key":
-        # Define test data
-        let emptyKey: array[0, byte] = []
-        let expectedKdfHex = "e3b0c44298fc1c149afbf4c8996fb924" # SHA-256 hash of empty key truncated
-        let expectedKdf = fromHex(expectedKdfHex)
+    let expectedResult = aes_ctr(key, iv, data)
+    if expectedResult.isErr:
+      error "Encryption failed", err = expectedResult.error
+      fail()
+    let expected = expectedResult.get()
 
-        # Compute derived key
-        let derivedKey = kdf(emptyKey)
+    if encrypted != expected:
+      error "Encrypted data with start index 0 should match the full AES-CTR encryption",
+        encrypted = encrypted, expected = expected
+      fail()
 
-        # Assertions
-        assert derivedKey == expectedKdf, "Derived key from empty key does not match the expected key"
+  test "aes_ctr_start_index_empty_data":
+    let
+      key = cast[array[16, byte]]("thisis16byteskey")
+      iv = cast[array[16, byte]]("thisis16bytesiv!")
+      emptyData: array[0, byte] = []
+      startIndex = 0
 
-    test "hmac_empty_key_and_data":
-        # Define test data
-        let emptyKey: array[0, byte] = []
-        let emptyData: array[0, byte] = []
-        let expectedHmacHex = "b613679a0814d9ec772f95d778c35fc5" # SHA-256 HMAC of empty key and data
-        let expectedHmac = fromHex(expectedHmacHex)
+    let encryptedResult = aes_ctr_start_index(key, iv, emptyData, startIndex)
+    if encryptedResult.isErr:
+      error "Encryption with start index failed", err = encryptedResult.error
+      fail()
+    let encrypted = encryptedResult.get()
 
-        # Compute HMAC
-        let hmacResult = hmac(emptyKey, emptyData)
+    if emptyData != encrypted:
+      error "Encrypted empty data with start index 0 should be empty",
+        original = emptyData, encrypted = encrypted
+      fail()
 
-        # Assertions
-        assert hmacResult == expectedHmac, "HMAC of empty key and data does not match the expected HMAC"
+  test "aes_ctr_start_index_middle":
+    let
+      key = cast[array[16, byte]]("thisis16byteskey")
+      iv = cast[array[16, byte]]("thisis16bytesiv!")
+      data: seq[byte] = cast[seq[byte]]("thisisverylongdata")
+      startIndex = 16
 
-    test "aes_ctr_start_index_zero_index":
-        # Define test data
-        let key = cast[array[16, byte]]("thisis16byteskey")
-        let iv = cast[array[16, byte]]("thisis16bytesiv!")
-        let data: seq[byte] = cast[seq[byte]]("thisisdata")
+    let encrypted2Result =
+      aes_ctr_start_index(key, iv, data[startIndex ..^ 1], startIndex)
+    if encrypted2Result.isErr:
+      error "Encryption with start index failed", err = encrypted2Result.error
+      fail()
+    let encrypted2 = encrypted2Result.get()
 
-        # Encrypt starting from index 0 (should be the same as full data encryption)
-        let startIndex = 0
-        let encrypted = aes_ctr_start_index(key, iv, data, startIndex)
+    let encrypted1Result = aes_ctr(key, iv, data[0 .. startIndex - 1])
+    if encrypted1Result.isErr:
+      error "Encryption with start index failed", err = encrypted1Result.error
+      fail()
+    let encrypted1 = encrypted1Result.get()
 
-        # Encrypt the whole data with the original IV
-        let expected = aes_ctr(key, iv, data)
+    let expectedResult = aes_ctr(key, iv, data)
+    if expectedResult.isErr:
+      error "Encryption failed", err = expectedResult.error
+      fail()
+    let expected = expectedResult.get()
 
-        # Assertions
-        assert encrypted == expected, "Encrypted data with start index 0 should match the full AES-CTR encryption"
-
-    test "aes_ctr_start_index_empty_data":
-        # Define test data
-        let key = cast[array[16, byte]]("thisis16byteskey")
-        let iv = cast[array[16, byte]]("thisis16bytesiv!")
-        let emptyData: array[0, byte] = []
-
-        # Encrypt from start index 0 on empty data
-        let startIndex = 0
-        let encrypted = aes_ctr_start_index(key, iv, emptyData, startIndex)
-
-        # Encrypting empty data should result in empty data
-        assert encrypted == emptyData, "Encrypted empty data with start index 0 should be empty"
-
-    test "aes_ctr_start_index_middle":
-        # Define test data
-        let key = cast[array[16, byte]]("thisis16byteskey")
-        let iv = cast[array[16, byte]]("thisis16bytesiv!")
-        let data: seq[byte] = cast[seq[byte]]("thisisverylongdata")
-
-        # Encrypt starting from index 16
-        let startIndex = 16
-        let encrypted2 = aes_ctr_start_index(key, iv, data[startIndex..^1], startIndex)
-
-        # Encrypt the data up to index 15
-        let encrypted1 = aes_ctr(key, iv, data[0..startIndex-1])
-
-        # Encrypt the whole data with the original IV
-        let expected = aes_ctr(key, iv, data)
-
-        # Assertions
-        assert encrypted1 & encrypted2 == expected, "Encrypted data with start index should match the full AES-CTR encryption"
+    if encrypted1 & encrypted2 != expected:
+      error "Encrypted data with start index should match the full AES-CTR encryption",
+        encrypted = encrypted1 & encrypted2, expected = expected
+      fail()
