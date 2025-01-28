@@ -177,12 +177,6 @@ proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} 
           mixMsg = deserializedResult.get()
           (message, protocol) = getMixMessage(mixMsg)
         info "# Received: ", receiver = multiAddr, message = cast[string](message)
-        case protocol
-        of Ping: discard
-        of GossipSub12: discard
-        of GossipSub11: discard
-        of GossipSub10: discard
-        of OtherProtocol: discard
       else:
         info "# Intermediate: ", multiAddr = multiAddr
         # Add delay
