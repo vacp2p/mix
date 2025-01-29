@@ -5,7 +5,7 @@ license = "MIT"
 
 # Dependencies
 requires "chronos >= 4.0.3"
-requires "libp2p >= 1.5.0"
+requires "https://github.com/vacp2p/nim-libp2p#poc/mix-transport"
 requires "nim >= 2.0.8"
 requires "nimcrypto >= 0.6.0"
 requires "serialization >= 0.2.2"
