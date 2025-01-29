@@ -1,8 +1,8 @@
 import chronicles, chronos, strutils
 import std/sysrand
 import
-  config, curve25519, fragmentation, mix_message, mix_node, sequtils, serialization,
-  sphinx, tag_manager, utils
+  config, curve25519, exit_connection, fragmentation, mix_message, mix_node, protocol,
+  sequtils, serialization, sphinx, tag_manager, utils
 import libp2p
 import
   libp2p/
@@ -15,6 +15,7 @@ type MixProtocol* = ref object of LPProtocol
   pubNodeInfo: Table[PeerId, MixPubInfo]
   switch: Switch
   tagManager: TagManager
+  pHandler: ProtocolHandler
 
 proc loadMixNodeInfo*(index: int): Result[MixNodeInfo, string] =
   let readNodeRes = readMixNodeInfoFromFile(index)
@@ -53,88 +54,6 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   discard urandom(bytes)
   let value = cast[uint64](bytes)
   return ok(int(value mod uint64(max)))
-
-proc sendMessage(
-    mixProto: MixProtocol,
-    message: seq[byte],
-    destMultiAddr: MultiAddress,
-    destPeerId: PeerId,
-) {.async.} =
-  var multiAddrs: seq[string] = @[]
-  var publicKeys: seq[FieldElement] = @[]
-  var hop: seq[Hop] = @[]
-  var delay: seq[seq[byte]] = @[]
-
-  # Select L mix nodes at random
-  let numMixNodes = mixProto.pubNodeInfo.len
-  assert numMixNodes > 0, "No public mix nodes available."
-
-  var pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
-  var randPeerId: PeerId
-  var availableIndices = toSeq(0 ..< numMixNodes)
-  for i in 0 ..< L:
-    if i == L - 1:
-      randPeerId = destPeerId
-    else:
-      let cryptoRandomIntResult = cryptoRandomInt(availableIndices.len)
-      if cryptoRandomIntResult.isErr:
-        error "Failed to generate random number", err = cryptoRandomIntResult.error
-        return
-      let
-        randomIndexPosition = cryptoRandomIntResult.value
-        selectedIndex = availableIndices[randomIndexPosition]
-      randPeerId = pubNodeInfoKeys[selectedIndex]
-      availableIndices.del(randomIndexPosition)
-
-    # Extract multiaddress, mix public key, and hop
-    let (multiAddr, mixPubKey, _) = getMixPubInfo(mixProto.pubNodeInfo[randPeerId])
-    multiAddrs.add(multiAddr)
-    publicKeys.add(mixPubKey)
-
-    let multiAddrBytesRes = multiAddrToBytes(multiAddr)
-    if multiAddrBytesRes.isErr:
-      error "Failed to convert multiaddress to bytes", err = multiAddrBytesRes.error
-      return
-
-    hop.add(initHop(multiAddrBytesRes.get()))
-
-    # Compute delay
-    let cryptoRandomIntResult = cryptoRandomInt(3)
-    if cryptoRandomIntResult.isErr:
-      error "Failed to generate random number", err = cryptoRandomIntResult.error
-      return
-    let delayMilliSec = cryptoRandomIntResult.value
-    delay.add(uint16ToBytes(uint16(delayMilliSec)))
-
-  # Wrap in Sphinx packet
-  let sphinxPacketRes = wrapInSphinxPacket(initMessage(message), publicKeys, delay, hop)
-  if sphinxPacketRes.isErr:
-    error "Failed to wrap in sphinx packet", err = sphinxPacketRes.error
-    return
-  let sphinxPacket = sphinxPacketRes.get()
-
-  # Send the wrapped message to the first mix node in the selected path
-  let firstMixNode = multiAddrs[0]
-  var nextHopConn: Connection
-  try:
-    let peerIdRes = getPeerIdFromMultiAddr(firstMixNode)
-    if peerIdRes.isErr:
-      error "Failed to get peer id from multiaddress: ", err = peerIdRes.error
-      return
-    let peerId = peerIdRes.get()
-
-    nextHopConn = await mixProto.switch.dial(
-      peerId,
-      @[MultiAddress.init(firstMixNode.split("/p2p/")[0]).get()],
-      @[MixProtocolID],
-    )
-    await nextHopConn.writeLp(sphinxPacket)
-    await sleepAsync(milliseconds(100))
-  except CatchableError as e:
-    error "Failed to send message to next hop: ", err = e.msg
-  finally:
-    if not nextHopConn.isNil:
-      await nextHopConn.close()
 
 proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} =
   while true:
@@ -176,13 +95,9 @@ proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} 
         let
           mixMsg = deserializedResult.get()
           (message, protocol) = getMixMessage(mixMsg)
-        info "# Received: ", receiver = multiAddr, message = cast[string](message)
-        case protocol
-        of Ping: discard
-        of GossipSub12: discard
-        of GossipSub11: discard
-        of GossipSub10: discard
-        of OtherProtocol: discard
+          exitConn = MixExitConnection.new(message)
+        info "# Received: ", receiver = multiAddr, message = message
+        await mixProto.pHandler(exitConn, protocol)
       else:
         info "# Intermediate: ", multiAddr = multiAddr
         # Add delay
@@ -233,17 +148,21 @@ proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} 
     of InvalidPoW:
       discard
 
-  # Close the current connection after processing
-  await conn.close()
-
 proc anonymizeLocalProtocolSend*(
     mixProto: MixProtocol,
-    mixMsg: seq[byte],
+    msg: seq[byte],
+    proto: ProtocolType,
     destMultiAddr: MultiAddress,
     destPeerId: PeerId,
 ) {.async.} =
-  # Pad the incoming message
-  # ToDo: Split large messages
+  let mixMsg = initMixMessage(msg, proto)
+
+  let serializedResult = serializeMixMessage(mixMsg)
+  if serializedResult.isErr:
+    error "Serialization failed", err = serializedResult.error
+    return
+  let serialized = serializedResult.get()
+
   let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
 
   let peerIdRes = getPeerIdFromMultiAddr(multiAddr)
@@ -252,15 +171,96 @@ proc anonymizeLocalProtocolSend*(
     return
   let peerId = peerIdRes.get()
 
-  let paddedMsg = padMessage(mixMsg, peerID)
+  let paddedMsg = padMessage(serialized, peerID)
+
+  info "# Sent: ", sender = multiAddr, message = msg
+
+  var
+    multiAddrs: seq[string] = @[]
+    publicKeys: seq[FieldElement] = @[]
+    hop: seq[Hop] = @[]
+    delay: seq[seq[byte]] = @[]
+
+  # Select L mix nodes at random
+  let numMixNodes = mixProto.pubNodeInfo.len
+  if numMixNodes < L:
+    error "No. of public mix nodes less than path length."
+    return
+
+  var
+    pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
+    randPeerId: PeerId
+    availableIndices = toSeq(0 ..< numMixNodes)
+  for i in 0 ..< L:
+    if i == L - 1:
+      randPeerId = destPeerId
+    else:
+      let cryptoRandomIntResult = cryptoRandomInt(availableIndices.len)
+      if cryptoRandomIntResult.isErr:
+        error "Failed to generate random number", err = cryptoRandomIntResult.error
+        return
+      let
+        randomIndexPosition = cryptoRandomIntResult.value
+        selectedIndex = availableIndices[randomIndexPosition]
+      randPeerId = pubNodeInfoKeys[selectedIndex]
+      availableIndices.del(randomIndexPosition)
+
+    # Extract multiaddress, mix public key, and hop
+    let (multiAddr, mixPubKey, _) =
+      getMixPubInfo(mixProto.pubNodeInfo.getOrDefault(randPeerId))
+    multiAddrs.add(multiAddr)
+    publicKeys.add(mixPubKey)
+
+    let multiAddrBytesRes = multiAddrToBytes(multiAddr)
+    if multiAddrBytesRes.isErr:
+      error "Failed to convert multiaddress to bytes", err = multiAddrBytesRes.error
+      return
+
+    hop.add(initHop(multiAddrBytesRes.get()))
+
+    # Compute delay
+    let cryptoRandomIntResult = cryptoRandomInt(3)
+    if cryptoRandomIntResult.isErr:
+      error "Failed to generate random number", err = cryptoRandomIntResult.error
+      return
+    let delayMilliSec = cryptoRandomIntResult.value
+    delay.add(uint16ToBytes(uint16(delayMilliSec)))
 
   let serializedRes = serializeMessageChunk(paddedMsg)
   if serializedRes.isErr:
     error "Failed to serialize padded message", err = serializedRes.error
     return
 
-  info "# Sent: ", sender = multiAddr, message = cast[string](mixMsg)
-  await sendMessage(mixProto, serializedRes.value, destMultiAddr, destPeerId)
+  # Wrap in Sphinx packet
+  let sphinxPacketRes =
+    wrapInSphinxPacket(initMessage(serializedRes.get()), publicKeys, delay, hop)
+  if sphinxPacketRes.isErr:
+    error "Failed to wrap in sphinx packet", err = sphinxPacketRes.error
+    return
+  let sphinxPacket = sphinxPacketRes.get()
+
+  # Send the wrapped message to the first mix node in the selected path
+  let parts = multiAddrs[0].split("/p2p/")
+  if parts.len != 2:
+    error "Invalid multiaddress format", parts = parts
+    return
+
+  let firstMixAddr = MultiAddress.init(parts[0]).valueOr:
+    error "Failed to initialize MultiAddress", err = error
+    return
+
+  let firstMixPeerId = PeerId.init(parts[1]).valueOr:
+    error "Failed to initialize PeerId", err = error
+    return
+
+  var nextHopConn: Connection
+  try:
+    nextHopConn =
+      await mixProto.switch.dial(firstMixPeerId, @[firstMixAddr], @[MixProtocolID])
+    await nextHopConn.writeLp(sphinxPacket)
+    await nextHopConn.close()
+  except CatchableError as e:
+    error "Failed to send message to next hop: ", err = e.msg
 
 proc new*(
     T: typedesc[MixProtocol], index, numNodes: int, switch: Switch
@@ -288,3 +288,6 @@ method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
 
   mixProtocol.codecs = @[MixProtocolID]
   mixProtocol.handler = handle
+
+proc setCallback*(self: MixProtocol, cb: ProtocolHandler) =
+  self.pHandler = cb
