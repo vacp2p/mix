@@ -2,13 +2,16 @@ import chronicles, chronos, results, strutils
 import std/[enumerate, sysrand]
 import libp2p
 import libp2p/[crypto/secp, multiaddress, builders, protocols/ping, switch]
-import ../src/[mix_message, mix_node, mix_protocol, protocol]
+import
+  entry_connection, mix_message, mix_node, mix_protocol, protocol, protocols/noresp_ping
 
-proc cryptoRandomInt(max: int): int =
+proc cryptoRandomInt(max: int): Result[int, string] =
+  if max == 0:
+    return err("Max cannot be zero.")
   var bytes: array[8, byte]
   discard urandom(bytes)
   let value = cast[uint64](bytes)
-  result = int(value mod uint64(max))
+  return ok(int(value mod uint64(max)))
 
 proc createSwitch(libp2pPrivKey: SkPrivateKey, multiAddr: MultiAddress): Switch =
   let
@@ -54,10 +57,17 @@ proc setUpNodes(numNodes: int): seq[Switch] =
 
       # Extract private key and multiaddress
       let (multiAddrStr, _, _, _, libp2pPrivKey) = getMixNodeInfo(node)
-      let multiAddr = MultiAddress.init(multiAddrStr.split("/p2p/")[0]).value()
+
+      let multiAddr = MultiAddress.init(multiAddrStr.split("/p2p/")[0]).valueOr:
+        error "Failed to initialize MultiAddress", err = error
+        return
 
       # Create switch
-      nodes.add(createSwitch(libp2pPrivKey, multiAddr))
+      let switch = createSwitch(libp2pPrivKey, multiAddr)
+      if not switch.isNil:
+        nodes.add(switch)
+      else:
+        warn "Failed to set up node", nodeIndex = index
 
     return nodes
 
@@ -66,37 +76,70 @@ proc mixnetSimulation() {.async.} =
     numberOfNodes = 10
     nodes = setUpNodes(numberOfNodes)
 
-  var mixProto: seq[MixProtocol] = @[]
+  var
+    mixProto: seq[MixProtocol] = @[]
+    noRespPingProto: seq[NoRespPing] = @[]
 
   # Start nodes
-  for index, node in enumerate(nodes):
-    # Mount Mix
+  let rng = newRng()
+  for index, _ in enumerate(nodes):
+    noRespPingProto.add(noresp_ping.NoRespPing.new(rng = rng))
+
     let protoRes = MixProtocol.new(index, numberOfNodes, nodes[index])
     if protoRes.isErr:
       error "Mix protocol initialization failed", err = protoRes.error
       return
     mixProto.add(protoRes.get())
+
+    var sendHandlerFunc = proc(
+        conn: Connection, proto: ProtocolType
+    ): Future[void] {.async.} =
+      try:
+        await callHandler(nodes[index], conn, proto) # Call handler on the switch
+      except CatchableError as e:
+        error "Error during execution of MixProtocol handler: ", err = e.msg
+      return
+    mixProto[index].setCallback(sendHandlerFunc)
+
+    nodes[index].mount(noRespPingProto[index])
     nodes[index].mount(mixProto[index])
+
     await nodes[index].start()
   await sleepAsync(1.seconds)
 
-  let senderIndex = cryptoRandomInt(numberOfNodes)
+  let cryptoRandomIntResult = cryptoRandomInt(numberOfNodes)
+  if cryptoRandomIntResult.isErr:
+    error "Failed to generate random number", err = cryptoRandomIntResult.error
+    return
+  let senderIndex = cryptoRandomIntResult.value
   var receiverIndex = 0
   if senderIndex < numberOfNodes - 1:
     receiverIndex = senderIndex + 1
-  let mixMsg = initMixMessage(cast[seq[byte]]("Hello World!"), OtherProtocol)
 
-  let serializedRes = serializeMixMessage(mixMsg)
-  if serializedRes.isErr:
-    error "Serialization failed", err = serializedRes.error
+  var sendDialerFunc = proc(
+      msg: seq[byte],
+      proto: ProtocolType,
+      destMultiAddr: MultiAddress,
+      destPeerId: PeerId,
+  ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
+    try:
+      await mixProto[senderIndex].anonymizeLocalProtocolSend(
+        msg, proto, destMultiAddr, destPeerId
+      )
+    except CatchableError as e:
+      error "Error during execution of sendThroughMixnet: ", err = e.msg
+      # TODO: handle error
     return
-  let serializedMsg = serializedRes.get()
 
-  await mixProto[senderIndex].anonymizeLocalProtocolSend(
-    serializedMsg,
+  let conn = MixEntryConnection.new(
     nodes[receiverIndex].peerInfo.addrs[0],
     nodes[receiverIndex].peerInfo.peerId,
+    ProtocolType.fromString(NoRespPingCodec),
+    sendDialerFunc,
   )
+
+  discard await noRespPingProto[senderIndex].noRespPing(conn)
+  await sleepAsync(1.seconds)
 
   deleteNodeInfoFolder()
   deletePubInfoFolder()
