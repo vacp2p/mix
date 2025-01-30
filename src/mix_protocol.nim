@@ -195,12 +195,9 @@ proc anonymizeLocalProtocolSend*(
     if i == L - 1:
       randPeerId = destPeerId
     else:
-      let cryptoRandomIntResult = cryptoRandomInt(availableIndices.len)
-      if cryptoRandomIntResult.isErr:
+      let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
         error "Failed to generate random number", err = cryptoRandomIntResult.error
         return
-      let
-        randomIndexPosition = cryptoRandomIntResult.value
         selectedIndex = availableIndices[randomIndexPosition]
       randPeerId = pubNodeInfoKeys[selectedIndex]
       availableIndices.del(randomIndexPosition)
