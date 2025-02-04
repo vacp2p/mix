@@ -1,7 +1,7 @@
-import options, os, results, strformat, strutils, config, utils
+import options, os, results, strformat, strutils
 import std/streams
 import libp2p/[crypto/crypto, crypto/curve25519, crypto/secp, multiaddress, peerid]
-import curve25519
+import ./[curve25519, config, utils]
 
 const MixNodeInfoSize* =
   addrSize + (2 * FieldElementSize) + (SkRawPublicKeySize + SkRawPrivateKeySize)

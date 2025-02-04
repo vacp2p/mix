@@ -1,12 +1,14 @@
 import chronicles, chronos, strutils
-import std/sysrand
-import
-  config, curve25519, exit_connection, fragmentation, mix_message, mix_node, protocol,
-  sequtils, serialization, sphinx, tag_manager, utils
-import libp2p
+import std/sysrand, sequtils
 import
   libp2p/
     [protocols/ping, protocols/protocol, stream/connection, stream/lpstream, switch]
+
+import
+  ./[
+    config, curve25519, exit_connection, fragmentation, mix_message, mix_node, protocol,
+    serialization, sphinx, tag_manager, utils,
+  ]
 
 const MixProtocolID* = "/mix/1.0.0"
 
@@ -196,10 +198,11 @@ proc anonymizeLocalProtocolSend*(
       randPeerId = destPeerId
     else:
       let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
-        error "Failed to generate random number", err = cryptoRandomIntResult.error
+        error "Failed to generate random number"
         return
-        selectedIndex = availableIndices[randomIndexPosition]
-      randPeerId = pubNodeInfoKeys[selectedIndex]
+
+      let selectedIndex = availableIndices[randomIndexPosition]
+      let randPeerId = pubNodeInfoKeys[selectedIndex]
       availableIndices.del(randomIndexPosition)
 
     # Extract multiaddress, mix public key, and hop

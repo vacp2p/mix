@@ -1,5 +1,5 @@
-import chronicles, config, results, utils
-import protocol
+import chronicles, results
+import ./[protocol, config, utils]
 
 type MixMessage* = object
   message: seq[byte]

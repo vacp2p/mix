@@ -1,5 +1,6 @@
-import crypto, results
+import results
 import std/times
+import ./crypto
 
 const
   difficultyLevel* = 18 # Difficulty level

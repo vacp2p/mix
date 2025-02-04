@@ -1,6 +1,6 @@
 import hashes, chronos, stew/byteutils
 import libp2p/stream/connection
-import protocol
+import ./protocol
 
 type MixDialer* = proc(
   msg: seq[byte], proto: ProtocolType, destMultiAddr: MultiAddress, destPeerId: PeerId
