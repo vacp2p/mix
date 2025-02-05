@@ -1,6 +1,6 @@
 import results, sequtils
 import std/math
-import config, crypto, curve25519, pow, serialization, tag_manager
+import ./[config, crypto, curve25519, pow, serialization, tag_manager]
 
 # Define possible outcomes of processing a Sphinx packet
 type ProcessingStatus* = enum

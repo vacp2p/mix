@@ -1,4 +1,5 @@
-import config, seqno_generator, results, utils
+import results
+import ./[config, seqno_generator, utils]
 import libp2p/peerid
 
 const paddingLengthSize* = 2

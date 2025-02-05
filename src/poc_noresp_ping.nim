@@ -1,9 +1,8 @@
 import chronicles, chronos, results, strutils
 import std/[enumerate, sysrand]
-import libp2p
 import libp2p/[crypto/secp, multiaddress, builders, protocols/ping, switch]
-import
-  entry_connection, mix_message, mix_node, mix_protocol, protocol, protocols/noresp_ping
+import ./[entry_connection, mix_message, mix_node, mix_protocol, protocol]
+import ./protocols/noresp_ping
 
 proc cryptoRandomInt(max: int): Result[int, string] =
   if max == 0:
@@ -46,7 +45,8 @@ proc setUpNodes(numNodes: int): seq[Switch] =
 
       let writePubRes = writePubInfoToFile(nodePubInfo, index)
       if writePubRes.isErr:
-        error "Failed to write pub info to file", nodeIndex = index
+        error "Failed to write pub info to file",
+          nodeIndex = index, error = writePubRes.error
         continue
 
       # Write info of all mix nodes
@@ -140,7 +140,6 @@ proc mixnetSimulation() {.async.} =
 
   discard await noRespPingProto[senderIndex].noRespPing(conn)
   await sleepAsync(1.seconds)
-
   deleteNodeInfoFolder()
   deletePubInfoFolder()
 
