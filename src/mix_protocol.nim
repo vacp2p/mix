@@ -198,22 +198,21 @@ proc anonymizeLocalProtocolSend*(
       randPeerId = destPeerId
     else:
       let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
-        error "Failed to generate random number"
+        error "Failed to generate random number", error = error
         return
-
       let selectedIndex = availableIndices[randomIndexPosition]
-      let randPeerId = pubNodeInfoKeys[selectedIndex]
+      randPeerId = pubNodeInfoKeys[selectedIndex]
       availableIndices.del(randomIndexPosition)
-
     # Extract multiaddress, mix public key, and hop
     let (multiAddr, mixPubKey, _) =
       getMixPubInfo(mixProto.pubNodeInfo.getOrDefault(randPeerId))
+
     multiAddrs.add(multiAddr)
     publicKeys.add(mixPubKey)
-
     let multiAddrBytesRes = multiAddrToBytes(multiAddr)
     if multiAddrBytesRes.isErr:
-      error "Failed to convert multiaddress to bytes", err = multiAddrBytesRes.error
+      error "Failed to convert multiaddress to bytes",
+        err = multiAddrBytesRes.error, maddr = multiAddr
       return
 
     hop.add(initHop(multiAddrBytesRes.get()))
@@ -225,7 +224,6 @@ proc anonymizeLocalProtocolSend*(
       return
     let delayMilliSec = cryptoRandomIntResult.value
     delay.add(uint16ToBytes(uint16(delayMilliSec)))
-
   let serializedRes = serializeMessageChunk(paddedMsg)
   if serializedRes.isErr:
     error "Failed to serialize padded message", err = serializedRes.error
