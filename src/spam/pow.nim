@@ -1,11 +1,12 @@
-import crypto, results
-import std/times
+import std/times, results
+import ../crypto
 
 const
   difficultyLevel* = 18 # Difficulty level
   acceptanceWindow* = 5 * 60 # Acceptance time window in seconds
   nonceSize = 4 # Nonce size
   timestampSize = 8 # Timestamp size
+  powSize* = nonceSize + timestampSize # PoW Size
 
 # Helper function to convert integer to sequence of bytes
 proc intToBytes*(value: int64, byteSize: int): Result[seq[byte], string] =

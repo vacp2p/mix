@@ -1,5 +1,5 @@
 import results
-import config
+import ./config
 
 type Header* = object
   Alpha: seq[byte]
@@ -31,9 +31,8 @@ proc getMessage*(message: Message): seq[byte] =
   return message.Content
 
 proc serializeMessage*(message: Message): Result[seq[byte], string] =
-  if len(message.Content) != messageSize + powSize:
-    return
-      err("Message with PoW must be exactly " & $(messageSize + powSize) & " bytes")
+  if len(message.Content) != messageSize:
+    return err("Message must be exactly " & $(messageSize) & " bytes")
   var res = newSeq[byte](k) # Prepend k bytes of zero padding
   res.add(message.Content)
   return ok(res)
@@ -85,23 +84,21 @@ proc serializeRoutingInfo*(info: RoutingInfo): Result[seq[byte], string] =
   if len(info.Beta) != (((r * (t + 1)) - t) * k):
     return err("Beta must be exactly " & $(((r * (t + 1)) - t) * k) & " bytes")
 
-  let addrBytesRes = serializeHop(info.Addr)
-  if addrBytesRes.isErr:
-    return err(addrBytesRes.error)
+  let addrBytes = serializeHop(info.Addr).valueOr:
+    return err("Serialize hop error: " & error)
 
-  return ok(addrBytesRes.get() & info.Delay & info.Gamma & info.Beta)
+  return ok(addrBytes & info.Delay & info.Gamma & info.Beta)
 
 proc deserializeRoutingInfo*(data: openArray[byte]): Result[RoutingInfo, string] =
   if len(data) != betaSize + ((t + 1) * k):
     return err("Data must be exactly " & $(betaSize + ((t + 1) * k)) & " bytes")
 
-  let hopRes = deserializeHop(data[0 .. addrSize - 1])
-  if hopRes.isErr:
-    return err(hopRes.error)
+  let hopRes = deserializeHop(data[0 .. addrSize - 1]).valueOr:
+    return err("Deserialize hop error: " & error)
 
   return ok(
     RoutingInfo(
-      Addr: hopRes.get(),
+      Addr: hopRes,
       Delay: data[addrSize .. (addrSize + delaySize - 1)],
       Gamma: data[(addrSize + delaySize) .. (addrSize + delaySize + gammaSize - 1)],
       Beta:
@@ -120,10 +117,8 @@ proc getSphinxPacket*(packet: SphinxPacket): (Header, seq[byte]) =
   (packet.Hdr, packet.Payload)
 
 proc serializeSphinxPacket*(packet: SphinxPacket): Result[seq[byte], string] =
-  let headerBytesRes = serializeHeader(packet.Hdr)
-  if headerBytesRes.isErr:
-    return err(headerBytesRes.error)
-  let headerBytes = headerBytesRes.get()
+  let headerBytes = serializeHeader(packet.Hdr).valueOr:
+    return err("Serialize sphinx packet header error: " & error)
 
   return ok(headerBytes & packet.Payload)
 
