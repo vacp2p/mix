@@ -1,6 +1,6 @@
 import results, strutils
 import stew/base58
-import config
+import ./config
 
 const addrBytesSize* = 46
 
@@ -98,10 +98,8 @@ proc bytesToMultiAddr*(bytes: openArray[byte]): Result[string, string] =
   let protocol = if bytes[4] == 0: "tcp" else: "quic"
     # ToDo: TLS or QUIC (Using TCP for testing purposes)
 
-  let portRes = bytesToUInt16(bytes[5 .. 6])
-  if portRes.isErr:
-    return err(portRes.error)
-  let port = portRes.get()
+  let port = bytesToUInt16(bytes[5 .. 6]).valueOr:
+    return err("Error in conversion of bytes to port no.: " & error)
 
   let peerIdBase58 = Base58.encode(bytes[7 ..^ 1])
 

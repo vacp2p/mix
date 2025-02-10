@@ -1,5 +1,5 @@
 import chronicles, results, unittest
-import ../src/[config, pow, serialization]
+import ../src/[config, serialization]
 
 # Define test cases
 suite "serialization_tests":
@@ -22,15 +22,7 @@ suite "serialization_tests":
   test "serialize_and_deserialize_message":
     let message = initMessage(newSeq[byte](messageSize))
 
-    let powRes = attachPow(getMessage(message))
-    if powRes.isErr:
-      error "Proof of work generation error."
-      fail()
-    let pow = powRes.get()
-
-    let msgPow = initMessage(pow)
-
-    let serializedRes = serializeMessage(msgPow)
+    let serializedRes = serializeMessage(message)
     if serializedRes.isErr:
       error "Failed to serialize message", err = serializedRes.error
       fail()
@@ -42,7 +34,7 @@ suite "serialization_tests":
       fail()
     let deserialized = deserializedRes.get()
 
-    if getMessage(msgPow) != getMessage(deserialized):
+    if getMessage(message) != getMessage(deserialized):
       error "Deserialized message does not match the original message"
       fail()
 

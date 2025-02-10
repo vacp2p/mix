@@ -1,6 +1,6 @@
-import crypto, times
-import std/endians
+import std/endians, times
 import libp2p/peerid
+import ./crypto
 
 type SeqNo* = object
   counter: uint32

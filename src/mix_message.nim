@@ -1,5 +1,5 @@
-import chronicles, config, results, utils
-import protocol
+import chronicles, results
+import ./[config, protocol, utils]
 
 type MixMessage* = object
   message: seq[byte]
@@ -43,10 +43,8 @@ proc serializeMixMessageAndDestination*(
       msgBytes = mixMsg.message
       protocolBytes = uint16ToBytes(uint16(mixMsg.protocol))
 
-    let destBytesRes = multiAddrToBytes(dest)
-    if destBytesRes.isErr:
-      return err(destBytesRes.error)
-    let destBytes = destBytesRes.get()
+    let destBytes = multiAddrToBytes(dest).valueOr:
+      return err("Error in multiaddress conversion to bytes: " & error)
 
     if len(destBytes) != addrSize:
       error "Destination address must be exactly " & $addrSize & " bytes"
@@ -63,10 +61,8 @@ proc deserializeMixMessageAndDestination*(
   try:
     let mixMsg = data[0 ..^ (addrSize + 1)]
 
-    let destRes = bytesToMultiAddr(data[^addrSize ..^ 1])
-    if destRes.isErr:
-      return err(destRes.error)
-    let dest = destRes.get()
+    let dest = bytesToMultiAddr(data[^addrSize ..^ 1]).valueOr:
+      return err("Error in destination multiaddress conversion to bytes: " & error)
 
     return ok((mixMsg, dest))
   except Exception as e:
