@@ -12,11 +12,6 @@ type MixEntryConnection* = ref object of Connection
   proto: ProtocolType
   mixDialer: MixDialer
 
-method join*(
-    self: MixEntryConnection
-): Future[void] {.async: (raises: [CancelledError], raw: true), public.} =
-  discard
-
 method readExactly*(
     self: MixEntryConnection, pbytes: pointer, nbytes: int
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError]), public.} =
@@ -60,12 +55,6 @@ method writeLp*(
 
 method shortLog*(self: MixEntryConnection): string {.raises: [].} =
   "[MixEntryConnection] Destination: " & $self.destMultiAddr & "/p2p/" & $self.destPeerId
-
-method initStream*(self: MixEntryConnection) =
-  discard
-
-method closeImpl*(self: MixEntryConnection): Future[void] {.async: (raises: []).} =
-  discard
 
 func hash*(self: MixEntryConnection): Hash =
   hash($self.destMultiAddr & "/p2p/" & $self.destPeerId)
