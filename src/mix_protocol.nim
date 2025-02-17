@@ -1,14 +1,13 @@
 import chronicles, chronos, sequtils, strutils
 import std/sysrand
 import
+  libp2p/
+    [protocols/ping, protocols/protocol, stream/connection, stream/lpstream, switch]
+import
   ./[
     config, curve25519, fragmentation, mix_message, mix_node, protocol, serialization,
     sphinx, tag_manager, utils,
   ]
-import libp2p
-import
-  libp2p/
-    [protocols/ping, protocols/protocol, stream/connection, stream/lpstream, switch]
 
 const MixProtocolID* = "/mix/1.0.0"
 
@@ -82,7 +81,7 @@ proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} 
         return
 
       let (message, protocol) = getMixMessage(deserializedResult)
-      info "# Received: ", receiver = multiAddr, message = message
+      info "####################################### Exit node - Received mix message: ", receiver = multiAddr, message = message
 
       # Add delay
       let delayMillis = (delay[0].int shl 8) or delay[1].int
@@ -120,7 +119,7 @@ proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} 
       except CatchableError as e:
         error "Failed to dial next hop: ", err = e.msg
     of Success:
-      info "# Intermediate: ", multiAddr = multiAddr
+      info "################################################################# Intermediate node for mixMsg: ", multiAddr = multiAddr
       # Add delay
       let delayMillis = (delay[0].int shl 8) or delay[1].int
       await sleepAsync(milliseconds(delayMillis))
@@ -182,7 +181,7 @@ proc anonymizeLocalProtocolSend*(
 
   let paddedMsg = padMessage(serialized, peerID)
 
-  info "# Sent: ", sender = multiAddr, message = msg
+  info "#################################################### Sent: ", sender = multiAddr, message = msg
 
   var
     multiAddrs: seq[string] = @[]
@@ -279,6 +278,27 @@ proc new*(
   let mixProto = T(
     mixNodeInfo: mixNodeInfo,
     pubNodeInfo: pubNodeInfo,
+    switch: switch,
+    tagManager: initTagManager(),
+  )
+  mixProto.init()
+  return ok(mixProto)
+
+proc initMix*(
+    T: typedesc[MixProtocol],
+    localMixNodeInfo: MixNodeInfo,
+    switch: Switch,
+    mixNodeTable: Table[PeerId, MixPubInfo],
+): Result[T, string] =
+  if mixNodeTable.len == 0:
+    # TODO:This is temporary check for testing, needs to be removed later
+    # probably protocol can be initiated without any mix nodes itself,
+    # and can be later supplied with nodes as they are discovered.
+    return err("No mix nodes passed for the protocol initialization.")
+
+  let mixProto = T(
+    mixNodeInfo: localMixNodeInfo,
+    pubNodeInfo: mixNodeTable,
     switch: switch,
     tagManager: initTagManager(),
   )

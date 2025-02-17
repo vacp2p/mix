@@ -1,6 +1,6 @@
 import hashes, chronos, stew/byteutils
 import libp2p/stream/connection
-import ./protocol
+import ./protocol, ./mix_node, ./mix_protocol
 
 type MixDialer* = proc(
   msg: seq[byte], proto: ProtocolType, destMultiAddr: MultiAddress, destPeerId: PeerId
@@ -92,3 +92,40 @@ proc new*(
 when defined(libp2p_agents_metrics):
   proc setShortAgent*(self: MixEntryConnection, shortAgent: string) =
     discard
+
+proc newConn*(T: typedesc[MixEntryConnection],
+    destMultiAddr: string,
+    destPeerId: PeerId,
+    proto: ProtocolType,
+    mixproto: MixProtocol): MixEntryConnection =
+
+  #let destPeerId = getPeerIdFromMultiAddr(destMultiAddr).get()
+
+  let maddr =  MultiAddress.init(destMultiAddr).get()
+
+  var sendDialerFunc = proc(
+      msg: seq[byte],
+      proto: ProtocolType,
+      destMultiAddr: MultiAddress,
+      destPeerId: PeerId,
+  ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
+    try:
+      await mixproto.anonymizeLocalProtocolSend(
+        msg, proto, destMultiAddr, destPeerId
+      )
+    except CatchableError as e:
+      error "Error during execution of sendThroughMixnet: ", err = e.msg
+      # TODO: handle error
+    return
+
+  let instance = T(
+    destMultiAddr: maddr,
+    destPeerId: destPeerId,
+    proto: proto,
+    mixDialer: sendDialerFunc,
+  )
+
+  when defined(libp2p_agents_metrics):
+    instance.shortAgent = connection.shortAgent
+
+  instance

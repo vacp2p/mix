@@ -1,6 +1,5 @@
 import chronicles, chronos, results, strutils
 import std/[enumerate, sysrand]
-import libp2p
 import libp2p/[crypto/secp, multiaddress, builders, protocols/ping, switch]
 import ./[entry_connection, mix_node, mix_protocol, protocol], ./protocols/noresp_ping
 
@@ -45,7 +44,7 @@ proc setUpNodes(numNodes: int): seq[Switch] =
 
       let writePubRes = writePubInfoToFile(nodePubInfo, index)
       if writePubRes.isErr:
-        error "Failed to write pub info to file", nodeIndex = index
+        error "Failed to write pub info to file", nodeIndex = index, error = writePubRes.error
         continue
 
       # Write info of all mix nodes
