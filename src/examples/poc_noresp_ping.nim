@@ -92,6 +92,8 @@ proc mixnetSimulation() {.async.} =
       return
     mixProto.add(protoRes.get())
 
+    mixProto[index].setCallback(nodes[index])
+
     nodes[index].mount(noRespPingProto[index])
     nodes[index].mount(mixProto[index])
 
@@ -109,7 +111,7 @@ proc mixnetSimulation() {.async.} =
 
   let conn = createMixEntryConnection(
     mixProto[senderIndex],
-    nodes[receiverIndex].peerInfo.addrs[0],
+    some(nodes[receiverIndex].peerInfo.addrs[0]),
     nodes[receiverIndex].peerInfo.peerId,
     NoRespPingCodec,
   )
