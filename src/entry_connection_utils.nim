@@ -3,8 +3,11 @@ import std/options
 import libp2p/[multiaddress, switch]
 import ./[entry_connection, mix_protocol, protocol]
 proc createMixEntryConnection*(
-    srcMix: MixProtocol, destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
-): MixEntryConnection {.gcsafe, raises:[].} =
+    srcMix: MixProtocol,
+    destAddr: Option[MultiAddress],
+    destPeerId: PeerId,
+    codec: string,
+): MixEntryConnection {.gcsafe, raises: [].} =
   var sendDialerFunc = proc(
       msg: seq[byte],
       proto: ProtocolType,
