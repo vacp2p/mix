@@ -1,14 +1,14 @@
 import chronos, chronicles
+import std/options
 import libp2p/[multiaddress, switch]
 import ./[entry_connection, mix_protocol, protocol]
 proc createMixEntryConnection*(
-    srcMix: MixProtocol, destAddr: MultiAddress, destPeerId: PeerId, codec: string
-): MixEntryConnection =
-  # Define the sendDialerFunc dynamically for the given sender MixProtocol
+    srcMix: MixProtocol, destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
+): MixEntryConnection {.gcsafe, raises:[].} =
   var sendDialerFunc = proc(
       msg: seq[byte],
       proto: ProtocolType,
-      destMultiAddr: MultiAddress,
+      destMultiAddr: Option[MultiAddress],
       destPeerId: PeerId,
   ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
     try:
