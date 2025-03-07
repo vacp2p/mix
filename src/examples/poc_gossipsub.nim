@@ -1,6 +1,6 @@
-import chronicles, sequtils, std/enumerate, strutils, chronos
-import std/[strformat, sysrand]
-import ../[mix_node, mix_protocol, protocol]
+import chronicles, sequtils, strutils, chronos
+import std/[enumerate, options, strformat, sysrand]
+import ../[entry_connection, entry_connection_utils, mix_node, mix_protocol, protocol]
 import
   libp2p/[
     crypto/secp,
@@ -11,7 +11,7 @@ import
     transports/tcptransport,
   ]
 
-type Node = tuple[switch: Switch, gossip: GossipSub, id: int]
+type Node = tuple[switch: Switch, gossip: GossipSub, mix: MixProtocol, id: int]
 
 proc createSwitch(libp2pPrivKey: SkPrivateKey, multiAddr: MultiAddress): Switch =
   let
@@ -96,7 +96,7 @@ proc oneNode(node: Node, rng: ref HmacDrbgContext) {.async.} =
     node.gossip.subscribe(
       "message",
       proc(topic: string, data: seq[byte]) {.async.} =
-        echo fmt"Node {node.id} received: {cast[string](data)}"
+        info "Message received", nodeId = node.id, msg = cast[string](data)
       ,
     )
   else:
@@ -105,8 +105,7 @@ proc oneNode(node: Node, rng: ref HmacDrbgContext) {.async.} =
   for msgNum in 0 ..< 5:
     await sleepAsync(500.milliseconds)
     let msg = fmt"Hello from Node {node.id}, Message No: {msgNum + 1}"
-
-    discard await node.gossip.publish("message", cast[seq[byte]](msg))
+    discard await node.gossip.publish("message", cast[seq[byte]](msg), useMix = true)
 
   await sleepAsync(1000.milliseconds)
   await node.switch.stop()
@@ -118,10 +117,27 @@ proc mixnet_gossipsub_test() {.async.} =
   var nodes: seq[Node]
 
   for i in 0 ..< numberOfNodes:
-    let gossip = GossipSub.init(switch = switch[i], triggerSelf = true)
+    let mixProto = MixProtocol.new(i, numberOfNodes, switch[i]).valueOr:
+      error "Mix protocol initialization failed", err = error
+      return
+
+    mixProto.setCallback(switch[i])
+
+    let mixConn = proc(
+        destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
+    ): Connection {.gcsafe, raises: [].} =
+      try:
+        return mixProto.createMixEntryConnection(destAddr, destPeerId, codec)
+      except CatchableError as e:
+        error "Error during execution of MixEntryConnection callback: ", err = e.msg
+        return nil
+
+    let gossip =
+      GossipSub.init(switch = switch[i], triggerSelf = true, mixConn = some(mixConn))
     switch[i].mount(gossip)
+    switch[i].mount(mixProto)
     await switch[i].start()
-    nodes.add((switch[i], gossip, i))
+    nodes.add((switch[i], gossip, mixProto, i))
 
   await connectNodesTCP(nodes)
 
