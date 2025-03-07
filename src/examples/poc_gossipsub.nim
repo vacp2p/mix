@@ -85,7 +85,7 @@ proc setUpNodes(numNodes: int): seq[Switch] =
 
     return nodes
 
-proc oneNode(node: Node, rng: ref HmacDrbgContext) {.async.} =
+proc oneNode(node: Node) {.async.} =
   node.gossip.addValidator(
     ["message"],
     proc(topic: string, message: Message): Future[ValidationResult] {.async.} =
@@ -143,7 +143,7 @@ proc mixnet_gossipsub_test() {.async.} =
 
   var allFuts: seq[Future[void]]
   for node in nodes:
-    allFuts.add(oneNode(node, newRng()))
+    allFuts.add(oneNode(node))
 
   await allFutures(allFuts)
 
