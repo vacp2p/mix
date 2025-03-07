@@ -1,4 +1,4 @@
-import chronos, strutils
+import chronos, std/enumerate, strutils
 import
   libp2p/[builders, protocols/ping, protocols/pubsub/gossipsub/types, stream/connection]
 import ./protocols/noresp_ping
@@ -13,8 +13,21 @@ type ProtocolType* = enum
   NoRespPing = NoRespPingCodec
   OtherProtocol = "other" # Placeholder for other protocols
 
+type ProtocolHandler* =
+  proc(conn: Connection, proto: ProtocolType): Future[void] {.async.}
+
 proc fromString*(T: type ProtocolType, proto: string): ProtocolType =
   try:
     parseEnum[ProtocolType](proto)
   except ValueError:
     ProtocolType.OtherProtocol
+
+method callHandler*(
+    switch: Switch, conn: Connection, proto: ProtocolType
+): Future[void] {.base, async.} =
+  let codec = $proto
+  for index, handler in enumerate(switch.ms.handlers):
+    if codec in handler.protos:
+      await handler.protocol.handler(conn, codec)
+      return
+  error "Handler doesn't exist", codec = codec
