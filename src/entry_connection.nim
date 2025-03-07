@@ -3,7 +3,10 @@ import libp2p/stream/connection
 import ./protocol
 
 type MixDialer* = proc(
-  msg: seq[byte], proto: ProtocolType, destMultiAddr: Option[MultiAddress], destPeerId: PeerId,
+  msg: seq[byte],
+  proto: ProtocolType,
+  destMultiAddr: Option[MultiAddress],
+  destPeerId: PeerId,
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true).}
 
 type MixEntryConnection* = ref object of Connection
