@@ -114,11 +114,7 @@ proc generateRandomDelay(): seq[byte] =
 
 # Function to compute betas, gammas, and deltas
 proc computeBetaGammaDelta(
-    s: seq[seq[byte]],
-    hop: openArray[Hop],
-    msg: Message,
-    delay: openArray[seq[byte]],
-    destHop: Hop,
+    s: seq[seq[byte]], hop: openArray[Hop], msg: Message, delay: openArray[seq[byte]]
 ): Result[(seq[byte], seq[byte], seq[byte]), string] =
   let sLen = s.len
   var
@@ -142,13 +138,11 @@ proc computeBetaGammaDelta(
 
     # Compute Beta and Gamma
     if i == sLen - 1:
-      let destBytes = serializeHop(destHop).valueOr:
-        return err("Error in destination address serialization: " & error)
       let
-        paddingLength = (((t + 1) * (r - L)) + 2) * k
-        destPadding = destBytes & delay[i] & newSeq[byte](paddingLength)
+        paddingLength = (((t + 1) * (r - L)) + t + 2) * k
+        zeroPadding = newSeq[byte](paddingLength)
 
-      let aesRes = aes_ctr(beta_aes_key, beta_iv, destPadding).valueOr:
+      let aesRes = aes_ctr(beta_aes_key, beta_iv, zeroPadding).valueOr:
         return err("Error in aes: " & error)
       beta = aesRes & filler
 
@@ -184,9 +178,8 @@ proc computeBetaGammaDelta(
 proc wrapInSphinxPacket*(
     msg: Message,
     publicKeys: openArray[FieldElement],
-    delay: openArray[seq[byte]],
+    delay: seq[seq[byte]],
     hop: openArray[Hop],
-    destHop: Hop,
 ): Result[seq[byte], string] =
   # Compute alphas and shared secrets
   let res1 = computeAlpha(publicKeys)
@@ -195,7 +188,7 @@ proc wrapInSphinxPacket*(
   let (alpha_0, s) = res1.get()
 
   # Compute betas, gammas, and deltas
-  let res2 = computeBetaGammaDelta(s, hop, msg, delay, destHop)
+  let res2 = computeBetaGammaDelta(s, hop, msg, delay)
   if res2.isErr:
     return err("Error in beta, gamma, and delta generation: " & res2.error)
   let (beta_0, gamma_0, delta_0) = res2.get()
@@ -264,17 +257,15 @@ proc processSphinxPacket*(
     return err("Error in aes: " & error)
 
   # Check if B has the required prefix for the original message
-  paddingLength = (((t + 1) * (r - L)) + 2) * k
+  paddingLength = (((t + 1) * (r - L)) + t + 2) * k
   zeroPadding = newSeq[byte](paddingLength)
 
-  if B[(t * k) .. (t * k) + paddingLength - 1] == zeroPadding:
+  if B[0 .. paddingLength - 1] == zeroPadding:
     let deserializeRes = deserializeMessage(delta_prime).valueOr:
       return err("Message deserialization error: " & error)
     let msg = getMessage(deserializeRes)
 
-    let hop = deserializeHop(B[0 .. addrSize - 1]).valueOr:
-      return err(error)
-    return ok((hop, B[addrSize .. ((t * k) - 1)], msg[0 .. messageSize - 1], Exit))
+    return ok((Hop(), @[], msg[0 .. messageSize - 1], Exit))
   else:
     # Extract routing information from B
     let deserializeRes = deserializeRoutingInfo(B).valueOr:

@@ -12,7 +12,7 @@ proc padMessage(message: openArray[byte], size: int): seq[byte] =
 
 # Helper function to create dummy data
 proc createDummyData(): (
-  Message, seq[FieldElement], seq[FieldElement], seq[seq[byte]], seq[Hop], Hop
+  Message, seq[FieldElement], seq[FieldElement], seq[seq[byte]], seq[Hop]
 ) =
   var keyPairResult = generateKeyPair()
   if keyPairResult.isErr:
@@ -46,9 +46,8 @@ proc createDummyData(): (
       ]
 
     message = initMessage(newSeq[byte](messageSize))
-    dest = initHop(newSeq[byte](addrSize))
 
-  return (message, privateKeys, publicKeys, delay, hops, dest)
+  return (message, privateKeys, publicKeys, delay, hops)
 
 # Unit tests for sphinx.nim
 suite "Sphinx Tests":
@@ -61,9 +60,9 @@ suite "Sphinx Tests":
     clearTags(tm)
 
   test "sphinx_wrap_and_process":
-    let (message, privateKeys, publicKeys, delay, hops, dest) = createDummyData()
+    let (message, privateKeys, publicKeys, delay, hops) = createDummyData()
 
-    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops, dest)
+    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops)
     if packetRes.isErr:
       error "Sphinx wrap error", err = packetRes.error
     let packet = packetRes.get()
@@ -119,17 +118,17 @@ suite "Sphinx Tests":
       fail()
 
   test "sphinx_wrap_empty_public_keys":
-    let (message, _, _, delay, _, dest) = createDummyData()
+    let (message, _, _, delay, _) = createDummyData()
 
-    let packetRes = wrapInSphinxPacket(message, @[], delay, @[], dest)
+    let packetRes = wrapInSphinxPacket(message, @[], delay, @[])
     if packetRes.isOk:
       error "Expected Sphinx wrap error when public keys are empty, but got success"
       fail()
 
   test "sphinx_process_invalid_mac":
-    let (message, privateKeys, publicKeys, delay, hops, dest) = createDummyData()
+    let (message, privateKeys, publicKeys, delay, hops) = createDummyData()
 
-    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops, dest)
+    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops)
     if packetRes.isErr:
       error "Sphinx wrap error", err = packetRes.error
     let packet = packetRes.get()
@@ -154,9 +153,9 @@ suite "Sphinx Tests":
       fail()
 
   test "sphinx_process_duplicate_tag":
-    let (message, privateKeys, publicKeys, delay, hops, dest) = createDummyData()
+    let (message, privateKeys, publicKeys, delay, hops) = createDummyData()
 
-    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops, dest)
+    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops)
     if packetRes.isErr:
       error "Sphinx wrap error", err = packetRes.error
     let packet = packetRes.get()
@@ -190,7 +189,7 @@ suite "Sphinx Tests":
   test "sphinx_wrap_and_process_message_sizes":
     let messageSizes = @[32, 64, 128, 256, 512]
     for size in messageSizes:
-      let (_, privateKeys, publicKeys, delay, hops, dest) = createDummyData()
+      let (_, privateKeys, publicKeys, delay, hops) = createDummyData()
       var message = newSeq[byte](size)
       randomize()
       for i in 0 ..< size:
@@ -198,7 +197,7 @@ suite "Sphinx Tests":
       let paddedMessage = padMessage(message, messageSize)
 
       let packetRes =
-        wrapInSphinxPacket(initMessage(paddedMessage), publicKeys, delay, hops, dest)
+        wrapInSphinxPacket(initMessage(paddedMessage), publicKeys, delay, hops)
       if packetRes.isErr:
         error "Sphinx wrap error", err = packetRes.error
       let packet = packetRes.get()
