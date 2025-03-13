@@ -290,11 +290,11 @@ proc initMix*(
     switch: Switch,
     mixNodeTable: Table[PeerId, MixPubInfo],
 ): Result[T, string] =
-  if mixNodeTable.len == 0:
+  #if mixNodeTable.len == 0:
     # TODO:This is temporary check for testing, needs to be removed later
     # probably protocol can be initiated without any mix nodes itself,
     # and can be later supplied with nodes as they are discovered.
-    return err("No mix nodes passed for the protocol initialization.")
+    #return err("No mix nodes passed for the protocol initialization.")
 
   let mixProto = T(
     mixNodeInfo: localMixNodeInfo,
@@ -311,3 +311,9 @@ method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
 
   mixProtocol.codecs = @[MixProtocolID]
   mixProtocol.handler = handle
+
+method setNodePool*(mixProtocol: MixProtocol, mixNodeTable: Table[PeerId, MixPubInfo]) {.gcsafe, raises: [].} =
+  mixProtocol.pubNodeInfo = mixNodeTable
+
+method getNodePoolSize*(mixProtocol: MixProtocol): int {.gcsafe, raises: [].} =
+  mixProtocol.pubNodeInfo.len
