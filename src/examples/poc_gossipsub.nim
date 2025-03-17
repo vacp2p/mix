@@ -7,6 +7,7 @@ import
     multiaddress,
     builders,
     protocols/pubsub/gossipsub,
+    protocols/pubsub/pubsubpeer,
     protocols/pubsub/rpc/messages,
     transports/tcptransport,
   ]
@@ -105,7 +106,7 @@ proc oneNode(node: Node) {.async.} =
   for msgNum in 0 ..< 5:
     await sleepAsync(500.milliseconds)
     let msg = fmt"Hello from Node {node.id}, Message No: {msgNum + 1}"
-    discard await node.gossip.publish("message", cast[seq[byte]](msg), useMix = true)
+    discard await node.gossip.publish("message", cast[seq[byte]](msg), useCustomConn = true)
 
   await sleepAsync(1000.milliseconds)
   await node.switch.stop()
@@ -133,7 +134,7 @@ proc mixnet_gossipsub_test() {.async.} =
         return nil
 
     let gossip =
-      GossipSub.init(switch = switch[i], triggerSelf = true, mixConn = some(mixConn))
+      GossipSub.init(switch = switch[i], triggerSelf = true, customConnCallbacks = some(CustomConnectionCallbacks(customConnCreationCB: mixConn)))
     switch[i].mount(gossip)
     switch[i].mount(mixProto)
     await switch[i].start()
