@@ -1,6 +1,6 @@
 import chronicles, math, sequtils, strutils, sugar, chronos
 import std/[atomics, enumerate, options, strformat, sysrand]
-import ../[entry_connection, entry_connection_utils, mix_node, mix_protocol, protocol]
+import ../[entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol]
 import
   libp2p/[
     crypto/secp,
@@ -135,8 +135,20 @@ proc mixnet_gossipsub_test(): Future[int] {.async.} =
         error "Error during execution of MixEntryConnection callback: ", err = e.msg
         return nil
 
+    let mixPeerSelect = proc(
+      allPeers: HashSet[PubSubPeer],
+      directPeers: HashSet[PubSubPeer],
+      meshPeers: HashSet[PubSubPeer],
+      fanoutPeers: HashSet[PubSubPeer],
+    ): HashSet[PubSubPeer] {.gcsafe, raises: [].} =
+      try:
+        return mixPeerSelection(allPeers, directPeers, meshPeers, fanoutPeers)
+      except CatchableError as e:
+        error "Error during execution of MixPeerSelection callback: ", err = e.msg
+        return initHashSet[PubSubPeer]()
+
     let gossip =
-      GossipSub.init(switch = switch[i], triggerSelf = true, customConnCallbacks = some(CustomConnectionCallbacks(customConnCreationCB: mixConn)))
+      GossipSub.init(switch = switch[i], triggerSelf = true, customConnCallbacks = some(CustomConnectionCallbacks(customConnCreationCB: mixConn, peerSelectionCB: mixPeerSelect)))
     switch[i].mount(gossip)
     switch[i].mount(mixProto)
     await switch[i].start()
