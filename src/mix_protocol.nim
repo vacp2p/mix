@@ -126,6 +126,7 @@ proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} 
       try:
         nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
         await nextHopConn.writeLp(processedPkt)
+        await nextHopConn.close()
       except CatchableError as e:
         error "Failed to dial next hop: ", err = e.msg
     of Duplicate:
