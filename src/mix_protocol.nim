@@ -189,8 +189,13 @@ proc anonymizeLocalProtocolSend*(
 
   # Select L mix nodes at random
   let numMixNodes = mixProto.pubNodeInfo.len
-  if numMixNodes < L:
-    error "No. of public mix nodes less than path length.", numMixNodes = numMixNodes
+  var numAvailableNodes = numMixNodes
+  if mixProto.pubNodeInfo.hasKey(destPeerId):
+    error "Destination peer is a mix node", destPeerId = destPeerId
+    numAvailableNodes = numMixNodes - 1
+
+  if numAvailableNodes < L:
+    error "No. of public mix nodes less than path length.", numMixNodes = numAvailableNodes, pathLength = L
     return
 
   var
