@@ -181,8 +181,6 @@ proc anonymizeLocalProtocolSend*(
 
   let paddedMsg = padMessage(serialized, peerID)
 
-  info "#################################################### Sent: ", sender = multiAddr, message = msg
-
   var
     multiAddrs: seq[string] = @[]
     publicKeys: seq[FieldElement] = @[]
@@ -192,20 +190,24 @@ proc anonymizeLocalProtocolSend*(
   # Select L mix nodes at random
   let numMixNodes = mixProto.pubNodeInfo.len
   if numMixNodes < L:
-    error "No. of public mix nodes less than path length."
+    error "No. of public mix nodes less than path length.", numMixNodes = numMixNodes
     return
 
   var
     pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
     randPeerId: PeerId
     availableIndices = toSeq(0 ..< numMixNodes)
-  for i in 0 ..< L:
+    i = 0
+  while i < L:
     let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
       error "Failed to generate random number", err = error
       return
     let selectedIndex = availableIndices[randomIndexPosition]
     randPeerId = pubNodeInfoKeys[selectedIndex]
     availableIndices.del(randomIndexPosition)
+    # Skip the destination peer
+    if randPeerId == destPeerId:
+      continue
 
     # Extract multiaddress, mix public key, and hop
     let (multiAddr, mixPubKey, _) =
@@ -224,7 +226,7 @@ proc anonymizeLocalProtocolSend*(
       error "Failed to generate random number", err = error
       return
     delay.add(uint16ToBytes(uint16(delayMilliSec)))
-
+    i = i + 1
   let serializedRes = serializeMessageChunk(paddedMsg).valueOr:
     error "Failed to serialize padded message", err = error
     return
@@ -265,6 +267,9 @@ proc anonymizeLocalProtocolSend*(
     await nextHopConn.close()
   except CatchableError as e:
     error "Failed to send message to next hop: ", err = e.msg
+
+  info "#################################################### Sent: ", sender = multiAddr, message = msg
+
 
 proc new*(
     T: typedesc[MixProtocol], index, numNodes: int, switch: Switch
