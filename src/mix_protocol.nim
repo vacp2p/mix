@@ -1,11 +1,11 @@
 import chronicles, chronos, sequtils, strutils
-import std/sysrand
+import std/sysrand, serialization
 import
   libp2p/
     [protocols/ping, protocols/protocol, stream/connection, stream/lpstream, switch]
 import
   ./[
-    config, curve25519, fragmentation, mix_message, mix_node, protocol, serialization,
+    config, curve25519, fragmentation, mix_message, mix_node, protocol,
     sphinx, tag_manager, utils,
   ]
 
