@@ -1,5 +1,5 @@
-import ./[config, seqno_generator, utils]
 import results, libp2p/peerid
+import ./[mixproto_config, seqno_generator, mix_utils]
 
 const paddingLengthSize* = 2
 const seqNoSize* = 4

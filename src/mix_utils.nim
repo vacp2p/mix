@@ -1,6 +1,6 @@
 import results, strutils
 import stew/base58
-import ./config
+import ./mixproto_config
 
 const addrBytesSize* = 46
 

@@ -5,8 +5,8 @@ import
     [protocols/ping, protocols/protocol, stream/connection, stream/lpstream, switch]
 import
   ./[
-    config, curve25519, fragmentation, mix_message, mix_node, protocol,
-    sphinx, tag_manager, utils,
+    mixproto_config, curve25519_utils, fragmentation, mix_message, mix_node, app_protocols,
+    sphinx, tag_manager, mix_utils,
   ]
 
 const MixProtocolID* = "/mix/1.0.0"

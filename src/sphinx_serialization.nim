@@ -1,5 +1,5 @@
 import results
-import ./config
+import ./mixproto_config
 
 type Header* = object
   Alpha: seq[byte]

@@ -1,7 +1,7 @@
 import chronicles, chronos, results, strutils
 import std/[enumerate, sysrand]
 import libp2p/[crypto/secp, multiaddress, builders, protocols/ping, switch]
-import ./[entry_connection, mix_node, mix_protocol, protocol], ./protocols/noresp_ping
+import ./[entry_connection, mix_node, mix_protocol, app_protocols], ./protocols/noresp_ping
 
 proc cryptoRandomInt(max: int): Result[int, string] =
   if max == 0:
