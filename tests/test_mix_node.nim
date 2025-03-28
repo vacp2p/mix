@@ -1,6 +1,6 @@
 import chronicles, options, os, strformat, results, strutils, unittest
 import libp2p/[crypto/crypto, crypto/secp, multiaddress, peerid]
-import ../src/[curve25519_utils, mix_node]
+import ../mix/[curve25519_utils, mix_node]
 
 suite "Mix Node Tests":
   setup:

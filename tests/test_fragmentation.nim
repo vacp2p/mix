@@ -1,6 +1,6 @@
 import chronicles, results, unittest
 import libp2p/peerid
-import ../src/[mixproto_config, fragmentation]
+import ../mix/[mixproto_config, fragmentation]
 
 suite "Fragmentation":
   let peerId =

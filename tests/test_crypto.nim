@@ -1,5 +1,5 @@
 import chronicles, nimcrypto, results, unittest
-import ../src/crypto_utils
+import ../mix/crypto_utils
 
 suite "cryptographic_functions_tests":
   test "aes_ctr_encrypt_decrypt":

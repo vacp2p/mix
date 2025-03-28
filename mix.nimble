@@ -10,8 +10,6 @@ requires "nim >= 2.0.8"
 requires "nimcrypto >= 0.6.0"
 requires "serialization >= 0.2.2"
 
-# Set the source directory
-srcDir = "src"
 const TEST_DIRECTORY = "tests"
 
 import strformat

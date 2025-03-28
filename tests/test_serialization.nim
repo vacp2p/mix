@@ -1,5 +1,5 @@
 import chronicles, results, unittest
-import ../src/[mixproto_config, sphinx_serialization]
+import ../mix/[mixproto_config, sphinx_serialization]
 
 # Define test cases
 suite "serialization_tests":

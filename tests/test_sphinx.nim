@@ -1,5 +1,6 @@
 import chronicles, random, results, unittest
-import ../src/[mixproto_config, curve25519_utils, sphinx_serialization, sphinx, tag_manager]
+import
+  ../mix/[mixproto_config, curve25519_utils, sphinx_serialization, sphinx, tag_manager]
 
 # Helper function to pad/truncate message
 proc padMessage(message: openArray[byte], size: int): seq[byte] =
