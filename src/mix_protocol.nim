@@ -6,7 +6,7 @@ import
 import
   ./[
     mixproto_config, curve25519_utils, fragmentation, mix_message, mix_node, app_protocols,
-    sphinx, tag_manager, mix_utils,
+    sphinx, tag_manager, mix_utils, sphinx_serialization
   ]
 
 const MixProtocolID* = "/mix/1.0.0"
