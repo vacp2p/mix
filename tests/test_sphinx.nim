@@ -1,5 +1,5 @@
 import chronicles, random, results, unittest
-import ../src/[config, curve25519, serialization, sphinx, tag_manager]
+import ../mix/[config, curve25519, serialization, sphinx, tag_manager]
 
 # Helper function to pad/truncate message
 proc padMessage(message: openArray[byte], size: int): seq[byte] =

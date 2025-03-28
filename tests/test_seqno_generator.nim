@@ -1,7 +1,7 @@
 import chronicles, sets, unittest
 import std/[os, times]
 import libp2p/peerid
-include ../src/seqno_generator
+include ../mix/seqno_generator
 
 suite "Sequence Number Generator":
   test "init_seq_no_from_peer_id":
