@@ -119,11 +119,10 @@ proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} 
       except CatchableError as e:
         error "Failed to dial next hop: ", err = e.msg
     of Success:
-      info "################################################################# Intermediate node for mixMsg: ", multiAddr = multiAddr
       # Add delay
       let delayMillis = (delay[0].int shl 8) or delay[1].int
+      info "################################################################# Intermediate node for mixMsg, adding delay: ", delay = delayMillis
       await sleepAsync(milliseconds(delayMillis))
-
       # Forward to next hop
       let nextHopBytes = getHop(nextHop)
 
@@ -139,6 +138,7 @@ proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} 
       let
         locationAddrStr = parts[0]
         peerIdStr = parts[1]
+      info "################################################################# Intermediate node, forwarding to next Hop ", nextHop = peerIdStr
 
       # Create MultiAddress and PeerId
       let locationAddr = MultiAddress.init(locationAddrStr).valueOr:
@@ -213,6 +213,8 @@ proc anonymizeLocalProtocolSend*(
     # Skip the destination peer
     if randPeerId == destPeerId:
       continue
+
+    info "Selected mix node: ", indexInPath = i, peerId = randPeerId
 
     # Extract multiaddress, mix public key, and hop
     let (multiAddr, mixPubKey, _) =
