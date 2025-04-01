@@ -212,7 +212,7 @@ proc anonymizeLocalProtocolSend*(
   let numMixNodes = mixProto.pubNodeInfo.len
   var numAvailableNodes = numMixNodes
   if mixProto.pubNodeInfo.hasKey(destPeerId):
-    error "Destination peer is a mix node", destPeerId = destPeerId
+    info "Destination peer is a mix node", destPeerId = destPeerId
     mix_messages_error.inc(labelValues = ["Entry", "DEST_MIX_NODE"])
     numAvailableNodes = numMixNodes - 1
 
