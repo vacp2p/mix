@@ -220,7 +220,6 @@ proc anonymizeLocalProtocolSend*(
   var numAvailableNodes = numMixNodes
   if mixProto.pubNodeInfo.hasKey(destPeerId):
     info "Destination peer is a mix node", destPeerId = destPeerId
-    mix_messages_error.inc(labelValues = ["Entry", "DEST_MIX_NODE"])
     numAvailableNodes = numMixNodes - 1
 
   if numAvailableNodes < L:
