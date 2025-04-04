@@ -49,7 +49,7 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   return ok(int(value mod uint64(max)))
 
 proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} =
-  while not conn.closed():
+  while not conn.isClosedRemotely:
     var receivedBytes = await conn.readLp(packetSize)
 
     if receivedBytes.len == 0:
