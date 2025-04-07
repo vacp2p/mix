@@ -50,12 +50,12 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   let value = cast[uint64](bytes)
   return ok(int(value mod uint64(max)))
 
-proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} =
+proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async: (raises: [CancelledError]).} =
   while true:
     var receivedBytes = await conn.readLp(packetSize)
 
     if receivedBytes.len == 0:
-      break # No data, end of stream
+      return # No data, end of stream
 
     # Process the packet
     let (multiAddr, _, mixPrivKey, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
@@ -254,7 +254,7 @@ proc new*(
   return ok(mixProto)
 
 method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
-  proc handle(conn: Connection, proto: string) {.async.} =
+  proc handle(conn: Connection, proto: string) {.async: (raises: [CancelledError]).} =
     await mixProtocol.handleMixNodeConnection(conn)
 
   mixProtocol.codecs = @[MixProtocolID]
@@ -263,7 +263,7 @@ method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
 proc setCallback*(mixProto: MixProtocol, switch: Switch): void =
   var sendHandlerFunc = proc(
       conn: Connection, proto: ProtocolType
-  ): Future[void] {.async.} =
+  ): Future[void] {.async: (raises: [CancelledError]).} =
     try:
       await callHandler(switch, conn, proto) # Call handler on the switch
     except CatchableError as e:

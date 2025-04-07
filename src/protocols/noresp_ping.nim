@@ -14,10 +14,10 @@ import
   ]
 
 logScope:
-  topics = "libp2p anonping"
+  topics = "libp2p norespping"
 
 const
-  NoRespPingCodec* = "/anonping/1.0.0"
+  NoRespPingCodec* = "/norespping/1.0.0"
   NoRespPingSize = 32
 
 type
@@ -38,7 +38,7 @@ proc new*(
   noRespPing
 
 method init*(p: NoRespPing) =
-  proc handle(conn: Connection, proto: string) {.async.} =
+  proc handle(conn: Connection, proto: string) {.async: (raises: [CancelledError]).} =
     try:
       trace "handling ping"
       var buf: array[NoRespPingSize, byte]

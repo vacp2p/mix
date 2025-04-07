@@ -14,7 +14,7 @@ type ProtocolType* = enum
   OtherProtocol = "other" # Placeholder for other protocols
 
 type ProtocolHandler* =
-  proc(conn: Connection, proto: ProtocolType): Future[void] {.async.}
+  proc(conn: Connection, proto: ProtocolType): Future[void] {.async: (raises: [CancelledError]).}
 
 proc fromString*(T: type ProtocolType, proto: string): ProtocolType =
   try:
