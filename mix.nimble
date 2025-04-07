@@ -5,7 +5,7 @@ license = "MIT"
 
 # Dependencies
 requires "chronos >= 4.0.3"
-requires "https://github.com/AkshayaMani/nim-libp2p#feat/gossipsub-custom-conn"
+requires "https://github.com/AkshayaMani/nim-libp2p#gossipsub-custom-conn"
 requires "nim >= 2.0.8"
 requires "nimcrypto >= 0.6.0"
 requires "serialization >= 0.2.2"
