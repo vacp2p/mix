@@ -197,7 +197,11 @@ proc anonymizeLocalProtocolSend*(
     error "Serialization failed", err = error
     mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
     return
-
+  if len(serialized) > dataSize:
+    error "Message size exceeds maximum payload size",
+      size = len(serialized), limit = dataSize
+    mix_messages_error.inc(labelValues = ["Entry", "INVALID_SIZE"])
+    return
   let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
 
   let peerId = getPeerIdFromMultiAddr(multiAddr).valueOr:
