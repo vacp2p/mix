@@ -51,88 +51,91 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   return ok(int(value mod uint64(max)))
 
 proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async: (raises: [CancelledError]).} =
-  while true:
-    var receivedBytes = await conn.readLp(packetSize)
+  var receivedBytes: seq[byte]
+  try:
+    receivedBytes = await conn.readLp(packetSize)
+  except Exception as e:
+    error "Failed to read: ", err = e.msg
 
-    if receivedBytes.len == 0:
-      return # No data, end of stream
+  if receivedBytes.len == 0:
+    return # No data, end of stream
 
-    # Process the packet
-    let (multiAddr, _, mixPrivKey, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
+  # Process the packet
+  let (multiAddr, _, mixPrivKey, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
 
-    let processedPktRes =
-      processSphinxPacket(receivedBytes, mixPrivKey, mixProto.tagManager)
-    if processedPktRes.isErr:
-      error "Failed to process Sphinx packet", err = processedPktRes.error
+  let processedPktRes =
+    processSphinxPacket(receivedBytes, mixPrivKey, mixProto.tagManager)
+  if processedPktRes.isErr:
+    error "Failed to process Sphinx packet", err = processedPktRes.error
+    return
+  let (nextHop, delay, processedPkt, status) = processedPktRes.get()
+
+  case status
+  of Exit:
+    if (nextHop != Hop()) or (delay != @[]):
+      error "Next hop and delay must be empty"
       return
-    let (nextHop, delay, processedPkt, status) = processedPktRes.get()
 
-    case status
-    of Exit:
-      if (nextHop != Hop()) or (delay != @[]):
-        error "Next hop and delay must be empty"
-        return
+    # This is the exit node, forward to destination
+    let msgChunk = deserializeMessageChunk(processedPkt).valueOr:
+      error "Deserialization failed", err = error
+      return
 
-      # This is the exit node, forward to destination
-      let msgChunk = deserializeMessageChunk(processedPkt).valueOr:
-        error "Deserialization failed", err = error
-        return
+    let unpaddedMsg = unpadMessage(msgChunk).valueOr:
+      error "Unpadding message failed", err = error
+      return
 
-      let unpaddedMsg = unpadMessage(msgChunk).valueOr:
-        error "Unpadding message failed", err = error
-        return
+    let deserializedResult = deserializeMixMessage(unpaddedMsg).valueOr:
+      error "Deserialization failed", err = error
+      return
 
-      let deserializedResult = deserializeMixMessage(unpaddedMsg).valueOr:
-        error "Deserialization failed", err = error
-        return
+    let
+      (message, protocol) = getMixMessage(deserializedResult)
+      exitConn = MixExitConnection.new(message)
+    info "# Received: ", receiver = multiAddr, message = message
+    await mixProto.pHandler(exitConn, protocol)
+  of Success:
+    info "# Intermediate: ", multiAddr = multiAddr
+    # Add delay
+    let delayMillis = (delay[0].int shl 8) or delay[1].int
+    await sleepAsync(milliseconds(delayMillis))
 
-      let
-        (message, protocol) = getMixMessage(deserializedResult)
-        exitConn = MixExitConnection.new(message)
-      info "# Received: ", receiver = multiAddr, message = message
-      await mixProto.pHandler(exitConn, protocol)
-    of Success:
-      info "# Intermediate: ", multiAddr = multiAddr
-      # Add delay
-      let delayMillis = (delay[0].int shl 8) or delay[1].int
-      await sleepAsync(milliseconds(delayMillis))
+    # Forward to next hop
+    let nextHopBytes = getHop(nextHop)
 
-      # Forward to next hop
-      let nextHopBytes = getHop(nextHop)
+    let fullAddrStr = bytesToMultiAddr(nextHopBytes).valueOr:
+      error "Failed to convert bytes to multiaddress", err = error
+      return
 
-      let fullAddrStr = bytesToMultiAddr(nextHopBytes).valueOr:
-        error "Failed to convert bytes to multiaddress", err = error
-        return
+    let parts = fullAddrStr.split("/p2p/")
+    if parts.len != 2:
+      error "Invalid multiaddress format", parts = parts
+      return
 
-      let parts = fullAddrStr.split("/p2p/")
-      if parts.len != 2:
-        error "Invalid multiaddress format", parts = parts
-        return
+    let
+      locationAddrStr = parts[0]
+      peerIdStr = parts[1]
 
-      let
-        locationAddrStr = parts[0]
-        peerIdStr = parts[1]
+    # Create MultiAddress and PeerId
+    let locationAddr = MultiAddress.init(locationAddrStr).valueOr:
+      error "Failed to parse location multiaddress: ", err = error
+      return
 
-      # Create MultiAddress and PeerId
-      let locationAddr = MultiAddress.init(locationAddrStr).valueOr:
-        error "Failed to parse location multiaddress: ", err = error
-        return
+    let peerId = PeerId.init(peerIdStr).valueOr:
+      error "Failed to initialize PeerId", err = error
+      return
 
-      let peerId = PeerId.init(peerIdStr).valueOr:
-        error "Failed to initialize PeerId", err = error
-        return
-
-      var nextHopConn: Connection
-      try:
-        nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
-        await nextHopConn.writeLp(processedPkt)
-        await nextHopConn.close()
-      except CatchableError as e:
-        error "Failed to dial next hop: ", err = e.msg
-    of Duplicate:
-      discard
-    of InvalidMAC:
-      discard
+    var nextHopConn: Connection
+    try:
+      nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
+      await nextHopConn.writeLp(processedPkt)
+      await nextHopConn.close()
+    except CatchableError as e:
+      error "Failed to dial next hop: ", err = e.msg
+  of Duplicate:
+    discard
+  of InvalidMAC:
+    discard
 
 proc anonymizeLocalProtocolSend*(
     mixProto: MixProtocol,
