@@ -340,26 +340,24 @@ proc new*(
   mixProto.init()
   return ok(mixProto)
 
-proc initMix*(
-    T: typedesc[MixProtocol],
+proc init*(
+    mixProtocol: MixProtocol,
     localMixNodeInfo: MixNodeInfo,
     switch: Switch,
     mixNodeTable: Table[PeerId, MixPubInfo],
-): Result[T, string] =
+) =
   #if mixNodeTable.len == 0:
   # TODO:This is temporary check for testing, needs to be removed later
   # probably protocol can be initiated without any mix nodes itself,
   # and can be later supplied with nodes as they are discovered.
   #return err("No mix nodes passed for the protocol initialization.")
 
-  let mixProto = T(
-    mixNodeInfo: localMixNodeInfo,
-    pubNodeInfo: mixNodeTable,
-    switch: switch,
-    tagManager: initTagManager(),
-  )
-  mixProto.init()
-  return ok(mixProto)
+  mixProtocol.mixNodeInfo = localMixNodeInfo
+  mixProtocol.switch = switch
+  mixProtocol.pubNodeInfo = mixNodeTable
+  mixProtocol.tagManager = initTagManager()
+
+  mixProtocol.init()
 
 method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
   proc handle(conn: Connection, proto: string) {.async.} =
