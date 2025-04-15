@@ -25,12 +25,13 @@ proc loadMixNodeInfo*(index: int): Result[MixNodeInfo, string] =
   ok(readNode)
 
 proc loadAllButIndexMixPubInfo*(
-    index, numNodes: int
+    index, numNodes: int,
+    pubInfoFolderPath: string = "./pubInfo"
 ): Result[Table[PeerId, MixPubInfo], string] =
   var pubInfoTable = initTable[PeerId, MixPubInfo]()
   for i in 0 ..< numNodes:
     if i != index:
-      let pubInfo = readMixPubInfoFromFile(i).valueOr:
+      let pubInfo = readMixPubInfoFromFile(i, pubInfoFolderPath).valueOr:
         return err("Failed to load pub info from file: " & error)
 
       let (multiAddr, _, _) = getMixPubInfo(pubInfo)
