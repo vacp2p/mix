@@ -19,8 +19,8 @@ type MixProtocol* = ref object of LPProtocol
   tagManager: TagManager
   pHandler: ProtocolHandler
 
-proc loadMixNodeInfo*(index: int): Result[MixNodeInfo, string] =
-  let readNode = readMixNodeInfoFromFile(index).valueOr:
+proc loadMixNodeInfo*(index: int, nodeFolderInfoPath: string = "./nodeInfo"): Result[MixNodeInfo, string] =
+  let readNode = readMixNodeInfoFromFile(index, nodeFolderInfoPath).valueOr:
     return err("Failed to load node info from file: " & error)
   ok(readNode)
 
@@ -242,10 +242,10 @@ proc new*(
     T: typedesc[MixProtocol], index, numNodes: int, switch: Switch
 ): Result[T, string] =
   let mixNodeInfo = loadMixNodeInfo(index).valueOr:
-    return err("Failed to load mix node info for index " & $index)
+    return err("Failed to load mix node info for index " & $index & " - err: " & error)
 
   let pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes).valueOr:
-    return err("Failed to load mix pub info for index " & $index)
+    return err("Failed to load mix pub info for index " & $index & " - err: " & error)
 
   let mixProto = T(
     mixNodeInfo: mixNodeInfo,

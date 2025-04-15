@@ -6,8 +6,6 @@ import ./[config, curve25519, utils]
 const MixNodeInfoSize* =
   addrSize + (2 * FieldElementSize) + (SkRawPublicKeySize + SkRawPrivateKeySize)
 const MixPubInfoSize* = addrSize + FieldElementSize + SkRawPublicKeySize
-const nodeInfoFolderPath* = "nodeInfo"
-const pubInfoFolderPath* = "pubInfo"
 
 type MixNodeInfo* = object
   multiAddr: string
@@ -98,7 +96,7 @@ proc deserializeMixNodeInfo*(data: openArray[byte]): Result[MixNodeInfo, string]
 proc isNodeMultiaddress*(mixNodeInfo: MixNodeInfo, multiAddr: string): bool =
   return mixNodeInfo.multiAddr == multiAddr
 
-proc writeMixNodeInfoToFile*(node: MixNodeInfo, index: int): Result[void, string] =
+proc writeMixNodeInfoToFile*(node: MixNodeInfo, index: int, nodeInfoFolderPath: string = "./nodeInfo"): Result[void, string] =
   if not dirExists(nodeInfoFolderPath):
     createDir(nodeInfoFolderPath)
   let filename = nodeInfoFolderPath / fmt"mixNode_{index}"
@@ -114,7 +112,7 @@ proc writeMixNodeInfoToFile*(node: MixNodeInfo, index: int): Result[void, string
   file.writeData(addr serializedData[0], serializedData.len)
   return ok()
 
-proc readMixNodeInfoFromFile*(index: int): Result[MixNodeInfo, string] =
+proc readMixNodeInfoFromFile*(index: int, nodeInfoFolderPath: string = "./nodeInfo"): Result[MixNodeInfo, string] =
   try:
     let filename = nodeInfoFolderPath / fmt"mixNode_{index}"
     if not fileExists(filename):
@@ -141,7 +139,7 @@ proc readMixNodeInfoFromFile*(index: int): Result[MixNodeInfo, string] =
   except OSError as e:
     return err("OS error: " & $e.msg)
 
-proc deleteNodeInfoFolder*() =
+proc deleteNodeInfoFolder*(nodeInfoFolderPath: string = "./nodeInfo") =
   if dirExists(nodeInfoFolderPath):
     removeDir(nodeInfoFolderPath)
 
@@ -186,7 +184,7 @@ proc deserializeMixPubInfo*(data: openArray[byte]): Result[MixPubInfo, string] =
 
   ok(MixPubInfo(multiAddr: multiAddr, mixPubKey: mixPubKey, libp2pPubKey: libp2pPubKey))
 
-proc writePubInfoToFile*(node: MixPubInfo, index: int): Result[void, string] =
+proc writePubInfoToFile*(node: MixPubInfo, index: int, pubInfoFolderPath: string = "./pubInfo"): Result[void, string] =
   if not dirExists(pubInfoFolderPath):
     createDir(pubInfoFolderPath)
   let filename = pubInfoFolderPath / fmt"mixNode_{index}"
@@ -202,7 +200,7 @@ proc writePubInfoToFile*(node: MixPubInfo, index: int): Result[void, string] =
   file.writeData(addr serializedData[0], serializedData.len)
   return ok()
 
-proc readMixPubInfoFromFile*(index: int): Result[MixPubInfo, string] =
+proc readMixPubInfoFromFile*(index: int, pubInfoFolderPath: string = "./pubInfo"): Result[MixPubInfo, string] =
   try:
     let filename = pubInfoFolderPath / fmt"mixNode_{index}"
     if not fileExists(filename):
@@ -229,7 +227,7 @@ proc readMixPubInfoFromFile*(index: int): Result[MixPubInfo, string] =
   except OSError as e:
     return err("OS error: " & $e.msg)
 
-proc deletePubInfoFolder*() =
+proc deletePubInfoFolder*(pubInfoFolderPath: string = "./pubInfo") =
   if dirExists(pubInfoFolderPath):
     removeDir(pubInfoFolderPath)
 
