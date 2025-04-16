@@ -59,7 +59,7 @@ proc setUpNodes(numNodes: int): seq[Switch] =
         continue
       let nodePubInfo = nodePubInfoRes.get()
 
-      let writePubRes = writePubInfoToFile(nodePubInfo, index)
+      let writePubRes = writeMixPubInfoToFile(nodePubInfo, index)
       if writePubRes.isErr:
         error "Failed to write pub info to file", nodeIndex = index
         continue
