@@ -1,5 +1,5 @@
 import chronicles, results, unittest
-import ../src/[mix_message, protocol]
+import ../mix/[mix_message, protocol]
 
 # Define test cases
 suite "mix_message_tests":

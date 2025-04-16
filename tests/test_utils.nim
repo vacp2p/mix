@@ -1,5 +1,5 @@
 import chronicles, results, unittest
-import ../src/[config, utils]
+import ../mix/[config, utils]
 
 suite "Utils tests":
   test "multi_addr_conversion":
