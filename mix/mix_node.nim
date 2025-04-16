@@ -184,7 +184,7 @@ proc deserializeMixPubInfo*(data: openArray[byte]): Result[MixPubInfo, string] =
 
   ok(MixPubInfo(multiAddr: multiAddr, mixPubKey: mixPubKey, libp2pPubKey: libp2pPubKey))
 
-proc writePubInfoToFile*(node: MixPubInfo, index: int, pubInfoFolderPath: string = "./pubInfo"): Result[void, string] =
+proc writeMixPubInfoToFile*(node: MixPubInfo, index: int, pubInfoFolderPath: string = "./pubInfo"): Result[void, string] =
   if not dirExists(pubInfoFolderPath):
     createDir(pubInfoFolderPath)
   let filename = pubInfoFolderPath / fmt"mixNode_{index}"

@@ -1,6 +1,6 @@
 import chronicles, options, os, strformat, results, strutils, unittest
 import libp2p/[crypto/crypto, crypto/secp, multiaddress, peerid]
-import ../src/[curve25519, mix_node]
+import ../mix/[curve25519, mix_node]
 
 suite "Mix Node Tests":
   setup:
@@ -151,10 +151,6 @@ suite "Mix Node Tests":
         error "File write error", index = i
         fail()
 
-      if not dirExists(nodeInfoFolderPath):
-        error "nodeInfo folder does not exist."
-        fail()
-
       let readNodeRes = readMixNodeInfoFromFile(i)
       if readNodeRes.isErr:
         error "File read error", index = i
@@ -199,13 +195,9 @@ suite "Mix Node Tests":
 
       let (multiAddr, mixPubKey, libp2pPubKey) = getMixPubInfo(node)
 
-      let writeNodeRes = writePubInfoToFile(node, i)
+      let writeNodeRes = writeMixPubInfoToFile(node, i)
       if writeNodeRes.isErr:
         error "File write error", index = i
-        fail()
-
-      if not dirExists(pubInfoFolderPath):
-        error "pubInfo folder does not exist."
         fail()
 
       let readNodeRes = readMixPubInfoFromFile(i)
