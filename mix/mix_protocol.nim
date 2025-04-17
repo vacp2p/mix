@@ -240,12 +240,12 @@ proc anonymizeLocalProtocolSend*(
     error "Failed to send message to next hop: ", err = e.msg
 
 proc new*(
-    T: typedesc[MixProtocol], index, numNodes: int, switch: Switch
+    T: typedesc[MixProtocol], index, numNodes: int, switch: Switch, nodeFolderInfoPath: string = "./nodeInfo"
 ): Result[T, string] =
-  let mixNodeInfo = loadMixNodeInfo(index).valueOr:
+  let mixNodeInfo = loadMixNodeInfo(index, nodeFolderInfoPath).valueOr:
     return err("Failed to load mix node info for index " & $index & " - err: " & error)
 
-  let pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes).valueOr:
+  let pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes, nodeFolderInfoPath).valueOr:
     return err("Failed to load mix pub info for index " & $index & " - err: " & error)
 
   let mixProto = T(
