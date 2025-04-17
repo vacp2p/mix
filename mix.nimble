@@ -4,6 +4,7 @@ description = "A custom Mix Protocol"
 license = "MIT"
 
 # Dependencies
+requires "stew >= 0.3.0"
 requires "chronos >= 4.0.3"
 requires "https://github.com/AkshayaMani/nim-libp2p#gossipsub-custom-conn"
 requires "nim >= 2.0.8"
