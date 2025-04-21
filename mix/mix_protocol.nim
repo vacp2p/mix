@@ -239,6 +239,23 @@ proc anonymizeLocalProtocolSend*(
   except CatchableError as e:
     error "Failed to send message to next hop: ", err = e.msg
 
+proc createMixProtocol*(
+     mixNodeInfo: MixNodeInfo,
+     pubNodeInfo: Table[PeerId, MixPubInfo],
+     switch: Switch,
+     tagManager: TagManager,
+     handler: ProtocolHandler,
+ ): Result[MixProtocol, string] =
+   let mixProto = new MixProtocol
+   mixProto.mixNodeInfo = mixNodeInfo
+   mixProto.pubNodeInfo = pubNodeInfo
+   mixProto.switch = switch
+   mixProto.tagManager = tagManager
+   mixProto.pHandler = handler
+   mixProto.init()
+ 
+   return ok(mixProto)
+
 proc new*(
     T: typedesc[MixProtocol], index, numNodes: int, switch: Switch, nodeFolderInfoPath: string = "."
 ): Result[T, string] =
