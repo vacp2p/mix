@@ -122,8 +122,6 @@ proc mixnet_gossipsub_test() {.async.} =
       error "Mix protocol initialization failed", err = error
       return
 
-    mixProto.setCallback(switch[i])
-
     let mixConn = proc(
         destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
     ): Connection {.gcsafe, raises: [].} =

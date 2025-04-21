@@ -248,12 +248,23 @@ proc new*(
   let pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes, nodeFolderInfoPath / fmt"pubInfo").valueOr:
     return err("Failed to load mix pub info for index " & $index & " - err: " & error)
 
+  var sendHandlerFunc = proc(
+    conn: Connection, proto: ProtocolType
+  ): Future[void] {.async: (raises: [CancelledError]).} =
+    try:
+      await callHandler(switch, conn, proto)
+    except CatchableError as e:
+      error "Error during execution of MixProtocol handler: ", err = e.msg
+    return
+
   let mixProto = T(
     mixNodeInfo: mixNodeInfo,
     pubNodeInfo: pubNodeInfo,
     switch: switch,
     tagManager: initTagManager(),
+    pHandler: sendHandlerFunc,
   )
+
   mixProto.init()
   return ok(mixProto)
 
@@ -263,14 +274,3 @@ method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
 
   mixProtocol.codecs = @[MixProtocolID]
   mixProtocol.handler = handle
-
-proc setCallback*(mixProto: MixProtocol, switch: Switch): void =
-  var sendHandlerFunc = proc(
-      conn: Connection, proto: ProtocolType
-  ): Future[void] {.async: (raises: [CancelledError]).} =
-    try:
-      await callHandler(switch, conn, proto) # Call handler on the switch
-    except CatchableError as e:
-      error "Error during execution of MixProtocol handler: ", err = e.msg
-    return
-  mixProto.pHandler = sendHandlerFunc
