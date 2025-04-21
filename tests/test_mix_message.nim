@@ -64,7 +64,7 @@ suite "mix_message_tests":
       message = "Hello World!"
       protocol = ProtocolType.GossipSub12
       destination =
-        "/ip4/127.0.0.1/tcp/4242/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
+        "/ip4/0.0.0.0/tcp/4242/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
       mixMsg = initMixMessage(cast[seq[byte]](message), protocol)
 
     let serializedResult = serializeMixMessageAndDestination(mixMsg, destination)

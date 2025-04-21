@@ -17,8 +17,8 @@ proc createSwitch(multiAddr: MultiAddress): Switch =
 
 proc noresp_ping_test() {.async.} =
   let
-    addressA = MultiAddress.init("/ip4/127.0.0.1/tcp/8081").value()
-    addressB = MultiAddress.init("/ip4/127.0.0.1/tcp/8082").value()
+    addressA = MultiAddress.init("/ip4/0.0.0.0/tcp/8081").value()
+    addressB = MultiAddress.init("/ip4/0.0.0.0/tcp/8082").value()
     switchA = createSwitch(addressA)
     switchB = createSwitch(addressB)
     rng = newRng()
