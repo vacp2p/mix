@@ -31,7 +31,7 @@ suite "Mix Node Tests":
         pubKeyProto = PublicKey(scheme: Secp256k1, skkey: libp2pPubKey)
         peerId = PeerId.init(pubKeyProto).get()
 
-      if multiAddr != fmt"/ip4/127.0.0.1/tcp/{4242 + i}/p2p/{peerId}":
+      if multiAddr != fmt"/ip4/0.0.0.0/tcp/{4242 + i}/p2p/{peerId}":
         error "Multiaddress of retrieved node is invalid", multiaddr = multiAddr
         fail()
 
@@ -57,7 +57,7 @@ suite "Mix Node Tests":
 
   test "get_peer_id_from_multiaddr":
     let multiAddr =
-      "/ip4/127.0.0.1/tcp/4242/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"
+      "/ip4/0.0.0.0/tcp/4242/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"
 
     let peerIdRes = getPeerIdFromMultiAddr(multiAddr)
     if peerIdRes.isErr:
@@ -122,7 +122,7 @@ suite "Mix Node Tests":
 
   test "invalid_peer_id_lookup":
     let multiAddr =
-      "/ip4/127.0.0.1/tcp/4242/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"
+      "/ip4/0.0.0.0/tcp/4242/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"
       # Random peer ID
 
     let peerIdRes = getPeerIdFromMultiAddr(multiAddr)
