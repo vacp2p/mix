@@ -4,7 +4,7 @@ import ../mix/[config, utils]
 suite "Utils tests":
   test "multi_addr_conversion":
     let multiAddrs = [
-      "/ip4/127.0.0.1/tcp/4242/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC",
+      "/ip4/0.0.0.0/tcp/4242/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC",
       "/ip4/192.168.1.1/quic/8080/p2p/16Uiu2HAm6WNzw8AssyPscYYi8x1bY5wXyQrGTShRH75bh5dPCjBQ",
       "/ip4/10.0.0.1/tcp/1234/p2p/16Uiu2HAmDHw4mwBdEjxjJPhrt8Eq1kvDjXAuwkqCmhNiz363AFV2",
     ]
@@ -32,14 +32,14 @@ suite "Utils tests":
 
   test "invalid_protocol":
     let res = multiAddrToBytes(
-      "/ip4/127.0.0.1/udp/4242/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
+      "/ip4/0.0.0.0/udp/4242/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
     )
     if res.isOk:
       error "Expected error for invalid protocol, but conversion succeeded"
       fail()
 
   test "invalid_peerid_length":
-    let res = multiAddrToBytes("/ip4/127.0.0.1/tcp/4242/p2p/16Uiu2HAmFk")
+    let res = multiAddrToBytes("/ip4/0.0.0.0/tcp/4242/p2p/16Uiu2HAmFk")
     if res.isOk:
       error "Expected error for invalid peer ID length, but conversion succeeded"
       fail()
@@ -53,7 +53,7 @@ suite "Utils tests":
 
   test "invalid_ip_address_format":
     let res = multiAddrToBytes(
-      "/ip4/127.0.0/tcp/4242/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
+      "/ip4/0.0.0/tcp/4242/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
     )
     if res.isOk:
       error "Expected error for invalid IP address format, but conversion succeeded"
@@ -69,21 +69,21 @@ suite "Utils tests":
 
   test "invalid_base58_encoding":
     let res = multiAddrToBytes(
-      "/ip4/127.0.0.1/tcp/4242/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgV!"
+      "/ip4/0.0.0.0/tcp/4242/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgV!"
     )
     if res.isOk:
       error "Expected error for invalid Base58 encoding, but conversion succeeded"
       fail()
 
   test "invalid_multiaddress_format":
-    let res = multiAddrToBytes("/ip4/127.0.0.1/tcp/4242")
+    let res = multiAddrToBytes("/ip4/0.0.0.0/tcp/4242")
     if res.isOk:
       error "Expected error for invalid multiaddress format, but conversion succeeded"
       fail()
 
   test "invalid_port_number":
     let res = multiAddrToBytes(
-      "/ip4/127.0.0.1/tcp/65536/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
+      "/ip4/0.0.0.0/tcp/65536/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
     )
     if res.isOk:
       error "Expected error for invalid port number, but conversion succeeded"
