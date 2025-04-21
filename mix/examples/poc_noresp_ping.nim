@@ -92,8 +92,6 @@ proc mixnetSimulation() {.async.} =
       return
     mixProto.add(protoRes.get())
 
-    mixProto[index].setCallback(nodes[index])
-
     nodes[index].mount(noRespPingProto[index])
     nodes[index].mount(mixProto[index])
 
