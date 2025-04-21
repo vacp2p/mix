@@ -208,6 +208,7 @@ proc writeMixPubInfoToFile*(node: MixPubInfo, index: int, pubInfoFolderPath: str
 proc readMixPubInfoFromFile*(index: int, pubInfoFolderPath: string = "./pubInfo"): Result[MixPubInfo, string] =
   try:
     let filename = pubInfoFolderPath / fmt"mixNode_{index}"
+    echo "READING, ", filename
     if not fileExists(filename):
       return err("File does not exist")
     var file = newFileStream(filename, fmRead)
