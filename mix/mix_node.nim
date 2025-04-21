@@ -185,16 +185,21 @@ proc deserializeMixPubInfo*(data: openArray[byte]): Result[MixPubInfo, string] =
   ok(MixPubInfo(multiAddr: multiAddr, mixPubKey: mixPubKey, libp2pPubKey: libp2pPubKey))
 
 proc writeMixPubInfoToFile*(node: MixPubInfo, index: int, pubInfoFolderPath: string = "./pubInfo"): Result[void, string] =
+  echo "PUBINFOFOLDERPATH ", pubInfoFolderPath 
   if not dirExists(pubInfoFolderPath):
+    echo "CREATING DIR"
     createDir(pubInfoFolderPath)
   let filename = pubInfoFolderPath / fmt"mixNode_{index}"
+  echo "FILENAME, ", filename
   var file = newFileStream(filename, fmWrite)
   if file == nil:
+    echo "COULD NOT CREATE FILE"
     return err("Failed to create file stream for " & filename)
   defer:
     file.close()
 
   let serializedData = serializeMixPubInfo(node).valueOr:
+    echo "COULD NOT SERIALIZE ", $error
     return err("Failed to serialize mix pub info: " & error)
 
   file.writeData(addr serializedData[0], serializedData.len)
