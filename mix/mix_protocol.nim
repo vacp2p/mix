@@ -1,5 +1,5 @@
-import chronicles, chronos, sequtils, strutils
-import std/sysrand
+import chronicles, chronos, sequtils, strutils, os
+import std/[strformat, sysrand]
 import
   ./[
     config, curve25519, exit_connection, fragmentation, mix_message, mix_node, protocol,
@@ -240,12 +240,12 @@ proc anonymizeLocalProtocolSend*(
     error "Failed to send message to next hop: ", err = e.msg
 
 proc new*(
-    T: typedesc[MixProtocol], index, numNodes: int, switch: Switch, nodeFolderInfoPath: string = "./nodeInfo"
+    T: typedesc[MixProtocol], index, numNodes: int, switch: Switch, nodeFolderInfoPath: string = "."
 ): Result[T, string] =
-  let mixNodeInfo = loadMixNodeInfo(index, nodeFolderInfoPath).valueOr:
+  let mixNodeInfo = loadMixNodeInfo(index, nodeFolderInfoPath / fmt"nodeInfo").valueOr:
     return err("Failed to load mix node info for index " & $index & " - err: " & error)
 
-  let pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes, nodeFolderInfoPath).valueOr:
+  let pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes, nodeFolderInfoPath / fmt"pubInfo").valueOr:
     return err("Failed to load mix pub info for index " & $index & " - err: " & error)
 
   let mixProto = T(
