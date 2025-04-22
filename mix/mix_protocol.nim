@@ -19,14 +19,15 @@ type MixProtocol* = ref object of LPProtocol
   tagManager: TagManager
   pHandler: ProtocolHandler
 
-proc loadMixNodeInfo*(index: int, nodeFolderInfoPath: string = "./nodeInfo"): Result[MixNodeInfo, string] =
+proc loadMixNodeInfo*(
+    index: int, nodeFolderInfoPath: string = "./nodeInfo"
+): Result[MixNodeInfo, string] =
   let readNode = readMixNodeInfoFromFile(index, nodeFolderInfoPath).valueOr:
     return err("Failed to load node info from file: " & error)
   ok(readNode)
 
 proc loadAllButIndexMixPubInfo*(
-    index, numNodes: int,
-    pubInfoFolderPath: string = "./pubInfo"
+    index, numNodes: int, pubInfoFolderPath: string = "./pubInfo"
 ): Result[Table[PeerId, MixPubInfo], string] =
   var pubInfoTable = initTable[PeerId, MixPubInfo]()
   for i in 0 ..< numNodes:
@@ -51,7 +52,9 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   let value = cast[uint64](bytes)
   return ok(int(value mod uint64(max)))
 
-proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async: (raises: [CancelledError]).} =
+proc handleMixNodeConnection(
+    mixProto: MixProtocol, conn: Connection
+) {.async: (raises: [CancelledError]).} =
   var receivedBytes: seq[byte]
   try:
     receivedBytes = await conn.readLp(packetSize)
@@ -240,33 +243,38 @@ proc anonymizeLocalProtocolSend*(
     error "Failed to send message to next hop: ", err = e.msg
 
 proc createMixProtocol*(
-     mixNodeInfo: MixNodeInfo,
-     pubNodeInfo: Table[PeerId, MixPubInfo],
-     switch: Switch,
-     tagManager: TagManager,
-     handler: ProtocolHandler,
- ): Result[MixProtocol, string] =
-   let mixProto = new MixProtocol
-   mixProto.mixNodeInfo = mixNodeInfo
-   mixProto.pubNodeInfo = pubNodeInfo
-   mixProto.switch = switch
-   mixProto.tagManager = tagManager
-   mixProto.pHandler = handler
-   mixProto.init()
- 
-   return ok(mixProto)
+    mixNodeInfo: MixNodeInfo,
+    pubNodeInfo: Table[PeerId, MixPubInfo],
+    switch: Switch,
+    tagManager: TagManager,
+    handler: ProtocolHandler,
+): Result[MixProtocol, string] =
+  let mixProto = new MixProtocol
+  mixProto.mixNodeInfo = mixNodeInfo
+  mixProto.pubNodeInfo = pubNodeInfo
+  mixProto.switch = switch
+  mixProto.tagManager = tagManager
+  mixProto.pHandler = handler
+  mixProto.init()
+
+  return ok(mixProto)
 
 proc new*(
-    T: typedesc[MixProtocol], index, numNodes: int, switch: Switch, nodeFolderInfoPath: string = "."
+    T: typedesc[MixProtocol],
+    index, numNodes: int,
+    switch: Switch,
+    nodeFolderInfoPath: string = ".",
 ): Result[T, string] =
   let mixNodeInfo = loadMixNodeInfo(index, nodeFolderInfoPath / fmt"nodeInfo").valueOr:
     return err("Failed to load mix node info for index " & $index & " - err: " & error)
 
-  let pubNodeInfo = loadAllButIndexMixPubInfo(index, numNodes, nodeFolderInfoPath / fmt"pubInfo").valueOr:
+  let pubNodeInfo = loadAllButIndexMixPubInfo(
+    index, numNodes, nodeFolderInfoPath / fmt"pubInfo"
+  ).valueOr:
     return err("Failed to load mix pub info for index " & $index & " - err: " & error)
 
   var sendHandlerFunc = proc(
-    conn: Connection, proto: ProtocolType
+      conn: Connection, proto: ProtocolType
   ): Future[void] {.async: (raises: [CancelledError]).} =
     try:
       await callHandler(switch, conn, proto)

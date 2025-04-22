@@ -28,15 +28,19 @@ proc createMixEntryConnection*(
     destAddr, destPeerId, ProtocolType.fromString(codec), sendDialerFunc
   )
 
-proc mixPeerSelection*(allPeers: HashSet[PubSubPeer], directPeers: HashSet[PubSubPeer], meshPeers: HashSet[PubSubPeer], fanoutPeers: HashSet[PubSubPeer]): HashSet[PubSubPeer] {.gcsafe, raises: [].} = 
+proc mixPeerSelection*(
+    allPeers: HashSet[PubSubPeer],
+    directPeers: HashSet[PubSubPeer],
+    meshPeers: HashSet[PubSubPeer],
+    fanoutPeers: HashSet[PubSubPeer],
+): HashSet[PubSubPeer] {.gcsafe, raises: [].} =
   var
     peers: HashSet[PubSubPeer]
     allPeersSeq = allPeers.toSeq()
-  let
-    rng = newRng()
+  let rng = newRng()
   rng.shuffle(allPeersSeq)
   for p in allPeersSeq:
     peers.incl(p)
-    if peers.len >= D: 
+    if peers.len >= D:
       break
   return peers
