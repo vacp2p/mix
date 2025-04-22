@@ -1,6 +1,7 @@
 import chronicles, math, sequtils, strutils, sugar, chronos
 import std/[atomics, enumerate, options, strformat, sysrand]
-import ../[entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol]
+import
+  ../[entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol]
 import
   libp2p/[
     crypto/secp,
@@ -106,7 +107,8 @@ proc oneNode(node: Node, rcvdCnt: ptr Atomic[int]) {.async.} =
   for msgNum in 0 ..< 5:
     await sleepAsync(500.milliseconds)
     let msg = fmt"Hello from Node {node.id}, Message No: {msgNum + 1}"
-    discard await node.gossip.publish("message", cast[seq[byte]](msg), useCustomConn = true)
+    discard
+      await node.gossip.publish("message", cast[seq[byte]](msg), useCustomConn = true)
 
   await sleepAsync(1000.milliseconds)
   await node.switch.stop()
@@ -134,10 +136,10 @@ proc mixnet_gossipsub_test(): Future[int] {.async.} =
         return nil
 
     let mixPeerSelect = proc(
-      allPeers: HashSet[PubSubPeer],
-      directPeers: HashSet[PubSubPeer],
-      meshPeers: HashSet[PubSubPeer],
-      fanoutPeers: HashSet[PubSubPeer],
+        allPeers: HashSet[PubSubPeer],
+        directPeers: HashSet[PubSubPeer],
+        meshPeers: HashSet[PubSubPeer],
+        fanoutPeers: HashSet[PubSubPeer],
     ): HashSet[PubSubPeer] {.gcsafe, raises: [].} =
       try:
         return mixPeerSelection(allPeers, directPeers, meshPeers, fanoutPeers)
@@ -145,8 +147,15 @@ proc mixnet_gossipsub_test(): Future[int] {.async.} =
         error "Error during execution of MixPeerSelection callback: ", err = e.msg
         return initHashSet[PubSubPeer]()
 
-    let gossip =
-      GossipSub.init(switch = switch[i], triggerSelf = true, customConnCallbacks = some(CustomConnectionCallbacks(customConnCreationCB: mixConn, peerSelectionCB: mixPeerSelect)))
+    let gossip = GossipSub.init(
+      switch = switch[i],
+      triggerSelf = true,
+      customConnCallbacks = some(
+        CustomConnectionCallbacks(
+          customConnCreationCB: mixConn, peerSelectionCB: mixPeerSelect
+        )
+      ),
+    )
     switch[i].mount(gossip)
     switch[i].mount(mixProto)
     await switch[i].start()
@@ -201,8 +210,14 @@ proc main() {.async.} =
 
   # Display frequency summary
   echo "\nSummary of message counts:"
-  var summarySeq = collect(for k, v in summary: (k, v))
-  summarySeq.sort(proc(x, y: (int, int)): int = cmp(x[0], y[0]))
+  var summarySeq = collect(
+    for k, v in summary:
+      (k, v)
+  )
+  summarySeq.sort(
+    proc(x, y: (int, int)): int =
+      cmp(x[0], y[0])
+  )
   for (numMessages, numRuns) in summarySeq:
     echo fmt"{numRuns} runs: {numMessages} messages"
 

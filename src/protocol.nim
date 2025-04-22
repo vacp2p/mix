@@ -13,8 +13,9 @@ type ProtocolType* = enum
   NoRespPing = NoRespPingCodec
   OtherProtocol = "other" # Placeholder for other protocols
 
-type ProtocolHandler* =
-  proc(conn: Connection, proto: ProtocolType): Future[void] {.async: (raises: [CancelledError]).}
+type ProtocolHandler* = proc(conn: Connection, proto: ProtocolType): Future[void] {.
+  async: (raises: [CancelledError])
+.}
 
 proc fromString*(T: type ProtocolType, proto: string): ProtocolType =
   try:
