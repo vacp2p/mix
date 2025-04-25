@@ -96,10 +96,10 @@ proc handleMixNodeConnection(
     let
       (message, protocol) = getMixMessage(deserializedResult)
       exitConn = MixExitConnection.new(message)
-    info "# Received: ", receiver = multiAddr, message = message
+    trace "# Received: ", receiver = multiAddr, message = message
     await mixProto.pHandler(exitConn, protocol)
   of Success:
-    info "# Intermediate: ", multiAddr = multiAddr
+    trace "# Intermediate: ", multiAddr = multiAddr
     # Add delay
     let delayMillis = (delay[0].int shl 8) or delay[1].int
     await sleepAsync(milliseconds(delayMillis))
@@ -162,7 +162,7 @@ proc anonymizeLocalProtocolSend*(
 
   let paddedMsg = padMessage(serialized, peerID)
 
-  info "# Sent: ", sender = multiAddr, message = msg, dest = destMultiAddr
+  trace "# Sent: ", sender = multiAddr, message = msg, dest = destMultiAddr
 
   var
     multiAddrs: seq[string] = @[]
@@ -231,7 +231,7 @@ proc anonymizeLocalProtocolSend*(
     error "Failed to initialize PeerId", err = error
     return
 
-  info "# Sending to: ", multiaddr = multiAddrs[0]
+  trace "# Sending to: ", multiaddr = multiAddrs[0]
 
   var nextHopConn: Connection
   try:
