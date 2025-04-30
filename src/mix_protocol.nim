@@ -340,7 +340,7 @@ proc new*(
   mixProto.init()
   return ok(mixProto)
 
-proc init*(
+proc initialize*(
     mixProtocol: MixProtocol,
     localMixNodeInfo: MixNodeInfo,
     switch: Switch,
