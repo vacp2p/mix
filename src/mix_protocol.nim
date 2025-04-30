@@ -60,6 +60,9 @@ proc handleMixNodeConnection(
     receivedBytes = await conn.readLp(packetSize)
   except Exception as e:
     error "Failed to read: ", err = e.msg
+  finally:
+    if conn != nil:
+      await conn.close()
 
   if receivedBytes.len == 0:
     return # No data, end of stream
