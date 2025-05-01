@@ -62,7 +62,10 @@ proc handleMixNodeConnection(
     error "Failed to read: ", err = e.msg
   finally:
     if conn != nil:
-      await conn.close()
+      try:
+        await conn.close()
+      except CatchableError as e:
+        error "Failed to close incoming stream: ", err = e.msg
 
   if receivedBytes.len == 0:
     return # No data, end of stream
@@ -136,9 +139,14 @@ proc handleMixNodeConnection(
     try:
       nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
       await nextHopConn.writeLp(processedPkt)
-      await nextHopConn.close()
     except CatchableError as e:
       error "Failed to dial next hop: ", err = e.msg
+    finally:
+      if nextHopConn != nil:
+        try:
+          await nextHopConn.close()
+        except CatchableError as e:
+          error "Failed to close outgoing stream: ", err = e.msg
   of Duplicate:
     discard
   of InvalidMAC:
@@ -241,9 +249,14 @@ proc anonymizeLocalProtocolSend*(
     nextHopConn =
       await mixProto.switch.dial(firstMixPeerId, @[firstMixAddr], @[MixProtocolID])
     await nextHopConn.writeLp(sphinxPacket)
-    await nextHopConn.close()
   except CatchableError as e:
     error "Failed to send message to next hop: ", err = e.msg
+  finally:
+    if nextHopConn != nil:
+      try:
+        await nextHopConn.close()
+      except CatchableError as e:
+        error "Failed to close outgoing stream: ", err = e.msg
 
 proc createMixProtocol*(
     mixNodeInfo: MixNodeInfo,
