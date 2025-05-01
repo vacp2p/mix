@@ -104,6 +104,12 @@ proc handleMixNodeConnection(
       exitConn = MixExitConnection.new(message)
     trace "# Received: ", receiver = multiAddr, message = message
     await mixProto.pHandler(exitConn, protocol)
+
+    if conn != nil:
+      try:
+        await exitConn.close()
+      except CatchableError as e:
+        error "Failed to close exit connection: ", err = e.msg
   of Success:
     trace "# Intermediate: ", multiAddr = multiAddr
     # Add delay
