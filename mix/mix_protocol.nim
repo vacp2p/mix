@@ -126,6 +126,8 @@ proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} 
     try:
       destConn = await mixProto.switch.dial(peerId, @[locationAddr], $protocol)
       await destConn.writeLp(message)
+      #TODO: When response is implemented, we can read the response here
+      await destConn.close()
     except CatchableError as e:
       error "Failed to dial next hop: ", err = e.msg
       mix_messages_error.inc(labelValues = ["Exit", "DAIL_FAILED"])
