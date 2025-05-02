@@ -105,7 +105,7 @@ proc handleMixNodeConnection(
     trace "# Received: ", receiver = multiAddr, message = message
     await mixProto.pHandler(exitConn, protocol)
 
-    if conn != nil:
+    if exitConn != nil:
       try:
         await exitConn.close()
       except CatchableError as e:
