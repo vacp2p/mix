@@ -129,8 +129,12 @@ method shortLog*(self: MixExitConnection): string {.raises: [].} =
 method initStream*(self: MixExitConnection) =
   discard
 
-method closeImpl*(self: MixExitConnection): Future[void] {.async: (raises: []).} =
-  discard
+method closeImpl*(
+    self: MixExitConnection
+): Future[void] {.async: (raises: [], raw: true).} =
+  let fut = newFuture[void]()
+  fut.complete()
+  return fut
 
 func hash*(self: MixExitConnection): Hash =
   discard
