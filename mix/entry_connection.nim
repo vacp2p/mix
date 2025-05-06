@@ -72,6 +72,14 @@ method writeLp*(
 method shortLog*(self: MixEntryConnection): string {.raises: [].} =
   "[MixEntryConnection] Destination: " & $self.destMultiAddr & "/p2p/" & $self.destPeerId
 
+method initStream*(self: MixEntryConnection) =
+  discard
+
+method closeImpl*(
+    self: MixEntryConnection
+): Future[void] {.async: (raises: [], raw: true).} =
+  discard
+
 func hash*(self: MixEntryConnection): Hash =
   hash($self.destMultiAddr & "/p2p/" & $self.destPeerId)
 
