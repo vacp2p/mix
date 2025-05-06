@@ -78,7 +78,9 @@ method initStream*(self: MixEntryConnection) =
 method closeImpl*(
     self: MixEntryConnection
 ): Future[void] {.async: (raises: [], raw: true).} =
-  discard
+  let fut = newFuture[void]()
+  fut.complete()
+  return fut
 
 func hash*(self: MixEntryConnection): Hash =
   hash($self.destMultiAddr & "/p2p/" & $self.destPeerId)
