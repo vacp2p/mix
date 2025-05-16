@@ -1,5 +1,6 @@
 import chronicles, chronos, sequtils, strutils, os
 import std/[strformat, sysrand]
+import stew/endians2
 import
   ./[
     config, curve25519, exit_connection, fragmentation, mix_message, mix_node, protocol,
@@ -9,6 +10,7 @@ import libp2p
 import
   libp2p/
     [protocols/ping, protocols/protocol, stream/connection, stream/lpstream, switch]
+from times import Time, getTime, toUnix, fromUnix, `-`, initTime, `$`, inMilliseconds
 
 const MixProtocolID* = "/mix/1.0.0"
 
@@ -52,12 +54,20 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   let value = cast[uint64](bytes)
   return ok(int(value mod uint64(max)))
 
+proc toUnixNs(t: Time): int64 =
+  t.toUnix().int64 * 1_000_000_000 + times.nanosecond(t).int64
+
 proc handleMixNodeConnection(
     mixProto: MixProtocol, conn: Connection
 ) {.async: (raises: [CancelledError]).} =
-  var receivedBytes: seq[byte]
+  var
+    receivedBytes: seq[byte]
+    metadata: seq[byte]
+    fromPeerID: string
   try:
+    metadata = await conn.readLp(16)
     receivedBytes = await conn.readLp(packetSize)
+    fromPeerID = shortLog(conn.peerId)
   except Exception as e:
     error "Failed to read: ", err = e.msg
   finally:
@@ -67,7 +77,11 @@ proc handleMixNodeConnection(
       except CatchableError as e:
         error "Failed to close incoming stream: ", err = e.msg
 
-  if receivedBytes.len == 0:
+  let
+    startTime = getTime()
+    startTimeNs = toUnixNs(startTime)
+
+  if metadata.len == 0 or receivedBytes.len == 0:
     return # No data, end of stream
 
   # Process the packet
@@ -79,6 +93,15 @@ proc handleMixNodeConnection(
     error "Failed to process Sphinx packet", err = processedPktRes.error
     return
   let (nextHop, delay, processedPkt, status) = processedPktRes.get()
+
+  let ownPeerId = PeerId.init(multiAddr.split("/p2p/")[1]).valueOr:
+    error "Failed to initialize my PeerId", err = error
+    return
+
+  let
+    orig = uint64.fromBytesLE(metadata[0 ..< 8])
+    msgid = uint64.fromBytesLE(metadata[8 ..< 16])
+    myPeerId = shortLog(ownPeerId)
 
   case status
   of Exit:
@@ -110,6 +133,14 @@ proc handleMixNodeConnection(
         await exitConn.close()
       except CatchableError as e:
         error "Failed to close exit connection: ", err = e.msg
+
+    let
+      endTime = getTime()
+      endTimeNs = toUnixNs(endTime)
+      processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
+    
+    info "Exit", msgid=msgid, fromPeerID=fromPeerID, toPeerID="None", myPeerId=myPeerId, orig=orig, current=startTimeNs, procDelay=processingDelay
+
   of Success:
     trace "# Intermediate: ", multiAddr = multiAddr
     # Add delay
@@ -141,9 +172,18 @@ proc handleMixNodeConnection(
       error "Failed to initialize PeerId", err = error
       return
 
+    let
+      endTime = getTime()
+      endTimeNs = toUnixNs(endTime)
+      processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
+      toPeerID = shortLog(peerId)
+
+    info "Intermediate", msgid=msgid, fromPeerID=fromPeerID, toPeerID=toPeerID, myPeerId=myPeerId, orig=orig, current=startTimeNs, procDelay=processingDelay
+
     var nextHopConn: Connection
     try:
       nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
+      await nextHopConn.writeLp(metadata)
       await nextHopConn.writeLp(processedPkt)
     except CatchableError as e:
       error "Failed to dial next hop: ", err = e.msg
@@ -165,6 +205,10 @@ proc anonymizeLocalProtocolSend*(
     destMultiAddr: Option[MultiAddress],
     destPeerId: PeerId,
 ) {.async.} =
+  let
+    startTime = getTime()
+    startTimeNs = toUnixNs(startTime)
+
   let mixMsg = initMixMessage(msg, proto)
 
   let serialized = serializeMixMessage(mixMsg).valueOr:
@@ -250,10 +294,26 @@ proc anonymizeLocalProtocolSend*(
 
   trace "# Sending to: ", multiaddr = multiAddrs[0]
 
+  let ownPeerId = PeerId.init(multiAddr.split("/p2p/")[1]).valueOr:
+    error "Failed to initialize my PeerId", err = error
+    return
+
+  let
+    orig = uint64.fromBytesLE(msg[0 ..< 8])
+    msgid = uint64.fromBytesLE(msg[8 ..< 16])
+    toPeerID = shortLog(firstMixPeerId)
+    myPeerId = shortLog(ownPeerId)
+    endTime = getTime()
+    endTimeNs = toUnixNs(endTime)
+    processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
+
+  info "Sender", msgid=msgid, fromPeerID="None", toPeerID=toPeerID, myPeerId=myPeerId, orig=orig, current=startTimeNs, procDelay=processingDelay
+
   var nextHopConn: Connection
   try:
     nextHopConn =
       await mixProto.switch.dial(firstMixPeerId, @[firstMixAddr], @[MixProtocolID])
+    await nextHopConn.writeLp(msg[0 ..< 16])
     await nextHopConn.writeLp(sphinxPacket)
   except CatchableError as e:
     error "Failed to send message to next hop: ", err = e.msg
