@@ -1,10 +1,10 @@
 const
   k* = 16 # Security parameter
-  r* = 5 # Maximum path length
+  MAX_PATH_LEN* = 5
   t* = 3 # t.k - combined length of next hop address and delay
-  L* = 3 # Path length
+  PATH_LEN* = 3
   alphaSize* = 32 # Group element
-  betaSize* = ((r * (t + 1)) + 1) * k # (r(t+1)+1)k bytes
+  betaSize* = ((MAX_PATH_LEN * (t + 1)) + 1) * k # (r(t+1)+1)k bytes
   gammaSize* = 16 # Output of HMAC-SHA-256, truncated to 16 bytes
   headerSize* = alphaSize + betaSize + gammaSize # Total header size
   delaySize* = 2 # Delay size

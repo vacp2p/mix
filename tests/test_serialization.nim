@@ -62,7 +62,7 @@ suite "serialization_tests":
       initHop(newSeq[byte](addrSize)),
       newSeq[byte](delaySize),
       newSeq[byte](gammaSize),
-      newSeq[byte](((r * (t + 1)) - t) * k),
+      newSeq[byte](((MAX_PATH_LEN * (t + 1)) - t) * k),
     )
 
     let serializedRes = serializeRoutingInfo(routingInfo)
@@ -97,7 +97,7 @@ suite "serialization_tests":
       error "Deserialized gamma does not match the original gamma"
       fail()
 
-    if beta != dBeta[0 .. (((r * (t + 1)) - t) * k) - 1]:
+    if beta != dBeta[0 .. (((MAX_PATH_LEN * (t + 1)) - t) * k) - 1]:
       error "Deserialized beta does not match the original beta"
       fail()
 

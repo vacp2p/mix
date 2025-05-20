@@ -82,7 +82,7 @@ proc computeFillerStrings(s: seq[seq[byte]]): Result[seq[byte], string] =
       zeroPadding = newSeq[byte](fillerLength)
 
     let fillerRes = aes_ctr_start_index(
-      aes_key, iv, filler & zeroPadding, (((t + 1) * (r - i)) + t + 2) * k
+      aes_key, iv, filler & zeroPadding, (((t + 1) * (MAX_PATH_LEN - i)) + t + 2) * k
     )
     if fillerRes.isErr:
       return err("Error in aes with start index: " & fillerRes.error)
@@ -139,7 +139,7 @@ proc computeBetaGammaDelta(
     # Compute Beta and Gamma
     if i == sLen - 1:
       let
-        paddingLength = (((t + 1) * (r - L)) + t + 2) * k
+        paddingLength = (((t + 1) * (MAX_PATH_LEN - PATH_LEN)) + t + 2) * k
         zeroPadding = newSeq[byte](paddingLength)
 
       let aesRes = aes_ctr(beta_aes_key, beta_iv, zeroPadding).valueOr:
@@ -155,7 +155,7 @@ proc computeBetaGammaDelta(
       delta = deltaRes.get()
     else:
       let routingInfo = initRoutingInfo(
-        hop[i + 1], delay[i + 1], gamma, beta[0 .. (((r * (t + 1)) - t) * k) - 1]
+        hop[i + 1], delay[i + 1], gamma, beta[0 .. (((MAX_PATH_LEN * (t + 1)) - t) * k) - 1]
       )
 
       let serializeRes = serializeRoutingInfo(routingInfo).valueOr:
@@ -258,7 +258,7 @@ proc processSphinxPacket*(
     return err("Error in aes: " & error)
 
   # Check if B has the required prefix for the original message
-  paddingLength = (((t + 1) * (r - L)) + t + 2) * k
+  paddingLength = (((t + 1) * (MAX_PATH_LEN - PATH_LEN)) + t + 2) * k
   zeroPadding = newSeq[byte](paddingLength)
 
   if B[0 .. paddingLength - 1] == zeroPadding:

@@ -191,10 +191,9 @@ proc anonymizeLocalProtocolSend*(
     hop: seq[Hop] = @[]
     delay: seq[seq[byte]] = @[]
 
-  # Select L mix nodes at random
-  # TODO: describe `L`
+  # Select PATH_LEN mix nodes at random
   let numMixNodes = mixProto.pubNodeInfo.len
-  if numMixNodes < L:
+  if numMixNodes < PATH_LEN:
     error "No. of public mix nodes less than path length."
     return
 
@@ -202,7 +201,7 @@ proc anonymizeLocalProtocolSend*(
     pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
     randPeerId: PeerId
     availableIndices = toSeq(0 ..< numMixNodes)
-  for i in 0 ..< L:
+  for i in 0 ..< PATH_LEN:
     let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
       error "Failed to generate random number", err = error
       return
