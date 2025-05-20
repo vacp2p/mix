@@ -73,12 +73,9 @@ proc handleMixNodeConnection(
   # Process the packet
   let (multiAddr, _, mixPrivKey, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
 
-  let processedPktRes =
-    processSphinxPacket(receivedBytes, mixPrivKey, mixProto.tagManager)
-  if processedPktRes.isErr:
-    error "Failed to process Sphinx packet", err = processedPktRes.error
+  let (nextHop, delay, processedPkt, status) = processSphinxPacket(receivedBytes, mixPrivKey, mixProto.tagManager).valueOr:
+    error "Failed to process Sphinx packet", err = error
     return
-  let (nextHop, delay, processedPkt, status) = processedPktRes.get()
 
   case status
   of Exit:
