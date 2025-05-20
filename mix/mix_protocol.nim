@@ -100,10 +100,9 @@ proc handleMixNodeConnection(
       return
 
     let
-      (message, protocol) = getMixMessage(deserializedResult)
-      exitConn = MixExitConnection.new(message)
-    trace "# Received: ", receiver = multiAddr, message = message
-    await mixProto.pHandler(exitConn, protocol)
+      exitConn = MixExitConnection.new(deserializedResult.message)
+    trace "# Received: ", receiver = multiAddr, message = deserializedResult.message
+    await mixProto.pHandler(exitConn, deserializedResult.protocol)
 
     if exitConn != nil:
       try:
