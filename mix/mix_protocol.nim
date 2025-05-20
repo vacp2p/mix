@@ -74,12 +74,15 @@ proc handleMixNodeConnection(
   # Process the packet
   let (multiAddr, _, mixPrivKey, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
 
+  # TODO: This should be a struct instead of a tuple
   let (nextHop, delay, processedPkt, status) = processSphinxPacket(receivedBytes, mixPrivKey, mixProto.tagManager).valueOr:
     error "Failed to process Sphinx packet", err = error
     return
 
+  # TODO: Exit and Success helper functions
   case status
   of Exit:
+    # TODO: have an exit error enum
     if (nextHop != Hop()) or (delay != @[]):
       error "Next hop and delay must be empty"
       return
@@ -150,6 +153,7 @@ proc handleMixNodeConnection(
           await nextHopConn.close()
         except CatchableError as e:
           error "Failed to close outgoing stream: ", err = e.msg
+  # TODO?: contextualise why this is being discarded.
   of Duplicate:
     discard
   of InvalidMAC:
@@ -162,8 +166,10 @@ proc anonymizeLocalProtocolSend*(
     destMultiAddr: Option[MultiAddress],
     destPeerId: PeerId,
 ) {.async.} =
+  # TODO: pass in the MixMessage struct instead of msg and proto
   let mixMsg = initMixMessage(msg, proto)
 
+  # TODO?: ...or consider passing it in in serialized form?
   let serialized = serializeMixMessage(mixMsg).valueOr:
     error "Serialization failed", err = error
     return
@@ -178,6 +184,7 @@ proc anonymizeLocalProtocolSend*(
 
   trace "# Sent: ", sender = multiAddr, message = msg, dest = destMultiAddr
 
+  # TODO: This should be a struct instead
   var
     multiAddrs: seq[string] = @[]
     publicKeys: seq[FieldElement] = @[]
@@ -185,6 +192,7 @@ proc anonymizeLocalProtocolSend*(
     delay: seq[seq[byte]] = @[]
 
   # Select L mix nodes at random
+  # TODO: describe `L`
   let numMixNodes = mixProto.pubNodeInfo.len
   if numMixNodes < L:
     error "No. of public mix nodes less than path length."
@@ -311,6 +319,7 @@ proc new*(
   mixProto.init()
   return ok(mixProto)
 
+# Do we need to raise error here?
 method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
   proc handle(conn: Connection, proto: string) {.async: (raises: [CancelledError]).} =
     await mixProtocol.handleMixNodeConnection(conn)

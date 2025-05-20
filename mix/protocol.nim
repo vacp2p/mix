@@ -23,6 +23,7 @@ proc fromString*(T: type ProtocolType, proto: string): ProtocolType =
   except ValueError:
     ProtocolType.OtherProtocol
 
+# TODO: methods are always dyn dispatch, procs always static. style guide advises they be used sparingly
 method callHandler*(
     switch: Switch, conn: Connection, proto: ProtocolType
 ): Future[void] {.base, async.} =

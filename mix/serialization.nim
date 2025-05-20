@@ -1,5 +1,6 @@
 import results
 import ./config
+# TODO(general): ser/deser error enum
 
 type Header* = object
   Alpha: seq[byte]

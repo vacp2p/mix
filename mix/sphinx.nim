@@ -201,6 +201,7 @@ proc wrapInSphinxPacket*(
 
   return ok(serializeRes)
 
+# TODO: create a nice error handling story
 proc processSphinxPacket*(
     serSphinxPacket: seq[byte], privateKey: FieldElement, tm: var TagManager
 ): Result[(Hop, seq[byte], seq[byte], ProcessingStatus), string] =
