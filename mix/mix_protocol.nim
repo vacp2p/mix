@@ -12,7 +12,8 @@ import
 
 const MixProtocolID* = "/mix/1.0.0"
 
-type MixProtocol* = ref object of LPProtocol
+type MixProtocol* = ref object
+  lpProto: LPProtocol
   mixNodeInfo: MixNodeInfo
   pubNodeInfo: Table[PeerId, MixPubInfo]
   switch: Switch
@@ -273,7 +274,6 @@ proc createMixProtocol*(
   mixProto.switch = switch
   mixProto.tagManager = tagManager
   mixProto.pHandler = handler
-  mixProto.init()
 
   return ok(mixProto)
 
@@ -315,5 +315,5 @@ method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
   proc handle(conn: Connection, proto: string) {.async: (raises: [CancelledError]).} =
     await mixProtocol.handleMixNodeConnection(conn)
 
-  mixProtocol.codecs = @[MixProtocolID]
-  mixProtocol.handler = handle
+  mixProtocol.lp_proto.codecs = @[MixProtocolID]
+  mixProtocol.lp_proto.handler = handle
