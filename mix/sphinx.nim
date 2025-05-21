@@ -2,13 +2,15 @@ import results, sequtils
 import std/math
 import ./[config, crypto, curve25519, serialization, tag_manager]
 
+# TODO: This should not mix happy and error paths in an enum
 # Define possible outcomes of processing a Sphinx packet
 type ProcessingStatus* = enum
-  Exit # Packet processed successfully at exit
-  Success # Packet processed successfully
-  Duplicate # Packet was discarded due to duplicate tag
+  Exit
+  Intermediary
+  Duplicate 
   InvalidMAC
-    # Packet was discarded due to MAC verification failure
+  
+  
 
     # const lambda* = 500 # Parameter for exp distribution for generating random delay
 
@@ -222,12 +224,14 @@ proc processSphinxPacket*(
     sBytes = fieldElementToBytes(s)
 
   # Check if the tag has been seen
+  # TODO: set the return type such that only `Duplicate` is needed
   if isTagSeen(tm, s):
     return ok((Hop(), @[], @[], Duplicate))
 
   # Compute MAC
   let mac_key = kdf(deriveKeyMaterial("mac_key", sBytes))
 
+  # TODO: set the return type such that only `InvalidMac` is needed
   if not (toseq(hmac(mac_key, beta)) == gamma):
     # If MAC not verified
     return ok((Hop(), @[], @[], InvalidMAC))
@@ -291,4 +295,4 @@ proc processSphinxPacket*(
     let serializeRes = serializeSphinxPacket(sphinxPkt).valueOr:
       return err("Sphinx packet serialization error: " & error)
 
-    return ok((address, delay, serializeRes, Success))
+    return ok((address, delay, serializeRes, Intermediary))

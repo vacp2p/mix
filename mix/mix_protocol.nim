@@ -12,6 +12,7 @@ import
 
 const MixProtocolID* = "/mix/1.0.0"
 
+# Possibly important for reply block
 type MixProtocol* = ref object
   lpProto: LPProtocol
   mixNodeInfo: MixNodeInfo
@@ -20,6 +21,9 @@ type MixProtocol* = ref object
   tagManager: TagManager
   pHandler: ProtocolHandler
 
+# TODO: use Path type for paths
+# TODO: result errors should be enum variants that come with extractable data/message.
+# TODO: investigate file-read time as a sneaky factor in benchmark discrpency
 proc loadMixNodeInfo*(
     index: int, nodeFolderInfoPath: string = "./nodeInfo"
 ): Result[MixNodeInfo, string] =
@@ -110,7 +114,7 @@ proc handleMixNodeConnection(
         await exitConn.close()
       except CatchableError as e:
         error "Failed to close exit connection: ", err = e.msg
-  of Success:
+  of Intermediary:
     trace "# Intermediate: ", multiAddr = multiAddr
     # Add delay
     let delayMillis = (delay[0].int shl 8) or delay[1].int
@@ -161,6 +165,7 @@ proc handleMixNodeConnection(
 
 proc anonymizeLocalProtocolSend*(
     mixProto: MixProtocol,
+    # TODO: this should be a distinct message type
     msg: seq[byte],
     proto: ProtocolType,
     destMultiAddr: Option[MultiAddress],

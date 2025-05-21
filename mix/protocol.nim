@@ -11,7 +11,8 @@ type ProtocolType* = enum
   GossipSub11 = GossipSubCodec_11
   GossipSub10 = GossipSubCodec_10
   NoRespPing = NoRespPingCodec
-  OtherProtocol = "other" # Placeholder for other protocols
+  # Placeholder for other protocols
+  OtherProtocol = "other"
 
 type ProtocolHandler* = proc(conn: Connection, proto: ProtocolType): Future[void] {.
   async: (raises: [CancelledError])
