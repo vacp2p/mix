@@ -57,6 +57,82 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   let value = cast[uint64](bytes)
   return ok(int(value mod uint64(max)))
 
+proc handleExit(nextHop: Hop, delay: seq[byte], processedPkt: seq[byte], sender: ProtocolHandler) {.async: (raises: [CancelledError]).} = 
+  # TODO: have an exit error enum
+  if (nextHop != Hop()) or (delay != @[]):
+    error "Next hop and delay must be empty"
+    return
+
+  # This is the exit node, forward to destination
+  let msgChunk = deserializeMessageChunk(processedPkt).valueOr:
+    error "Deserialization failed", err = error
+    return
+
+  let unpaddedMsg = unpadMessage(msgChunk).valueOr:
+    error "Unpadding message failed", err = error
+    return
+
+  let deserializedResult = deserializeMixMessage(unpaddedMsg).valueOr:
+    error "Deserialization failed", err = error
+    return
+
+  let
+    exitConn = MixExitConnection.new(deserializedResult.message)
+  trace "# Received: ", receiver = multiAddr, message = deserializedResult.message
+  await sender(exitConn, deserializedResult.protocol)
+
+  if exitConn != nil:
+    try:
+      await exitConn.close()
+    except CatchableError as e:
+      error "Failed to close exit connection: ", err = e.msg
+
+  
+proc handleSuccess(nextHop: Hop, delay: seq[byte], processedPkt: seq[byte], switch: Switch) {.async: (raises: [CancelledError]).} = 
+  trace "# Intermediate: ", multiAddr = multiAddr
+  # Add delay
+  let delayMillis = (delay[0].int shl 8) or delay[1].int
+  await sleepAsync(milliseconds(delayMillis))
+
+  # Forward to next hop
+  let nextHopBytes = getHop(nextHop)
+
+  let fullAddrStr = bytesToMultiAddr(nextHopBytes).valueOr:
+    error "Failed to convert bytes to multiaddress", err = error
+    return
+
+  let parts = fullAddrStr.split("/p2p/")
+  if parts.len != 2:
+    error "Invalid multiaddress format", parts = parts
+    return
+
+  let
+    locationAddrStr = parts[0]
+    peerIdStr = parts[1]
+
+  # Create MultiAddress and PeerId
+  let locationAddr = MultiAddress.init(locationAddrStr).valueOr:
+    error "Failed to parse location multiaddress: ", err = error
+    return
+
+  let peerId = PeerId.init(peerIdStr).valueOr:
+    error "Failed to initialize PeerId", err = error
+    return
+
+  var nextHopConn: Connection
+  try:
+    nextHopConn = await switch.dial(peerId, @[locationAddr], MixProtocolID)
+    await nextHopConn.writeLp(processedPkt)
+  except CatchableError as e:
+    error "Failed to dial next hop: ", err = e.msg
+  finally:
+    if nextHopConn != nil:
+      try:
+        await nextHopConn.close()
+      except CatchableError as e:
+        error "Failed to close outgoing stream: ", err = e.msg
+
+# TODO: This could use enum-dispatch to delegate to specific functions
 proc handleMixNodeConnection(
     mixProto: MixProtocol, conn: Connection
 ) {.async: (raises: [CancelledError]).} =
@@ -83,81 +159,11 @@ proc handleMixNodeConnection(
     error "Failed to process Sphinx packet", err = error
     return
 
-  # TODO: Exit and Success helper functions
   case status
   of Exit:
-    # TODO: have an exit error enum
-    if (nextHop != Hop()) or (delay != @[]):
-      error "Next hop and delay must be empty"
-      return
-
-    # This is the exit node, forward to destination
-    let msgChunk = deserializeMessageChunk(processedPkt).valueOr:
-      error "Deserialization failed", err = error
-      return
-
-    let unpaddedMsg = unpadMessage(msgChunk).valueOr:
-      error "Unpadding message failed", err = error
-      return
-
-    let deserializedResult = deserializeMixMessage(unpaddedMsg).valueOr:
-      error "Deserialization failed", err = error
-      return
-
-    let
-      exitConn = MixExitConnection.new(deserializedResult.message)
-    trace "# Received: ", receiver = multiAddr, message = deserializedResult.message
-    await mixProto.pHandler(exitConn, deserializedResult.protocol)
-
-    if exitConn != nil:
-      try:
-        await exitConn.close()
-      except CatchableError as e:
-        error "Failed to close exit connection: ", err = e.msg
+    await handleExit(nextHop, delay, processedPkt, mixProto.pHandler)
   of Intermediary:
-    trace "# Intermediate: ", multiAddr = multiAddr
-    # Add delay
-    let delayMillis = (delay[0].int shl 8) or delay[1].int
-    await sleepAsync(milliseconds(delayMillis))
-
-    # Forward to next hop
-    let nextHopBytes = getHop(nextHop)
-
-    let fullAddrStr = bytesToMultiAddr(nextHopBytes).valueOr:
-      error "Failed to convert bytes to multiaddress", err = error
-      return
-
-    let parts = fullAddrStr.split("/p2p/")
-    if parts.len != 2:
-      error "Invalid multiaddress format", parts = parts
-      return
-
-    let
-      locationAddrStr = parts[0]
-      peerIdStr = parts[1]
-
-    # Create MultiAddress and PeerId
-    let locationAddr = MultiAddress.init(locationAddrStr).valueOr:
-      error "Failed to parse location multiaddress: ", err = error
-      return
-
-    let peerId = PeerId.init(peerIdStr).valueOr:
-      error "Failed to initialize PeerId", err = error
-      return
-
-    var nextHopConn: Connection
-    try:
-      nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
-      await nextHopConn.writeLp(processedPkt)
-    except CatchableError as e:
-      error "Failed to dial next hop: ", err = e.msg
-    finally:
-      if nextHopConn != nil:
-        try:
-          await nextHopConn.close()
-        except CatchableError as e:
-          error "Failed to close outgoing stream: ", err = e.msg
-  # TODO?: contextualise why this is being discarded.
+    await handleSuccess(nextHop, delay, processedPkt, mixProto.switch)
   of Duplicate:
     discard
   of InvalidMAC:
