@@ -57,6 +57,12 @@ proc cryptoRandomInt(max: int): Result[int, string] =
 proc toUnixNs(t: Time): int64 =
   t.toUnix().int64 * 1_000_000_000 + times.nanosecond(t).int64
 
+func byteToHex(b: byte): string = 
+  b.toHex(2)
+func bytesToHex(data: seq[byte]): string = 
+  data.map(byteToHex).join(" ")
+
+
 proc handleMixNodeConnection(
     mixProto: MixProtocol, conn: Connection
 ) {.async: (raises: [CancelledError]).} =
@@ -98,11 +104,15 @@ proc handleMixNodeConnection(
     error "Failed to initialize my PeerId", err = error
     return
 
+
   let
     orig = uint64.fromBytesLE(metadata[0 ..< 8])
-    msgid = uint64.fromBytesLE(metadata[8 ..< 16])
+    id3: seq[byte] = @metadata[13 ..< 16]
+    # id8: seq[byte] = id3 & @[0,0,0,0,0]
     myPeerId = shortLog(ownPeerId)
-
+  let padding: seq[byte] = @[0,0,0,0,0]
+  let id8 = id3.concat(padding)
+  let msgid = uint64.fromBytesLE(id8)
   case status
   of Exit:
     if (nextHop != Hop()) or (delay != @[]):
@@ -142,7 +152,6 @@ proc handleMixNodeConnection(
     info "Exit", msgid=msgid, fromPeerID=fromPeerID, toPeerID="None", myPeerId=myPeerId, orig=orig, current=startTimeNs, procDelay=processingDelay
 
   of Success:
-    trace "# Intermediate: ", multiAddr = multiAddr
     # Add delay
     let delayMillis = (delay[0].int shl 8) or delay[1].int
     await sleepAsync(milliseconds(delayMillis))
@@ -300,7 +309,7 @@ proc anonymizeLocalProtocolSend*(
 
   let
     orig = uint64.fromBytesLE(msg[0 ..< 8])
-    msgid = uint64.fromBytesLE(msg[8 ..< 16])
+    msgid = uint64.fromBytesLE(msg[13 ..< 21])
     toPeerID = shortLog(firstMixPeerId)
     myPeerId = shortLog(ownPeerId)
     endTime = getTime()

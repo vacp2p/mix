@@ -248,7 +248,7 @@ proc main() {.async.} =
       recvTime = getTime()
       delay = recvTime - sentDate
 
-    info "Received message", msgId = msgId, sentAt = timestampNs, delayMs = delay.inMilliseconds(), msg = data.map(byteToHex).join(" ")
+    info "Received message", msgId = msgId, sentAt = timestampNs, delayMs = delay.inMilliseconds()
 
   proc messageValidator(
       topic: string, msg: Message
@@ -317,7 +317,7 @@ proc main() {.async.} =
       payload.add(toBytesLE(msgId))
       payload.add(newSeq[byte](msg_size - 16))  # Fill the rest with padding
 
-      info "Publishing", msgId = msgId, timestamp = timestampNs, msg = payload.map(byteToHex).join(" ")
+      info "Publishing", msgId = msgId, timestamp = timestampNs
 
       let pub_res = await gossipSub.publish("test", payload, useCustomConn = true)
       if pub_res <= 0:
