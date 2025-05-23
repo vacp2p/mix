@@ -305,7 +305,9 @@ proc main() {.async.} =
   info "Mesh size", meshSize = gossipSub.mesh.getOrDefault("test").len
 
   info "Publishing turn", id = myId
-  for msg in 0 ..< 50: #client.param(int, "message_count"):
+
+  let count = 50
+  for msg in high(int) - count ..< high(int): #client.param(int, "message_count"):
     if msg mod publisherCount == myId:
       # info "Sending message", time = times.getTime()
       let now = getTime()
