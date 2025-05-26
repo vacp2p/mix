@@ -304,7 +304,7 @@ proc anonymizeLocalProtocolSend*(
     return
 
   let
-    orig = uint64.fromBytesLE(msg[0 ..< 8])
+    orig = uint64.fromBytesLE(msg[5 ..< 13])
     # whats happening bytes 8..13
     msgid = uint64.fromBytesLE(msg[13 ..< 21])
     toPeerID = shortLog(firstMixPeerId)
