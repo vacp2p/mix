@@ -12,9 +12,7 @@ import
 
 const MixProtocolID* = "/mix/1.0.0"
 
-# Possibly important for reply block
-type MixProtocol* = ref object
-  lpProto: LPProtocol
+type MixProtocol* = ref object of LPProtocol
   mixNodeInfo: MixNodeInfo
   pubNodeInfo: Table[PeerId, MixPubInfo]
   switch: Switch
@@ -23,7 +21,6 @@ type MixProtocol* = ref object
 
 # TODO: use Path type for paths
 # TODO: result errors should be enum variants that come with extractable data/message.
-# TODO: investigate file-read time as a sneaky factor in benchmark discrpency
 proc loadMixNodeInfo*(
     index: int, nodeFolderInfoPath: string = "./nodeInfo"
 ): Result[MixNodeInfo, string] =
@@ -88,7 +85,7 @@ proc handleExit(nextHop: Hop, delay: seq[byte], processedPkt: seq[byte], sender:
       error "Failed to close exit connection: ", err = e.msg
 
   
-proc handleSuccess(nextHop: Hop, delay: seq[byte], processedPkt: seq[byte], switch: Switch) {.async: (raises: [CancelledError]).} = 
+proc handleIntermediate(nextHop: Hop, delay: seq[byte], processedPkt: seq[byte], switch: Switch) {.async: (raises: [CancelledError]).} = 
   trace "# Intermediate: ", multiAddr = multiAddr
   # Add delay
   let delayMillis = (delay[0].int shl 8) or delay[1].int
@@ -163,7 +160,7 @@ proc handleMixNodeConnection(
   of Exit:
     await handleExit(nextHop, delay, processedPkt, mixProto.pHandler)
   of Intermediary:
-    await handleSuccess(nextHop, delay, processedPkt, mixProto.switch)
+    await handleIntermediate(nextHop, delay, processedPkt, mixProto.switch)
   of Duplicate:
     discard
   of InvalidMAC:
@@ -292,6 +289,7 @@ proc createMixProtocol*(
   mixProto.switch = switch
   mixProto.tagManager = tagManager
   mixProto.pHandler = handler
+  mixProto.init()
 
   return ok(mixProto)
 
@@ -329,10 +327,10 @@ proc new*(
   mixProto.init()
   return ok(mixProto)
 
-# Do we need to raise error here?
-method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
+method init*(mixProtocol: MixProtocol) {.gcsafe} =
   proc handle(conn: Connection, proto: string) {.async: (raises: [CancelledError]).} =
     await mixProtocol.handleMixNodeConnection(conn)
 
-  mixProtocol.lp_proto.codecs = @[MixProtocolID]
-  mixProtocol.lp_proto.handler = handle
+  # This defers to the LPProto parent class
+  mixProtocol.codecs = @[MixProtocolID]
+  mixProtocol.handler = handle
