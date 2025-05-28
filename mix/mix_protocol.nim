@@ -74,9 +74,10 @@ proc handleExit(nextHop: Hop, delay: seq[byte], processedPkt: seq[byte], sender:
     return
 
   let
-    exitConn = MixExitConnection.new(deserializedResult.message)
-  trace "# Received: ", receiver = multiAddr, message = deserializedResult.message
-  await sender(exitConn, deserializedResult.protocol)
+    (message, protocol) = getMixMessage(deserializedResult)
+    exitConn = MixExitConnection.new(message)
+  trace "# Received: ", receiver = multiAddr, message = message
+  await sender(exitConn, protocol)
 
   if exitConn != nil:
     try:

@@ -2,11 +2,14 @@ import chronicles, results
 import ./[config, protocol, utils]
 
 type MixMessage* = object
-  message*: seq[byte]
-  protocol*: ProtocolType
+  message: seq[byte]
+  protocol: ProtocolType
 
 proc initMixMessage*(message: openArray[byte], protocol: ProtocolType): MixMessage =
   return MixMessage(message: @message, protocol: protocol)
+
+proc getMixMessage*(mixMsg: MixMessage): (seq[byte], ProtocolType) =
+  return (mixMsg.message, mixMsg.protocol)
 
 proc serializeMixMessage*(mixMsg: MixMessage): Result[seq[byte], string] =
   try:
