@@ -52,6 +52,7 @@ proc serializeMixNodeInfo*(nodeInfo: MixNodeInfo): Result[seq[byte], string] =
     addrBytes & mixPubKeyBytes & mixPrivKeyBytes & libp2pPubKeyBytes & libp2pPrivKeyBytes
   )
 
+# TODO: set up error enums
 proc deserializeMixNodeInfo*(data: openArray[byte]): Result[MixNodeInfo, string] =
   if len(data) != MixNodeInfoSize:
     return
@@ -170,6 +171,7 @@ proc serializeMixPubInfo*(nodeInfo: MixPubInfo): Result[seq[byte], string] =
 
   return ok(addrBytes & mixPubKeyBytes & libp2pPubKeyBytes)
 
+# TODO: set up error enums
 proc deserializeMixPubInfo*(data: openArray[byte]): Result[MixPubInfo, string] =
   if len(data) != MixPubInfoSize:
     return
