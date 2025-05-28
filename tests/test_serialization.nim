@@ -20,7 +20,7 @@ suite "serialization_tests":
       fail()
 
   test "serialize_and_deserialize_message":
-    let message = initMessage(newSeq[byte](MSG_SIZE))
+    let message = newMessage(newSeq[byte](MSG_SIZE))
 
     let serializedRes = serializeMessage(message)
     if serializedRes.isErr:

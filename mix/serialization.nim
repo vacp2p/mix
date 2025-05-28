@@ -25,7 +25,7 @@ proc serializeHeader*(header: Header): Result[seq[byte], string] =
 type Message* = object
   Content: seq[byte]
 
-proc initMessage*(content: seq[byte]): Message =
+proc newMessage*(content: seq[byte]): Message =
   return Message(Content: content)
 
 proc getMessage*(message: Message): seq[byte] =

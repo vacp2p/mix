@@ -45,7 +45,7 @@ proc createDummyData(): (
         initHop(newSeq[byte](ADDR_SIZE)),
       ]
 
-    message = initMessage(newSeq[byte](MSG_SIZE))
+    message = newMessage(newSeq[byte](MSG_SIZE))
 
   return (message, privateKeys, publicKeys, delay, hops)
 
@@ -112,7 +112,7 @@ suite "Sphinx Tests":
       error "Processing status should be Exit"
       fail()
 
-    let processedMessage = initMessage(processedPacket3)
+    let processedMessage = newMessage(processedPacket3)
     if processedMessage != message:
       error "Packet processing failed"
       fail()
@@ -197,7 +197,7 @@ suite "Sphinx Tests":
       let paddedMessage = padMessage(message, MSG_SIZE)
 
       let packetRes =
-        wrapInSphinxPacket(initMessage(paddedMessage), publicKeys, delay, hops)
+        wrapInSphinxPacket(newMessage(paddedMessage), publicKeys, delay, hops)
       if packetRes.isErr:
         error "Sphinx wrap error", err = packetRes.error
       let packet = packetRes.get()

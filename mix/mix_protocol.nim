@@ -240,7 +240,7 @@ proc anonymizeLocalProtocolSend*(
 
   # Wrap in Sphinx packet
   let sphinxPacket = wrapInSphinxPacket(
-    initMessage(serializedRes), publicKeys, delay, hop
+    newMessage(serializedRes), publicKeys, delay, hop
   ).valueOr:
     error "Failed to wrap in sphinx packet", err = error
     return
