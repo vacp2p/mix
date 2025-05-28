@@ -57,10 +57,10 @@ proc cryptoRandomInt(max: int): Result[int, string] =
 proc toUnixNs(t: Time): int64 =
   t.toUnix().int64 * 1_000_000_000 + times.nanosecond(t).int64
 
-func byteToHex(b: byte): string = 
-  b.toHex(2)
-func bytesToHex(data: seq[byte]): string = 
-  data.map(byteToHex).join(" ")
+# func byteToHex(b: byte): string = 
+#   b.toHex(2)
+# func bytesToHex(data: seq[byte]): string = 
+#   data.map(byteToHex).join(" ")
 
 
 proc handleMixNodeConnection(
