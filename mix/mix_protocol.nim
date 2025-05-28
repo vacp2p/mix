@@ -106,7 +106,7 @@ proc handleMixNodeConnection(
 
 
   let
-    orig = uint64.fromBytesLE(metadata[0 ..< 8])
+    orig = uint64.fromBytesLE(metadata[5 ..< 13])
     msgid = uint64.fromBytesLE(metadata[13 ..< 21])
     myPeerId = shortLog(ownPeerId)
   case status
