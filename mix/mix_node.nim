@@ -1,5 +1,5 @@
 import options, os, results, strformat, strutils
-import std/streams
+import std/[streams, paths]
 import libp2p/[crypto/crypto, crypto/curve25519, crypto/secp, multiaddress, peerid]
 import ./[config, curve25519, utils]
 
@@ -98,11 +98,11 @@ proc isNodeMultiaddress*(mixNodeInfo: MixNodeInfo, multiAddr: string): bool =
   return mixNodeInfo.multiAddr == multiAddr
 
 proc writeMixNodeInfoToFile*(
-    node: MixNodeInfo, index: int, nodeInfoFolderPath: string = "./nodeInfo"
+    node: MixNodeInfo, index: int, nodeInfoFolderPath: paths.Path = paths.Path("./nodeInfo")
 ): Result[void, string] =
-  if not dirExists(nodeInfoFolderPath):
-    createDir(nodeInfoFolderPath)
-  let filename = nodeInfoFolderPath / fmt"mixNode_{index}"
+  if not dirExists($nodeInfoFolderPath):
+    createDir($nodeInfoFolderPath)
+  let filename = $nodeInfoFolderPath / fmt"mixNode_{index}"
   var file = newFileStream(filename, fmWrite)
   if file == nil:
     return err("Failed to create file stream for " & filename)
@@ -116,10 +116,10 @@ proc writeMixNodeInfoToFile*(
   return ok()
 
 proc readMixNodeInfoFromFile*(
-    index: int, nodeInfoFolderPath: string = "./nodeInfo"
+    index: int, nodeInfoFolderPath: paths.Path = paths.Path("./nodeInfo")
 ): Result[MixNodeInfo, string] =
   try:
-    let filename = nodeInfoFolderPath / fmt"mixNode_{index}"
+    let filename = $nodeInfoFolderPath / fmt"mixNode_{index}"
     if not fileExists(filename):
       return err("File does not exist")
     var file = newFileStream(filename, fmRead)
@@ -144,9 +144,9 @@ proc readMixNodeInfoFromFile*(
   except OSError as e:
     return err("OS error: " & $e.msg)
 
-proc deleteNodeInfoFolder*(nodeInfoFolderPath: string = "./nodeInfo") =
-  if dirExists(nodeInfoFolderPath):
-    removeDir(nodeInfoFolderPath)
+proc deleteNodeInfoFolder*(nodeInfoFolderPath: paths.Path = paths.Path("./nodeInfo")) =
+  if dirExists($nodeInfoFolderPath):
+    removeDir($nodeInfoFolderPath)
 
 type MixPubInfo* = object
   multiAddr: string
@@ -191,11 +191,11 @@ proc deserializeMixPubInfo*(data: openArray[byte]): Result[MixPubInfo, string] =
   ok(MixPubInfo(multiAddr: multiAddr, mixPubKey: mixPubKey, libp2pPubKey: libp2pPubKey))
 
 proc writeMixPubInfoToFile*(
-    node: MixPubInfo, index: int, pubInfoFolderPath: string = "./pubInfo"
+    node: MixPubInfo, index: int, pubInfoFolderPath: paths.Path = paths.Path("./pubInfo")
 ): Result[void, string] =
-  if not dirExists(pubInfoFolderPath):
-    createDir(pubInfoFolderPath)
-  let filename = pubInfoFolderPath / fmt"mixNode_{index}"
+  if not dirExists($pubInfoFolderPath):
+    createDir($pubInfoFolderPath)
+  let filename = $pubInfoFolderPath / fmt"mixNode_{index}"
   var file = newFileStream(filename, fmWrite)
   if file == nil:
     return err("Failed to create file stream for " & filename)
@@ -209,10 +209,10 @@ proc writeMixPubInfoToFile*(
   return ok()
 
 proc readMixPubInfoFromFile*(
-    index: int, pubInfoFolderPath: string = "./pubInfo"
+    index: int, pubInfoFolderPath: paths.Path = paths.Path("./pubInfo")
 ): Result[MixPubInfo, string] =
   try:
-    let filename = pubInfoFolderPath / fmt"mixNode_{index}"
+    let filename = $pubInfoFolderPath / fmt"mixNode_{index}"
     if not fileExists(filename):
       return err("File does not exist")
     var file = newFileStream(filename, fmRead)
@@ -237,9 +237,9 @@ proc readMixPubInfoFromFile*(
   except OSError as e:
     return err("OS error: " & $e.msg)
 
-proc deletePubInfoFolder*(pubInfoFolderPath: string = "./pubInfo") =
-  if dirExists(pubInfoFolderPath):
-    removeDir(pubInfoFolderPath)
+proc deletePubInfoFolder*(pubInfoFolderPath: paths.Path = paths.Path("./pubInfo")) =
+  if dirExists($pubInfoFolderPath):
+    removeDir($pubInfoFolderPath)
 
 proc getMixPubInfoByIndex*(index: int): Result[MixPubInfo, string] =
   if index < 0 or index >= mixNodes.len:

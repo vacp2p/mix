@@ -1,5 +1,5 @@
 import chronicles, chronos, sequtils, strutils, os
-import std/[strformat, sysrand]
+import std/[strformat, sysrand, paths]
 import
   ./[
     config, curve25519, exit_connection, fragmentation, mix_message, mix_node, protocol,
@@ -19,17 +19,16 @@ type MixProtocol* = ref object of LPProtocol
   tagManager: TagManager
   pHandler: ProtocolHandler
 
-# TODO: use Path type for paths
 # TODO: result errors should be enum variants that come with extractable data/message.
 proc loadMixNodeInfo*(
-    index: int, nodeFolderInfoPath: string = "./nodeInfo"
+    index: int, nodeFolderInfoPath: paths.Path = paths.Path("./nodeInfo")
 ): Result[MixNodeInfo, string] =
   let readNode = readMixNodeInfoFromFile(index, nodeFolderInfoPath).valueOr:
     return err("Failed to load node info from file: " & error)
   ok(readNode)
 
 proc loadAllButIndexMixPubInfo*(
-    index, numNodes: int, pubInfoFolderPath: string = "./pubInfo"
+    index, numNodes: int, pubInfoFolderPath: paths.Path = paths.Path("./pubInfo")
 ): Result[Table[PeerId, MixPubInfo], string] =
   var pubInfoTable = initTable[PeerId, MixPubInfo]()
   for i in 0 ..< numNodes:
@@ -297,7 +296,7 @@ proc new*(
     T: typedesc[MixProtocol],
     index, numNodes: int,
     switch: Switch,
-    nodeFolderInfoPath: string = ".",
+    nodeFolderInfoPath: paths.Path = paths.Path("."),
 ): Result[T, string] =
   let mixNodeInfo = loadMixNodeInfo(index, nodeFolderInfoPath / fmt"nodeInfo").valueOr:
     return err("Failed to load mix node info for index " & $index & " - err: " & error)
