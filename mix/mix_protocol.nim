@@ -167,13 +167,10 @@ proc handleMixNodeConnection(
 
 proc anonymizeLocalProtocolSend*(
     mixProto: MixProtocol,
-    # TODO: this should be a distinct message type
-    msg: seq[byte],
-    proto: ProtocolType,
+    mixMsg: MixMessage,
     destMultiAddr: Option[MultiAddress],
     destPeerId: PeerId,
 ) {.async.} =
-  # TODO: pass in the MixMessage struct instead of msg and proto
   let mixMsg = initMixMessage(msg, proto)
 
   # TODO?: ...or consider passing it in in serialized form?
