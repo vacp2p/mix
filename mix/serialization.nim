@@ -14,12 +14,12 @@ proc getHeader*(header: Header): (seq[byte], seq[byte], seq[byte]) =
   (header.Alpha, header.Beta, header.Gamma)
 
 proc serializeHeader*(header: Header): Result[seq[byte], string] =
-  if len(header.Alpha) != alphaSize:
-    return err("Alpha must be exactly " & $alphaSize & " bytes")
-  if len(header.Beta) != betaSize:
-    return err("Beta must be exactly " & $betaSize & " bytes")
-  if len(header.Gamma) != gammaSize:
-    return err("Gamma must be exactly " & $gammaSize & " bytes")
+  if len(header.Alpha) != ALPHA_SIZE:
+    return err("Alpha must be exactly " & $ALPHA_SIZE & " bytes")
+  if len(header.Beta) != BETA_SIZE:
+    return err("Beta must be exactly " & $BETA_SIZE & " bytes")
+  if len(header.Gamma) != GAMMA_SIZE:
+    return err("Gamma must be exactly " & $GAMMA_SIZE & " bytes")
   return ok(header.Alpha & header.Beta & header.Gamma)
 
 type Message* = object
@@ -32,15 +32,15 @@ proc getMessage*(message: Message): seq[byte] =
   return message.Content
 
 proc serializeMessage*(message: Message): Result[seq[byte], string] =
-  if len(message.Content) != messageSize:
-    return err("Message must be exactly " & $(messageSize) & " bytes")
+  if len(message.Content) != MSG_SIZE:
+    return err("Message must be exactly " & $(MSG_SIZE) & " bytes")
   var res = newSeq[byte](k) # Prepend k bytes of zero padding
   res.add(message.Content)
   return ok(res)
 
 proc deserializeMessage*(serializedMessage: openArray[byte]): Result[Message, string] =
-  if len(serializedMessage) != payloadSize:
-    return err("Serialized message must be exactly " & $payloadSize & " bytes")
+  if len(serializedMessage) != PAYLOAD_SIZE:
+    return err("Serialized message must be exactly " & $PAYLOAD_SIZE & " bytes")
   let content = serializedMessage[k ..^ 1]
   return ok(Message(Content: content))
 
@@ -55,13 +55,13 @@ proc getHop*(hop: Hop): seq[byte] =
   return hop.MultiAddress
 
 proc serializeHop*(hop: Hop): Result[seq[byte], string] =
-  if len(hop.MultiAddress) != addrSize:
-    return err("MultiAddress must be exactly " & $addrSize & " bytes")
+  if len(hop.MultiAddress) != ADDR_SIZE:
+    return err("MultiAddress must be exactly " & $ADDR_SIZE & " bytes")
   return ok(hop.MultiAddress)
 
 proc deserializeHop*(data: openArray[byte]): Result[Hop, string] =
-  if len(data) != addrSize:
-    return err("MultiAddress must be exactly " & $addrSize & " bytes")
+  if len(data) != ADDR_SIZE:
+    return err("MultiAddress must be exactly " & $ADDR_SIZE & " bytes")
   return ok(Hop(MultiAddress: @data))
 
 type RoutingInfo* = object
@@ -79,10 +79,10 @@ proc getRoutingInfo*(info: RoutingInfo): (Hop, seq[byte], seq[byte], seq[byte]) 
   (info.Addr, info.Delay, info.Gamma, info.Beta)
 
 proc serializeRoutingInfo*(info: RoutingInfo): Result[seq[byte], string] =
-  if len(info.Delay) != delaySize:
-    return err("Delay must be exactly " & $delaySize & " bytes")
-  if len(info.Gamma) != gammaSize:
-    return err("Gamma must be exactly " & $gammaSize & " bytes")
+  if len(info.Delay) != DELAY_SIZE:
+    return err("Delay must be exactly " & $DELAY_SIZE & " bytes")
+  if len(info.Gamma) != GAMMA_SIZE:
+    return err("Gamma must be exactly " & $GAMMA_SIZE & " bytes")
   if len(info.Beta) != (((MAX_PATH_LEN * (t + 1)) - t) * k):
     return err("Beta must be exactly " & $(((MAX_PATH_LEN * (t + 1)) - t) * k) & " bytes")
 
@@ -92,19 +92,19 @@ proc serializeRoutingInfo*(info: RoutingInfo): Result[seq[byte], string] =
   return ok(addrBytes & info.Delay & info.Gamma & info.Beta)
 
 proc deserializeRoutingInfo*(data: openArray[byte]): Result[RoutingInfo, string] =
-  if len(data) != betaSize + ((t + 1) * k):
-    return err("Data must be exactly " & $(betaSize + ((t + 1) * k)) & " bytes")
+  if len(data) != BETA_SIZE + ((t + 1) * k):
+    return err("Data must be exactly " & $(BETA_SIZE + ((t + 1) * k)) & " bytes")
 
-  let hopRes = deserializeHop(data[0 .. addrSize - 1]).valueOr:
+  let hopRes = deserializeHop(data[0 .. ADDR_SIZE - 1]).valueOr:
     return err("Deserialize hop error: " & error)
 
   return ok(
     RoutingInfo(
       Addr: hopRes,
-      Delay: data[addrSize .. (addrSize + delaySize - 1)],
-      Gamma: data[(addrSize + delaySize) .. (addrSize + delaySize + gammaSize - 1)],
+      Delay: data[ADDR_SIZE .. (ADDR_SIZE + DELAY_SIZE - 1)],
+      Gamma: data[(ADDR_SIZE + DELAY_SIZE) .. (ADDR_SIZE + DELAY_SIZE + GAMMA_SIZE - 1)],
       Beta:
-        data[(addrSize + delaySize + gammaSize) .. (((MAX_PATH_LEN * (t + 1)) + t + 2) * k) - 1],
+        data[(ADDR_SIZE + DELAY_SIZE + GAMMA_SIZE) .. (((MAX_PATH_LEN * (t + 1)) + t + 2) * k) - 1],
     )
   )
 
@@ -125,13 +125,13 @@ proc serializeSphinxPacket*(packet: SphinxPacket): Result[seq[byte], string] =
   return ok(headerBytes & packet.Payload)
 
 proc deserializeSphinxPacket*(data: openArray[byte]): Result[SphinxPacket, string] =
-  if len(data) != packetSize:
-    return err("Sphinx packet size must be exactly " & $packetSize & " bytes")
+  if len(data) != PACKET_SIZE:
+    return err("Sphinx packet size must be exactly " & $PACKET_SIZE & " bytes")
 
   let header = Header(
-    Alpha: data[0 .. (alphaSize - 1)],
-    Beta: data[alphaSize .. (alphaSize + betaSize - 1)],
-    Gamma: data[(alphaSize + betaSize) .. (headerSize - 1)],
+    Alpha: data[0 .. (ALPHA_SIZE - 1)],
+    Beta: data[ALPHA_SIZE .. (ALPHA_SIZE + BETA_SIZE - 1)],
+    Gamma: data[(ALPHA_SIZE + BETA_SIZE) .. (HEADER_SIZE - 1)],
   )
 
-  return ok(SphinxPacket(Hdr: header, Payload: data[headerSize ..^ 1]))
+  return ok(SphinxPacket(Hdr: header, Payload: data[HEADER_SIZE ..^ 1]))

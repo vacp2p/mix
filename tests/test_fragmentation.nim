@@ -72,7 +72,7 @@ suite "Fragmentation":
 
   test "pad_and_chunk_large_message":
     let
-      message = newSeq[byte](messageSize * 2 + 10)
+      message = newSeq[byte](MSG_SIZE * 2 + 10)
       messageBytesLen = len(message)
       chunks = padAndChunkMessage(message, peerId)
       totalChunks = max(1, ceilDiv(messageBytesLen, dataSize))
@@ -103,7 +103,7 @@ suite "Fragmentation":
 
   test "chunk_sequence_numbers_are_consecutive":
     let
-      message = newSeq[byte](messageSize * 3)
+      message = newSeq[byte](MSG_SIZE * 3)
       messageBytesLen = len(message)
       chunks = padAndChunkMessage(message, peerId)
       totalChunks = max(1, ceilDiv(messageBytesLen, dataSize))

@@ -43,9 +43,9 @@ proc serializeMixMessageAndDestination*(
     let destBytes = multiAddrToBytes(dest).valueOr:
       return err("Error in multiaddress conversion to bytes: " & error)
 
-    if len(destBytes) != addrSize:
-      error "Destination address must be exactly " & $addrSize & " bytes"
-      return err("Destination address must be exactly " & $addrSize & " bytes")
+    if len(destBytes) != ADDR_SIZE:
+      error "Destination address must be exactly " & $ADDR_SIZE & " bytes"
+      return err("Destination address must be exactly " & $ADDR_SIZE & " bytes")
 
     return ok(msgBytes & protocolBytes & destBytes)
   except Exception as e:
@@ -56,9 +56,9 @@ proc deserializeMixMessageAndDestination*(
     data: openArray[byte]
 ): Result[(seq[byte], string), string] =
   try:
-    let mixMsg = data[0 ..^ (addrSize + 1)]
+    let mixMsg = data[0 ..^ (ADDR_SIZE + 1)]
 
-    let dest = bytesToMultiAddr(data[^addrSize ..^ 1]).valueOr:
+    let dest = bytesToMultiAddr(data[^ADDR_SIZE ..^ 1]).valueOr:
       return err("Error in destination multiaddress conversion to bytes: " & error)
 
     return ok((mixMsg, dest))

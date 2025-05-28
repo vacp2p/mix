@@ -135,7 +135,7 @@ proc handleMixNodeConnection(
 ) {.async: (raises: [CancelledError]).} =
   var receivedBytes: seq[byte]
   try:
-    receivedBytes = await conn.readLp(packetSize)
+    receivedBytes = await conn.readLp(PACKET_SIZE)
   except Exception as e:
     error "Failed to read: ", err = e.msg
   finally:

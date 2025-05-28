@@ -270,7 +270,7 @@ proc processSphinxPacket*(
       return err("Message deserialization error: " & error)
     let msg = getMessage(deserializeRes)
 
-    return ok((Hop(), @[], msg[0 .. messageSize - 1], Exit))
+    return ok((Hop(), @[], msg[0 .. MSG_SIZE - 1], Exit))
   else:
     # Extract routing information from B
     let deserializeRes = deserializeRoutingInfo(B).valueOr:

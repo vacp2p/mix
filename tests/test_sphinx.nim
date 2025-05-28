@@ -36,16 +36,16 @@ proc createDummyData(): (
     privateKeys = @[privateKey1, privateKey2, privateKey3]
     publicKeys = @[publicKey1, publicKey2, publicKey3]
 
-    delay = @[newSeq[byte](delaySize), newSeq[byte](delaySize), newSeq[byte](delaySize)]
+    delay = @[newSeq[byte](DELAY_SIZE), newSeq[byte](DELAY_SIZE), newSeq[byte](DELAY_SIZE)]
 
     hops =
       @[
-        initHop(newSeq[byte](addrSize)),
-        initHop(newSeq[byte](addrSize)),
-        initHop(newSeq[byte](addrSize)),
+        initHop(newSeq[byte](ADDR_SIZE)),
+        initHop(newSeq[byte](ADDR_SIZE)),
+        initHop(newSeq[byte](ADDR_SIZE)),
       ]
 
-    message = initMessage(newSeq[byte](messageSize))
+    message = initMessage(newSeq[byte](MSG_SIZE))
 
   return (message, privateKeys, publicKeys, delay, hops)
 
@@ -67,9 +67,9 @@ suite "Sphinx Tests":
       error "Sphinx wrap error", err = packetRes.error
     let packet = packetRes.get()
 
-    if packet.len != packetSize:
+    if packet.len != PACKET_SIZE:
       error "Packet length is not valid",
-        pkt_len = $(packet.len), expected_len = $packetSize
+        pkt_len = $(packet.len), expected_len = $PACKET_SIZE
       fail()
 
     let res1 = processSphinxPacket(packet, privateKeys[0], tm)
@@ -82,9 +82,9 @@ suite "Sphinx Tests":
       error "Processing status should be Intermediary"
       fail()
 
-    if processedPacket1.len != packetSize:
+    if processedPacket1.len != PACKET_SIZE:
       error "Packet length is not valid",
-        pkt_len = $(processedPacket1.len), expected_len = $packetSize
+        pkt_len = $(processedPacket1.len), expected_len = $PACKET_SIZE
       fail()
 
     let res2 = processSphinxPacket(processedPacket1, privateKeys[1], tm)
@@ -97,9 +97,9 @@ suite "Sphinx Tests":
       error "Processing status should be Intermediary"
       fail()
 
-    if processedPacket2.len != packetSize:
+    if processedPacket2.len != PACKET_SIZE:
       error "Packet length is not valid",
-        pkt_len = $(processedPacket2.len), expected_len = $packetSize
+        pkt_len = $(processedPacket2.len), expected_len = $PACKET_SIZE
       fail()
 
     let res3 = processSphinxPacket(processedPacket2, privateKeys[2], tm)
@@ -133,9 +133,9 @@ suite "Sphinx Tests":
       error "Sphinx wrap error", err = packetRes.error
     let packet = packetRes.get()
 
-    if packet.len != packetSize:
+    if packet.len != PACKET_SIZE:
       error "Packet length is not valid",
-        pkt_len = $(packet.len), expected_len = $packetSize
+        pkt_len = $(packet.len), expected_len = $PACKET_SIZE
       fail()
 
     # Corrupt the MAC for testing
@@ -160,9 +160,9 @@ suite "Sphinx Tests":
       error "Sphinx wrap error", err = packetRes.error
     let packet = packetRes.get()
 
-    if packet.len != packetSize:
+    if packet.len != PACKET_SIZE:
       error "Packet length is not valid",
-        pkt_len = $(packet.len), expected_len = $packetSize
+        pkt_len = $(packet.len), expected_len = $PACKET_SIZE
       fail()
 
     # Process the packet twice to test duplicate tag handling
@@ -194,7 +194,7 @@ suite "Sphinx Tests":
       randomize()
       for i in 0 ..< size:
         message[i] = byte(rand(256))
-      let paddedMessage = padMessage(message, messageSize)
+      let paddedMessage = padMessage(message, MSG_SIZE)
 
       let packetRes =
         wrapInSphinxPacket(initMessage(paddedMessage), publicKeys, delay, hops)
@@ -202,9 +202,9 @@ suite "Sphinx Tests":
         error "Sphinx wrap error", err = packetRes.error
       let packet = packetRes.get()
 
-      if packet.len != packetSize:
+      if packet.len != PACKET_SIZE:
         error "Packet length is not valid",
-          pkt_len = $(packet.len), expected_len = $packetSize, msg_len = $messageSize
+          pkt_len = $(packet.len), expected_len = $PACKET_SIZE, msg_len = $MSG_SIZE
         fail()
 
       let res1 = processSphinxPacket(packet, privateKeys[0], tm)
@@ -217,9 +217,9 @@ suite "Sphinx Tests":
         error "Processing status should be Intermediary"
         fail()
 
-      if processedPacket1.len != packetSize:
+      if processedPacket1.len != PACKET_SIZE:
         error "Packet length is not valid",
-          pkt_len = $(processedPacket1.len), expected_len = $packetSize
+          pkt_len = $(processedPacket1.len), expected_len = $PACKET_SIZE
         fail()
 
       let res2 = processSphinxPacket(processedPacket1, privateKeys[1], tm)
@@ -232,9 +232,9 @@ suite "Sphinx Tests":
         error "Processing status should be Intermediary"
         fail()
 
-      if processedPacket2.len != packetSize:
+      if processedPacket2.len != PACKET_SIZE:
         error "Packet length is not valid",
-          pkt_len = $(processedPacket2.len), expected_len = $packetSize
+          pkt_len = $(processedPacket2.len), expected_len = $PACKET_SIZE
         fail()
 
       let res3 = processSphinxPacket(processedPacket2, privateKeys[2], tm)

@@ -4,8 +4,8 @@ import libp2p/[crypto/crypto, crypto/curve25519, crypto/secp, multiaddress, peer
 import ./[config, curve25519, utils]
 
 const MixNodeInfoSize* =
-  addrSize + (2 * FieldElementSize) + (SkRawPublicKeySize + SkRawPrivateKeySize)
-const MixPubInfoSize* = addrSize + FieldElementSize + SkRawPublicKeySize
+  ADDR_SIZE + (2 * FieldElementSize) + (SkRawPublicKeySize + SkRawPrivateKeySize)
+const MixPubInfoSize* = ADDR_SIZE + FieldElementSize + SkRawPublicKeySize
 
 type MixNodeInfo* = object
   multiAddr: string
@@ -58,29 +58,29 @@ proc deserializeMixNodeInfo*(data: openArray[byte]): Result[MixNodeInfo, string]
     return
       err("Serialized Mix node info must be exactly " & $MixNodeInfoSize & " bytes")
 
-  let multiAddr = bytesToMultiAddr(data[0 .. addrSize - 1]).valueOr:
+  let multiAddr = bytesToMultiAddr(data[0 .. ADDR_SIZE - 1]).valueOr:
     return err("Error in multiaddress conversion to bytes: " & error)
 
   let mixPubKey = bytesToFieldElement(
-    data[addrSize .. (addrSize + FieldElementSize - 1)]
+    data[ADDR_SIZE .. (ADDR_SIZE + FieldElementSize - 1)]
   ).valueOr:
     return err("Mix public key deserialize error: " & error)
 
   let mixPrivKey = bytesToFieldElement(
-    data[(addrSize + FieldElementSize) .. (addrSize + (2 * FieldElementSize) - 1)]
+    data[(ADDR_SIZE + FieldElementSize) .. (ADDR_SIZE + (2 * FieldElementSize) - 1)]
   ).valueOr:
     return err("Mix private key deserialize error: " & error)
 
   let libp2pPubKey = SkPublicKey.init(
     data[
-      addrSize + (2 * FieldElementSize) ..
-        addrSize + (2 * FieldElementSize) + SkRawPublicKeySize - 1
+      ADDR_SIZE + (2 * FieldElementSize) ..
+        ADDR_SIZE + (2 * FieldElementSize) + SkRawPublicKeySize - 1
     ]
   ).valueOr:
     return err("Failed to initialize libp2p public key")
 
   let libp2pPrivKey = SkPrivateKey.init(
-    data[addrSize + (2 * FieldElementSize) + SkRawPublicKeySize ..^ 1]
+    data[ADDR_SIZE + (2 * FieldElementSize) + SkRawPublicKeySize ..^ 1]
   ).valueOr:
     return err("Failed to initialize libp2p private key")
 
@@ -177,15 +177,15 @@ proc deserializeMixPubInfo*(data: openArray[byte]): Result[MixPubInfo, string] =
     return
       err("Serialized mix public info must be exactly " & $MixPubInfoSize & " bytes")
 
-  let multiAddr = bytesToMultiAddr(data[0 .. addrSize - 1]).valueOr:
+  let multiAddr = bytesToMultiAddr(data[0 .. ADDR_SIZE - 1]).valueOr:
     return err("Error in bytes to multiaddress conversion: " & error)
 
   let mixPubKey = bytesToFieldElement(
-    data[addrSize .. (addrSize + FieldElementSize - 1)]
+    data[ADDR_SIZE .. (ADDR_SIZE + FieldElementSize - 1)]
   ).valueOr:
     return err("Mix public key deserialize error: " & error)
 
-  let libp2pPubKey = SkPublicKey.init(data[(addrSize + FieldElementSize) ..^ 1]).valueOr:
+  let libp2pPubKey = SkPublicKey.init(data[(ADDR_SIZE + FieldElementSize) ..^ 1]).valueOr:
     return err("Failed to initialize libp2p public key: ")
 
   ok(MixPubInfo(multiAddr: multiAddr, mixPubKey: mixPubKey, libp2pPubKey: libp2pPubKey))
