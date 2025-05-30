@@ -321,10 +321,17 @@ proc main() {.async.} =
       let timestampNs = now.toUnix().int64 * 1_000_000_000 + times.nanosecond(now).int64
       let msgId = uint64(msg)
 
+
+      # let packet: seq[bytes] = if defined(metadata):
+      #   mdSerialize(MetadataPacket(sentAt: toBytesLE(uint64(timestampNs)), id: toBytesLE(msgId), senderPeer: [0, 0]))
+      # else:
+      #   @[]
+      # payload.add(packet)
       var payload: seq[byte]
       payload.add(toBytesLE(uint64(timestampNs)))
       payload.add(toBytesLE(msgId))
-      payload.add(newSeq[byte](msg_size - 16))  # Fill the rest with padding
+      # payload.add(newSeq[byte](msg_size - 16))  # Fill the rest with padding
+      payload.add(newSeq[byte](msg_size - payload.len))  # Fill the rest with padding
 
       info "Publishing", msgId = msgId, timestamp = timestampNs
 

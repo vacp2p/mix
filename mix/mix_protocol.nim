@@ -14,6 +14,65 @@ from times import Time, getTime, toUnix, fromUnix, `-`, initTime, `$`, inMillise
 
 const MixProtocolID* = "/mix/1.0.0"
 
+# when defined(metadata):
+#   import std/json
+#   type MetadataEvent = enum
+#     Exit
+#     Success
+#     Publish
+#     Send
+#   
+#   type MetadataLog = object 
+#     event: MetadataEvent
+#     myId: string
+#     fromId: string
+#     toId: Option[string]
+#     msgId: uint64
+#     # Moment this packet first entered the mix network
+#     genesisTs: uint64
+#     # Moment the packet was received on this hop
+#     entryTs: uint64
+#     # Moment the packet was handled/forwarded on this hop
+#     exitTS: uint64
+#     # Any extra metadata added
+#     extras: Option[JsonNode]
+#
+#   type MetadataPacket* = object
+#     # Time the preceding peer sent it here
+#     sentAt: uint64
+#     id: uint64
+#     senderPeer: array[2, byte]
+#
+#   type MetadataError* = enum
+#     BadPacketBytelen
+#
+#   proc mdSerialize*(metadata: MetadataPacket): seq[byte] =
+#       var res: seq[byte]
+#       res.add(toBytesLE(uint64(metadata.sentAt)))
+#       res.add(toBytesLE(metadata.id))
+#       res.add(metadata.senderPeer)
+#
+#   proc mdDeserialize*(data: array[18, byte]): MetadataPacket =
+#
+#     let sentAt = uint64.fromBytesLE(data[0 ..< 8])
+#     let msgid = uint64.fromBytesLE(data[8 ..< 16])
+#     var sender: array[2, byte]
+#     sender[0] = data[16]
+#     sender[1] = data[17]
+#     MetadataPacket(sentAt: sentAt, id: msgid, senderPeer: sender)
+#
+#   proc leftTruncate(s: string, length: int): string =
+#     if s.len > length:
+#       return s[s.len - length ..< s.len]
+#     else:
+#       return s
+
+  # proc metaDataLogStr*(md: MetadataLog): string = 
+  #   let toIdStr = metadata.toId.mapIt(it: "$1", none: "none")
+  #   let extrasStr = metadata.extras.mapIt(it: "$1", none: "none")
+  #   fmt"event: {metadata.event:<9}|myId: {metadata.myId:<6}|fromId: {metadata.fromId:<9}|toId: {toIdStr:<9}|msgId: {metadata.msgId:<3}|genesis: {leftTruncate($metadata.genesisTs, 8)}| entryTs: {leftTruncate($metadata.entryTs, 8)}| exitTs: {leftTruncate($metadata.exitTs, 8)}| extras: {extrasStr}"
+
+
 type MixProtocol* = ref object of LPProtocol
   mixNodeInfo: MixNodeInfo
   pubNodeInfo: Table[PeerId, MixPubInfo]
