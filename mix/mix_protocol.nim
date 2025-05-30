@@ -57,10 +57,10 @@ proc cryptoRandomInt(max: int): Result[int, string] =
 proc toUnixNs(t: Time): int64 =
   t.toUnix().int64 * 1_000_000_000 + times.nanosecond(t).int64
 
-# func byteToHex(b: byte): string = 
-#   b.toHex(2)
-# func bytesToHex(data: seq[byte]): string = 
-#   data.map(byteToHex).join(" ")
+func byteToHex(b: byte): string = 
+  b.toHex(2)
+func bytesToHex(data: seq[byte]): string = 
+  data.map(byteToHex).join("")
 
 
 proc handleMixNodeConnection(
@@ -82,6 +82,7 @@ proc handleMixNodeConnection(
         await conn.close()
       except CatchableError as e:
         error "Failed to close incoming stream: ", err = e.msg
+  let fromPeerIDBytes = fromPeerId[6..< 10].mapIt(cast[byte](it))
 
   let
     startTime = getTime()
@@ -109,6 +110,7 @@ proc handleMixNodeConnection(
     orig = uint64.fromBytesLE(metadata[5 ..< 13])
     msgid = uint64.fromBytesLE(metadata[13 ..< 21])
     myPeerId = shortLog(ownPeerId)
+    myPeerIDBytes = myPeerId[6..< 10].mapIt(cast[byte](it))
   case status
   of Exit:
     if (nextHop != Hop()) or (delay != @[]):
@@ -128,10 +130,11 @@ proc handleMixNodeConnection(
       error "Deserialization failed", err = error
       return
 
-    let
-      (message, protocol) = getMixMessage(deserializedResult)
-      exitConn = MixExitConnection.new(message)
+    var (message, protocol) = getMixMessage(deserializedResult)
     trace "# Received: ", receiver = multiAddr, message = message
+    for i in 0..<4:
+      message[i + 21] = fromPeerIDBytes[i]
+    var exitConn = MixExitConnection.new(message)
     await mixProto.pHandler(exitConn, protocol)
 
     if exitConn != nil:
@@ -145,7 +148,7 @@ proc handleMixNodeConnection(
       endTimeNs = toUnixNs(endTime)
       processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
     
-    info "Exit", msgid=msgid, fromPeerID=fromPeerID, toPeerID="None", myPeerId=myPeerId, orig=orig, current=startTimeNs, procDelay=processingDelay
+    info "Exit", fromPeerID=bytesToHex(fromPeerIDBytes), msgid=msgid, toPeerID="X", myPeerId=bytesToHex(myPeerIDBytes), orig=orig, current=startTimeNs, procDelay=processingDelay
 
   of Success:
     # Add delay
@@ -182,8 +185,10 @@ proc handleMixNodeConnection(
       endTimeNs = toUnixNs(endTime)
       processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
       toPeerID = shortLog(peerId)
+    let toPeerIDBytes = toPeerId[6..< 10].mapIt(cast[byte](it))
+    let myPeerIDBytes = myPeerId[6..< 10].mapIt(cast[byte](it))
 
-    info "Intermediate", msgid=msgid, fromPeerID=fromPeerID, toPeerID=toPeerID, myPeerId=myPeerId, orig=orig, current=startTimeNs, procDelay=processingDelay
+    info "Intermediate", fromPeerID=bytesToHex(fromPeerIDBytes), msgid=msgid, toPeerID=bytesToHex(toPeerIDBytes), myPeerId=bytesToHex(myPeerIDBytes), orig=orig, current=startTimeNs, procDelay=processingDelay
 
     var nextHopConn: Connection
     try:
@@ -312,8 +317,10 @@ proc anonymizeLocalProtocolSend*(
     endTime = getTime()
     endTimeNs = toUnixNs(endTime)
     processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
+    toPeerIDBytes = toPeerId[6..< 10].mapIt(cast[byte](it))
+    myPeerIDBytes = myPeerId[6..< 10].mapIt(cast[byte](it))
 
-  info "Sender", msgid=msgid, fromPeerID="None", toPeerID=toPeerID, myPeerId=myPeerId, orig=orig, current=startTimeNs, procDelay=processingDelay
+  info "Sender", toPeerID=bytesToHex(toPeerIDBytes), fromPeerID="X", msgid=msgid, myPeerId=bytesToHex(myPeerIDBytes), orig=orig, current=startTimeNs, procDelay=processingDelay
 
   var nextHopConn: Connection
   try:

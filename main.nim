@@ -235,6 +235,10 @@ proc main() {.async.} =
   )
 
   proc messageHandler(topic: string, data: seq[byte]) {.async.} =
+    func byteToHex(b: byte): string = 
+      b.toHex(2)
+    func bytesToHex(data: seq[byte]): string = 
+      data.map(byteToHex).join("")
     if data.len < 16:
       warn "Message too short"
       return
@@ -245,10 +249,13 @@ proc main() {.async.} =
       sentMoment = nanoseconds(int64(timestampNs))
       sentNanosecs = nanoseconds(sentMoment - seconds(sentMoment.seconds))
       sentDate = initTime(sentMoment.seconds, sentNanosecs)
-      recvTime = getTime()
+      recvTime = getTime()  
+      now = getTime()
+      nsnow = now.toUnix().int64 * 1_000_000_000 + times.nanosecond(now).int64
       delay = recvTime - sentDate
+      fromPeerIdBytes = data[16..<20]
 
-    info "Received message", msgId = msgId, sentAt = timestampNs, delayMs = delay.inMilliseconds()
+    info "Received", fromPeerId = bytesToHex(fromPeerIdBytes), msgid = msgId, now = nsnow, delayMs = delay.inMilliseconds()
 
   proc messageValidator(
       topic: string, msg: Message
@@ -306,8 +313,8 @@ proc main() {.async.} =
 
   info "Publishing turn", id = myId
 
-  let count = 50
-  for msg in high(int) - count ..< high(int): #client.param(int, "message_count"):
+  let count = 26
+  for msg in 0 .. count: #client.param(int, "message_count"):
     if msg mod publisherCount == myId:
       # info "Sending message", time = times.getTime()
       let now = getTime()
