@@ -57,6 +57,12 @@ proc cryptoRandomInt(max: int): Result[int, string] =
 proc toUnixNs(t: Time): int64 =
   t.toUnix().int64 * 1_000_000_000 + times.nanosecond(t).int64
 
+# func byteToHex(b: byte): string = 
+#   b.toHex(2)
+# func bytesToHex(data: seq[byte]): string = 
+#   data.map(byteToHex).join(" ")
+
+
 proc handleMixNodeConnection(
     mixProto: MixProtocol, conn: Connection
 ) {.async: (raises: [CancelledError]).} =
@@ -65,7 +71,7 @@ proc handleMixNodeConnection(
     metadata: seq[byte]
     fromPeerID: string
   try:
-    metadata = await conn.readLp(16)
+    metadata = await conn.readLp(21)
     receivedBytes = await conn.readLp(packetSize)
     fromPeerID = shortLog(conn.peerId)
   except Exception as e:
@@ -98,11 +104,11 @@ proc handleMixNodeConnection(
     error "Failed to initialize my PeerId", err = error
     return
 
-  let
-    orig = uint64.fromBytesLE(metadata[0 ..< 8])
-    msgid = uint64.fromBytesLE(metadata[8 ..< 16])
-    myPeerId = shortLog(ownPeerId)
 
+  let
+    orig = uint64.fromBytesLE(metadata[5 ..< 13])
+    msgid = uint64.fromBytesLE(metadata[13 ..< 21])
+    myPeerId = shortLog(ownPeerId)
   case status
   of Exit:
     if (nextHop != Hop()) or (delay != @[]):
@@ -142,7 +148,6 @@ proc handleMixNodeConnection(
     info "Exit", msgid=msgid, fromPeerID=fromPeerID, toPeerID="None", myPeerId=myPeerId, orig=orig, current=startTimeNs, procDelay=processingDelay
 
   of Success:
-    trace "# Intermediate: ", multiAddr = multiAddr
     # Add delay
     let delayMillis = (delay[0].int shl 8) or delay[1].int
     await sleepAsync(milliseconds(delayMillis))
@@ -299,8 +304,9 @@ proc anonymizeLocalProtocolSend*(
     return
 
   let
-    orig = uint64.fromBytesLE(msg[0 ..< 8])
-    msgid = uint64.fromBytesLE(msg[8 ..< 16])
+    orig = uint64.fromBytesLE(msg[5 ..< 13])
+    # whats happening bytes 8..13
+    msgid = uint64.fromBytesLE(msg[13 ..< 21])
     toPeerID = shortLog(firstMixPeerId)
     myPeerId = shortLog(ownPeerId)
     endTime = getTime()
@@ -313,7 +319,7 @@ proc anonymizeLocalProtocolSend*(
   try:
     nextHopConn =
       await mixProto.switch.dial(firstMixPeerId, @[firstMixAddr], @[MixProtocolID])
-    await nextHopConn.writeLp(msg[0 ..< 16])
+    await nextHopConn.writeLp(msg[0 ..< 21])
     await nextHopConn.writeLp(sphinxPacket)
   except CatchableError as e:
     error "Failed to send message to next hop: ", err = e.msg
