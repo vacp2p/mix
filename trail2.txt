@@ -1,0 +1,28 @@
+0
+16:52:43.005+00:00 Publishing                                 tid=1 msgId=5 timestamp=1748537563005489348                                                                                             
+16:52:43.005+00:00 Received                                   tid=1 fromPeerId=00000000 msgid=5 now=1748537563005524865 delayMs=0                                                                     
+16:52:43.007+00:00 Sender                                     tid=1 toPeerID=3 fromPeerID=X msgid=5 myPeerId=0 orig=1748537563005489348 current=1748537563005605877 procDelay=1.937772  
+16:52:43.009+00:00 Sender                                     tid=1 toPeerID=3 fromPeerID=X msgid=5 myPeerId=0 orig=1748537563005489348 current=1748537563007682460 procDelay=1.934727  
+16:52:43.011+00:00 Sender                                     tid=1 toPeerID=3 fromPeerID=X msgid=5 myPeerId=0 orig=1748537563005489348 current=1748537563009742352 procDelay=1.928885  
+16:52:43.013+00:00 Sender                                     tid=1 toPeerID=4 fromPeerID=X msgid=5 myPeerId=0 orig=1748537563005489348 current=1748537563011741509 procDelay=1.941119  
+16:52:43.090+00:00 Received                                   tid=1 fromPeerId=4 now=1748537563090864866 delayMs=85                                                                    
+1
+16:52:43.057+00:00 Intermediate                               tid=1 fromPeerID=4 toPeerID=2 myPeerId=1 orig=1748537563005489348 current=1748537563054786154 procDelay=3.036938   
+16:52:43.081+00:00 Received                                   tid=1 fromPeerId=4 now=1748537563081068883 delayMs=75                                                                            
+16:52:43.081+00:00 Exit                                       tid=1 fromPeerID=4 toPeerID=X myPeerId=1 orig=1748537563005489348 current=1748537563080428901 procDelay=0.6763710000000001
+16:52:43.104+00:00 Received                                   tid=1 fromPeerId=2 now=1748537563104014721 delayMs=98                                                                            
+16:52:43.104+00:00 Exit                                       tid=1 fromPeerID=2 toPeerID=X myPeerId=1 orig=1748537563005489348 current=1748537563103660706 procDelay=0.375826          
+2
+16:52:43.077+00:00 Intermediate                               tid=1 fromPeerID=3 toPeerID=1 myPeerId=2 orig=1748537563005489348 current=1748537563073416551 procDelay=3.810882  
+16:52:43.077+00:00 Intermediate                               tid=1 fromPeerID=3 toPeerID=1 myPeerId=2 orig=1748537563005489348 current=1748537563076449842 procDelay=1.036388  
+16:52:43.095+00:00 Received                                   tid=1 fromPeerId=4 now=1748537563095775335 delayMs=90                                                                           
+3
+16:52:43.035+00:00 Intermediate                               tid=1 fromPeerID=0 toPeerID=2 myPeerId=3 orig=1748537563005489348 current=1748537563034744495 procDelay=0.543631  
+16:52:43.037+00:00 Intermediate                               tid=1 fromPeerID=0 toPeerID=2 myPeerId=3 orig=1748537563005489348 current=1748537563035563063 procDelay=2.103143  
+16:52:43.039+00:00 Intermediate                               tid=1 fromPeerID=0 toPeerID=4 myPeerId=3 orig=1748537563005489348 current=1748537563036265684 procDelay=2.773262  
+16:52:43.081+00:00 Received                                   tid=1 fromPeerId=4 now=1748537563081169432 delayMs=75                                                                           
+4
+16:52:43.036+00:00 Intermediate                               tid=1 fromPeerID=0 toPeerID=1 myPeerId=4 orig=1748537563005489348 current=1748537563034372736 procDelay=2.580831  
+16:52:43.042+00:00 Intermediate                               tid=1 fromPeerID=3 toPeerID=1 myPeerId=4 orig=1748537563005489348 current=1748537563040547001 procDelay=1.598905  
+16:52:43.091+00:00 Received                                   tid=1 fromPeerId=4 now=1748537563091017192 delayMs=85                                                                           
+
