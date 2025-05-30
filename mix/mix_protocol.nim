@@ -60,7 +60,7 @@ proc toUnixNs(t: Time): int64 =
 func byteToHex(b: byte): string = 
   b.toHex(2)
 func bytesToHex(data: seq[byte]): string = 
-  data.map(byteToHex).join(" ")
+  data.map(byteToHex).join("")
 
 
 proc handleMixNodeConnection(
@@ -148,7 +148,7 @@ proc handleMixNodeConnection(
       endTimeNs = toUnixNs(endTime)
       processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
     
-    info "Exit", fromPeerID=bytesToHex(fromPeerIDBytes), msgid=msgid, toPeerID="None", myPeerId=bytesToHex(myPeerIDBytes), orig=orig, current=startTimeNs, procDelay=processingDelay
+    info "Exit", fromPeerID=bytesToHex(fromPeerIDBytes), msgid=msgid, toPeerID="X", myPeerId=bytesToHex(myPeerIDBytes), orig=orig, current=startTimeNs, procDelay=processingDelay
 
   of Success:
     # Add delay
@@ -320,7 +320,7 @@ proc anonymizeLocalProtocolSend*(
     toPeerIDBytes = toPeerId[6..< 10].mapIt(cast[byte](it))
     myPeerIDBytes = myPeerId[6..< 10].mapIt(cast[byte](it))
 
-  info "Sender", toPeerID=bytesToHex(toPeerIDBytes), fromPeerID="None", msgid=msgid, myPeerId=bytesToHex(myPeerIDBytes), orig=orig, current=startTimeNs, procDelay=processingDelay
+  info "Sender", toPeerID=bytesToHex(toPeerIDBytes), fromPeerID="X", msgid=msgid, myPeerId=bytesToHex(myPeerIDBytes), orig=orig, current=startTimeNs, procDelay=processingDelay
 
   var nextHopConn: Connection
   try:
