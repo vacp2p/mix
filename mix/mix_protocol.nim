@@ -245,7 +245,7 @@ proc handleMixNodeConnection(
       endTime = getTime()
       endTimeNs = toUnixNs(endTime)
       processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
-    while defined(metadata):
+    when defined(metadata):
       info "Exit", fromPeerID=bytesToHex(fromPeerIDBytes), msgid=msgid, toPeerID="X", myPeerId=bytesToHex(myPeerIDBytes), orig=orig, current=startTimeNs, procDelay=processingDelay
 
   of Success:
