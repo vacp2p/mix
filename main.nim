@@ -256,6 +256,23 @@ proc main() {.async.} =
       fromPeerIdBytes = data[16..<20]
 
     info "Received", fromPeerId = bytesToHex(fromPeerIdBytes), msgid = msgId, now = nsnow, delayMs = delay.inMilliseconds()
+    if defined(metadata):
+      let packet = mdDeserialize(data[0 ..< 16])
+      let log = logFromPacket(
+          packet,
+          MetadataEvent.Received, 
+          "me",
+          bytesToHex(fromPeerIdBytes),
+          none(string),
+          # Moment the packet was received on this hop
+          # startTimeNs,
+          # # Moment the packet was handled/forwarded on this hop
+          # endTimeNs,
+          # Any extra metadata added
+          none(JsonNode)
+      )
+      info "", msg=metadataLogStr(log)
+
 
   proc messageValidator(
       topic: string, msg: Message
@@ -323,7 +340,7 @@ proc main() {.async.} =
 
 
       var payload: seq[byte] = @[]
-      when defined(metadata):
+      if defined(metadata):
         payload.add(mdSerialize(MetadataPacket(msgId: msgId)))
         
       payload.add(newSeq[byte](msg_size - payload.len))  # Fill the rest with padding
