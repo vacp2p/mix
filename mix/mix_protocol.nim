@@ -12,12 +12,12 @@ import
     [protocols/ping, protocols/protocol, stream/connection, stream/lpstream, switch]
 from times import Time, getTime, toUnix, fromUnix, `-`, initTime, `$`, inMilliseconds
 
+proc toUnixNs(t: Time): int64 =
+  t.toUnix().int64 * 1_000_000_000 + times.nanosecond(t).int64
 const MixProtocolID* = "/mix/1.0.0"
 # nim c -d:metadata ...
 when defined(metadata):
   import std/json
-  proc toUnixNs(t: Time): int64 =
-    t.toUnix().int64 * 1_000_000_000 + times.nanosecond(t).int64
   
   func byteToHex(b: byte): string = 
     b.toHex(2)
@@ -57,7 +57,7 @@ when defined(metadata):
     packet: MetadataPacket,
     event: MetadataEvent,
     myId: string,
-    fromId: Option[string],
+    fromId: string,
     toId: Option[string],
     # Moment the packet was received on this hop
     # entryTs: uint64,
@@ -107,11 +107,11 @@ when defined(metadata):
       return s
 
   proc metaDataLogStr*(md: MetadataLog): string = 
-    var frmIdStr: string 
-    if md.fromId.isSome():
-      frmIdStr = $(md.toId.get())
-    else:
-      frmIdStr = "None"
+    # var frmIdStr: string 
+    # if md.fromId.isSome():
+    #   frmIdStr = $(md.toId.get())
+    # else:
+    #   frmIdStr = "None"
 
     var toIdStr: string 
     if md.toId.isSome():
@@ -124,7 +124,7 @@ when defined(metadata):
       extraStr = $(md.extras.get())
     else:
       extraStr = "None"
-    fmt"event: {md.event:<6}|myId: {md.myId:<6}|fromId: {frmIdStr:<9}|toId: {toIdStr:<9}|msgId: {md.msgId:<3}|entryTs: {leftTruncate($md.entryTs, 8)}| exitTs: {leftTruncate($md.exitTs, 8)}| extras: {extraStr}"
+    fmt"event: {md.event:<8}|myId: {leftTruncate(md.myId, 6):<6}|fromId: {leftTruncate(md.fromId, 6):<6}|toId: {leftTruncate(toIdStr, 6):<6}|msgId: {md.msgId:<3}|entryTs: {leftTruncate($md.entryTs, 8)}| exitTs: {leftTruncate($md.exitTs, 8)}| extras: {extraStr}"
 
 
 type MixProtocol* = ref object of LPProtocol
@@ -238,6 +238,7 @@ proc handleMixNodeConnection(
 
     var (message, protocol) = getMixMessage(deserializedResult)
     trace "# Received: ", receiver = multiAddr, message = message
+    info "bytes", bytes = hexToBytes(message)
     for i in 0..<4:
       message[i + 21] = fromPeerIDBytes[i]
     var exitConn = MixExitConnection.new(message)
@@ -253,7 +254,7 @@ proc handleMixNodeConnection(
       endTime = getTime()
       endTimeNs = toUnixNs(endTime)
       processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
-    if defined(metadata):
+    when defined(metadata):
       let packet = mdDeserialize(metadata[5 ..< 21])
       let log = logFromPacket(
           packet,
@@ -268,7 +269,7 @@ proc handleMixNodeConnection(
           # Any extra metadata added
           none(JsonNode)
       )
-      info "", msg=metadataLogStr(log)
+      info "", msg=metaDataLogStr(log)
 
   of Success:
     # Add delay
@@ -309,7 +310,7 @@ proc handleMixNodeConnection(
     let myPeerIDBytes = myPeerId[6..< 10].mapIt(cast[byte](it))
 
 
-    if defined(metadata):
+    when defined(metadata):
       let packet = mdDeserialize(metadata[5 ..< 21])
       let log = logFromPacket(
           packet,
@@ -324,7 +325,7 @@ proc handleMixNodeConnection(
           # Any extra metadata added
           none(JsonNode)
       )
-      info "", msg=metadataLogStr(log)
+      info "", msg=metaDataLogStr(log)
     var nextHopConn: Connection
     try:
       nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
@@ -460,8 +461,8 @@ proc anonymizeLocalProtocolSend*(
     let log = logFromPacket(
         packet,
         MetadataEvent.Send, 
-        myPeerId,
-        none(string),
+        bytesToHex(myPeerIDBytes),
+        "XXXX",
         some(bytesToHex(toPeerIDBytes)),
         # Moment the packet was received on this hop
         # startTimeNs,
@@ -470,7 +471,7 @@ proc anonymizeLocalProtocolSend*(
         # Any extra metadata added
         none(JsonNode)
     )
-    info "", msg=metadataLogStr(log)
+    info "", msg=metaDataLogStr(log)
 
   var nextHopConn: Connection
   try:

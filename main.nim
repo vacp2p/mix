@@ -255,7 +255,6 @@ proc main() {.async.} =
       delay = recvTime - sentDate
       fromPeerIdBytes = data[16..<20]
 
-    info "Received", fromPeerId = bytesToHex(fromPeerIdBytes), msgid = msgId, now = nsnow, delayMs = delay.inMilliseconds()
     if defined(metadata):
       let packet = mdDeserialize(data[0 ..< 16])
       let log = logFromPacket(
@@ -271,7 +270,7 @@ proc main() {.async.} =
           # Any extra metadata added
           none(JsonNode)
       )
-      info "", msg=metadataLogStr(log)
+      info "", msg=metaDataLogStr(log)
 
 
   proc messageValidator(
