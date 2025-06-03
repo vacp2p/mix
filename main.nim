@@ -263,14 +263,11 @@ proc main() {.async.} =
           "me",
           bytesToHex(fromPeerIdBytes),
           none(string),
-          # Moment the packet was received on this hop
-          # startTimeNs,
-          # # Moment the packet was handled/forwarded on this hop
-          # endTimeNs,
-          # Any extra metadata added
+          0,
+          cast[uint64](nsnow),
           none(JsonNode)
       )
-      echo metaDataLogJson(log)
+      echo metaDataLogStr(log)
 
 
   proc messageValidator(

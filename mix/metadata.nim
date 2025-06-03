@@ -49,9 +49,9 @@ proc logFromPacket*(
   fromId: string,
   toId: Option[string],
   # Moment the packet was received on this hop
-  # entryTs: uint64,
-  # # Moment the packet was handled/forwarded on this hop
-  # exitTS: uint64,
+  entryTs: uint64,
+  # Moment the packet was handled/forwarded on this hop
+  exitTS: uint64,
   # Any extra metadata added
   extras: Option[JsonNode],
 ): MetadataLog = 
@@ -63,9 +63,9 @@ proc logFromPacket*(
     msgId: packet.msgId,
     # sentTs: packet.sentAt,
     # Moment the packet was received on this hop
-    entryTs: 0, #entryTs,
+    entryTs: entryTs, #entryTs,
     # Moment the packet was handled/forwarded on this hop
-    exitTS: 0, #exitTs,
+    exitTS: exitTs, #exitTs,
     # Any extra metadata added
     extras: extras
   )
@@ -79,8 +79,7 @@ proc mdSerialize*(metadata: MetadataPacket): seq[byte] =
     return res
 
 proc mdDeserialize*(data: seq[byte]): MetadataPacket =
-  if data.len != 8:
-    discard 1/0
+  doAssert(data.len == 16, fmt("only deser length of 16: {data}"))
 
   # let sentAt = uint64.fromBytesLE(data[0 ..< 8])
   let msgid = uint64.fromBytesLE(data[0 ..< 8])
@@ -113,7 +112,8 @@ proc metaDataLogStr*(md: MetadataLog): string =
     extraStr = $(md.extras.get())
   else:
     extraStr = "None"
-  fmt"event: {md.event:<8}|myId: {leftTruncate(md.myId, 6):<6}|fromId: {leftTruncate(md.fromId, 6):<6}|toId: {leftTruncate(toIdStr, 6):<6}|msgId: {md.msgId:<3}|entryTs: {leftTruncate($md.entryTs, 8)}| exitTs: {leftTruncate($md.exitTs, 8)}| extras: {extraStr}"
+  fmt"event: {md.event:<8}|myId: {leftTruncate(md.myId, 6):<6}|fromId: {leftTruncate(md.fromId, 6):<6}|toId: {leftTruncate(toIdStr, 6):<6}|msgId: {md.msgId:<3}|entryTs: {leftTruncate($md.entryTs, 10):<10}| exitTs: {leftTruncate($md.exitTs, 10):<10}| extras: {extraStr}"
+
 proc metaDataLogJson*(md: MetadataLog): JsonNode = 
   return %*{
     "event": md.event,
@@ -125,3 +125,4 @@ proc metaDataLogJson*(md: MetadataLog): JsonNode =
     "exitTs": md.exitTs,
     "extras": md.extras,
   }
+

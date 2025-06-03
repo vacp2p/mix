@@ -158,13 +158,12 @@ proc handleMixNodeConnection(
           metabytesToHex(fromPeerIDBytes),
           none(string),
           # Moment the packet was received on this hop
-          # startTimeNs,
+          cast[uint64](startTimeNs),
           # # Moment the packet was handled/forwarded on this hop
-          # endTimeNs,
-          # Any extra metadata added
+          cast[uint64](endTimeNs),
           none(JsonNode)
       )
-      echo metaDataLogJson(log)
+      echo metaDataLogStr(log)
 
   of Success:
     # Add delay
@@ -214,13 +213,12 @@ proc handleMixNodeConnection(
           metabytesToHex(fromPeerIDBytes),
           some(metabytesToHex(toPeerIDBytes)),
           # Moment the packet was received on this hop
-          # startTimeNs,
+          cast[uint64](startTimeNs),
           # # Moment the packet was handled/forwarded on this hop
-          # endTimeNs,
-          # Any extra metadata added
+          cast[uint64](endTimeNs),
           none(JsonNode)
       )
-      echo metaDataLogJson(log)
+      echo metaDataLogStr(log)
     var nextHopConn: Connection
     try:
       nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
@@ -360,13 +358,12 @@ proc anonymizeLocalProtocolSend*(
         "XXXX",
         some(metabytesToHex(toPeerIDBytes)),
         # Moment the packet was received on this hop
-        # startTimeNs,
+        cast[uint64](startTimeNs),
         # # Moment the packet was handled/forwarded on this hop
-        # endTimeNs,
-        # Any extra metadata added
+        cast[uint64](endTimeNs),
         none(JsonNode)
     )
-    echo metaDataLogJson(log)
+    echo metaDataLogStr(log)
 
   var nextHopConn: Connection
   try:
