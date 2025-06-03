@@ -270,7 +270,7 @@ proc main() {.async.} =
           # Any extra metadata added
           none(JsonNode)
       )
-      info "", msg=metaDataLogStr(log)
+      echo metaDataLogJson(log)
 
 
   proc messageValidator(

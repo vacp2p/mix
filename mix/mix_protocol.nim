@@ -125,6 +125,17 @@ when defined(metadata):
     else:
       extraStr = "None"
     fmt"event: {md.event:<8}|myId: {leftTruncate(md.myId, 6):<6}|fromId: {leftTruncate(md.fromId, 6):<6}|toId: {leftTruncate(toIdStr, 6):<6}|msgId: {md.msgId:<3}|entryTs: {leftTruncate($md.entryTs, 8)}| exitTs: {leftTruncate($md.exitTs, 8)}| extras: {extraStr}"
+  proc metaDataLogJson*(md: MetadataLog): JsonNode = 
+    return %*{
+      "event": md.event,
+      "myId": md.myId,
+      "fromId": md.fromId,
+      "toId": md.toId,
+      "msgId": md.msgId,
+      "entryTs": md.entryTs,
+      "exitTs": md.exitTs,
+      "extras": md.extras,
+    }
 
 
 type MixProtocol* = ref object of LPProtocol
@@ -269,7 +280,7 @@ proc handleMixNodeConnection(
           # Any extra metadata added
           none(JsonNode)
       )
-      info "", msg=metaDataLogStr(log)
+      echo metaDataLogJson(log)
 
   of Success:
     # Add delay
@@ -325,7 +336,7 @@ proc handleMixNodeConnection(
           # Any extra metadata added
           none(JsonNode)
       )
-      info "", msg=metaDataLogStr(log)
+      echo metaDataLogJson(log)
     var nextHopConn: Connection
     try:
       nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
@@ -471,7 +482,7 @@ proc anonymizeLocalProtocolSend*(
         # Any extra metadata added
         none(JsonNode)
     )
-    info "", msg=metaDataLogStr(log)
+    echo metaDataLogJson(log)
 
   var nextHopConn: Connection
   try:
