@@ -12,131 +12,14 @@ import
     [protocols/ping, protocols/protocol, stream/connection, stream/lpstream, switch]
 from times import Time, getTime, toUnix, fromUnix, `-`, initTime, `$`, inMilliseconds
 
+when defined(metadata):
+  import metadata
+  import json
+
 proc toUnixNs(t: Time): int64 =
   t.toUnix().int64 * 1_000_000_000 + times.nanosecond(t).int64
 const MixProtocolID* = "/mix/1.0.0"
 # nim c -d:metadata ...
-when defined(metadata):
-  import std/json
-  
-  func byteToHex(b: byte): string = 
-    b.toHex(2)
-  func bytesToHex(data: seq[byte]): string = 
-    data.map(byteToHex).join("")
-
-  type MetadataEvent* = enum
-    Publish
-    Send
-    Success
-    Exit
-    Received
-  
-  type MetadataLog* = object 
-    event*: MetadataEvent
-    myId*: string
-    fromId*: string
-    toId*: Option[string]
-    msgId*: uint64
-    # sentTs*: uint64
-    # Moment the packet was received on this hop
-    entryTs*: uint64
-    # Moment the packet was handled/forwarded on this hop
-    exitTS*: uint64
-    # Any extra metadata added
-    extras*: Option[JsonNode]
-
-  # piggybacking over the top of sphinx
-  type MetadataPacket* = object
-    # genesisTs*: uint64
-    msgId*: uint64
-
-  type MetadataError* = enum
-    BadPacketBytelen
-
-  proc logFromPacket*(
-    packet: MetadataPacket,
-    event: MetadataEvent,
-    myId: string,
-    fromId: string,
-    toId: Option[string],
-    # Moment the packet was received on this hop
-    # entryTs: uint64,
-    # # Moment the packet was handled/forwarded on this hop
-    # exitTS: uint64,
-    # Any extra metadata added
-    extras: Option[JsonNode],
-  ): MetadataLog = 
-    MetadataLog(
-      event: event,
-      myId: myId,
-      fromId: fromId,
-      toId: toId,
-      msgId: packet.msgId,
-      # sentTs: packet.sentAt,
-      # Moment the packet was received on this hop
-      entryTs: 0, #entryTs,
-      # Moment the packet was handled/forwarded on this hop
-      exitTS: 0, #exitTs,
-      # Any extra metadata added
-      extras: extras
-    )
-
-
-  proc mdSerialize*(metadata: MetadataPacket): seq[byte] =
-      var res: seq[byte]
-      # res.add(toBytesLE(uint64(metadata.sentAt)))
-      res.add(toBytesLE(metadata.msgId))
-      # res.add(metadata.senderPeer)
-      return res
-
-  proc mdDeserialize*(data: seq[byte]): MetadataPacket =
-    if data.len != 8:
-      let foo = 1/0
-
-    # let sentAt = uint64.fromBytesLE(data[0 ..< 8])
-    let msgid = uint64.fromBytesLE(data[0 ..< 8])
-    # var sender: array[2, byte]
-    # sender[0] = data[16]
-    # sender[1] = data[17]
-    MetadataPacket( msgId: msgid)
-
-  proc leftTruncate(s: string, length: int): string =
-    if s.len > length:
-      return s[s.len - length ..< s.len]
-    else:
-      return s
-
-  proc metaDataLogStr*(md: MetadataLog): string = 
-    # var frmIdStr: string 
-    # if md.fromId.isSome():
-    #   frmIdStr = $(md.toId.get())
-    # else:
-    #   frmIdStr = "None"
-
-    var toIdStr: string 
-    if md.toId.isSome():
-      toIdStr = $(md.toId.get())
-    else:
-      toIdStr = "None"
-
-    var extraStr: string
-    if md.extras.isSome():
-      extraStr = $(md.extras.get())
-    else:
-      extraStr = "None"
-    fmt"event: {md.event:<8}|myId: {leftTruncate(md.myId, 6):<6}|fromId: {leftTruncate(md.fromId, 6):<6}|toId: {leftTruncate(toIdStr, 6):<6}|msgId: {md.msgId:<3}|entryTs: {leftTruncate($md.entryTs, 8)}| exitTs: {leftTruncate($md.exitTs, 8)}| extras: {extraStr}"
-  proc metaDataLogJson*(md: MetadataLog): JsonNode = 
-    return %*{
-      "event": md.event,
-      "myId": md.myId,
-      "fromId": md.fromId,
-      "toId": md.toId,
-      "msgId": md.msgId,
-      "entryTs": md.entryTs,
-      "exitTs": md.exitTs,
-      "extras": md.extras,
-    }
-
 
 type MixProtocol* = ref object of LPProtocol
   mixNodeInfo: MixNodeInfo
@@ -223,11 +106,12 @@ proc handleMixNodeConnection(
     return
 
 
-  let
-    orig = uint64.fromBytesLE(metadata[5 ..< 13])
-    msgid = uint64.fromBytesLE(metadata[13 ..< 21])
-    myPeerId = shortLog(ownPeerId)
-    myPeerIDBytes = myPeerId[6..< 10].mapIt(cast[byte](it))
+  when defined(metadata):
+    let
+      orig = uint64.fromBytesLE(metadata[5 ..< 13])
+      msgid = uint64.fromBytesLE(metadata[13 ..< 21])
+      myPeerId = shortLog(ownPeerId)
+      myPeerIDBytes = myPeerId[6..< 10].mapIt(cast[byte](it))
   case status
   of Exit:
     if (nextHop != Hop()) or (delay != @[]):
@@ -249,9 +133,9 @@ proc handleMixNodeConnection(
 
     var (message, protocol) = getMixMessage(deserializedResult)
     trace "# Received: ", receiver = multiAddr, message = message
-    info "bytes", bytes = bytesToHex(message)
-    for i in 0..<4:
-      message[i + 21] = fromPeerIDBytes[i]
+    when defined(metadata):
+      for i in 0..<4:
+        message[i + 21] = fromPeerIDBytes[i]
     var exitConn = MixExitConnection.new(message)
     await mixProto.pHandler(exitConn, protocol)
 
@@ -261,17 +145,17 @@ proc handleMixNodeConnection(
       except CatchableError as e:
         error "Failed to close exit connection: ", err = e.msg
 
-    let
-      endTime = getTime()
-      endTimeNs = toUnixNs(endTime)
-      processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
     when defined(metadata):
+      let
+        endTime = getTime()
+        endTimeNs = toUnixNs(endTime)
+        processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
       let packet = mdDeserialize(metadata[5 ..< 21])
       let log = logFromPacket(
           packet,
           MetadataEvent.Exit, 
-          bytesToHex(myPeerIDBytes),
-          bytesToHex(fromPeerIDBytes),
+          metabytesToHex(myPeerIDBytes),
+          metabytesToHex(fromPeerIDBytes),
           none(string),
           # Moment the packet was received on this hop
           # startTimeNs,
@@ -312,23 +196,23 @@ proc handleMixNodeConnection(
       error "Failed to initialize PeerId", err = error
       return
 
-    let
-      endTime = getTime()
-      endTimeNs = toUnixNs(endTime)
-      processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
-      toPeerID = shortLog(peerId)
-    let toPeerIDBytes = toPeerId[6..< 10].mapIt(cast[byte](it))
-    let myPeerIDBytes = myPeerId[6..< 10].mapIt(cast[byte](it))
-
-
     when defined(metadata):
+      let
+        endTime = getTime()
+        endTimeNs = toUnixNs(endTime)
+        processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
+        toPeerID = shortLog(peerId)
+      let toPeerIDBytes = toPeerId[6..< 10].mapIt(cast[byte](it))
+      let myPeerIDBytes = myPeerId[6..< 10].mapIt(cast[byte](it))
+
+
       let packet = mdDeserialize(metadata[5 ..< 21])
       let log = logFromPacket(
           packet,
           MetadataEvent.Success, 
-          bytesToHex(myPeerIDBytes),
-          bytesToHex(fromPeerIDBytes),
-          some(bytesToHex(toPeerIDBytes)),
+          metabytesToHex(myPeerIDBytes),
+          metabytesToHex(fromPeerIDBytes),
+          some(metabytesToHex(toPeerIDBytes)),
           # Moment the packet was received on this hop
           # startTimeNs,
           # # Moment the packet was handled/forwarded on this hop
@@ -455,26 +339,26 @@ proc anonymizeLocalProtocolSend*(
     error "Failed to initialize my PeerId", err = error
     return
 
-  let
-    orig = uint64.fromBytesLE(msg[5 ..< 13])
-    # whats happening bytes 8..13
-    msgid = uint64.fromBytesLE(msg[13 ..< 21])
-    toPeerID = shortLog(firstMixPeerId)
-    myPeerId = shortLog(ownPeerId)
-    endTime = getTime()
-    endTimeNs = toUnixNs(endTime)
-    processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
-    toPeerIDBytes = toPeerId[6..< 10].mapIt(cast[byte](it))
-    myPeerIDBytes = myPeerId[6..< 10].mapIt(cast[byte](it))
 
   when defined(metadata):
+    let
+      orig = uint64.fromBytesLE(msg[5 ..< 13])
+      # whats happening bytes 8..13
+      msgid = uint64.fromBytesLE(msg[13 ..< 21])
+      toPeerID = shortLog(firstMixPeerId)
+      myPeerId = shortLog(ownPeerId)
+      endTime = getTime()
+      endTimeNs = toUnixNs(endTime)
+      processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
+      toPeerIDBytes = toPeerId[6..< 10].mapIt(cast[byte](it))
+      myPeerIDBytes = myPeerId[6..< 10].mapIt(cast[byte](it))
     let packet = mdDeserialize(msg[5 ..< 21])
     let log = logFromPacket(
         packet,
         MetadataEvent.Send, 
-        bytesToHex(myPeerIDBytes),
+        metabytesToHex(myPeerIDBytes),
         "XXXX",
-        some(bytesToHex(toPeerIDBytes)),
+        some(metabytesToHex(toPeerIDBytes)),
         # Moment the packet was received on this hop
         # startTimeNs,
         # # Moment the packet was handled/forwarded on this hop

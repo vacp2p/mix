@@ -11,7 +11,7 @@ import node
 import json
 import
   mix/[
-    entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol,
+    entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol, metadata,
     utils,
   ]
 import
