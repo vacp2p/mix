@@ -238,7 +238,7 @@ proc handleMixNodeConnection(
 
     var (message, protocol) = getMixMessage(deserializedResult)
     trace "# Received: ", receiver = multiAddr, message = message
-    info "bytes", bytes = hexToBytes(message)
+    info "bytes", bytes = bytesToHex(message)
     for i in 0..<4:
       message[i + 21] = fromPeerIDBytes[i]
     var exitConn = MixExitConnection.new(message)
