@@ -138,14 +138,6 @@ proc handleMixNodeConnection(
       for i in 0..<3:
         message[i + 19] = myPeerIDBytes[i+1]
         message[i + 22] = fromPeerIDBytes[i+1]
-    var exitConn = MixExitConnection.new(message)
-    await mixProto.pHandler(exitConn, protocol)
-
-    if exitConn != nil:
-      try:
-        await exitConn.close()
-      except CatchableError as e:
-        error "Failed to close exit connection: ", err = e.msg
     when defined(metadata):
       let
         endTime = getTime()
@@ -154,7 +146,7 @@ proc handleMixNodeConnection(
       let packet = mdDeserialize(metadata[5 ..< 21])
       let log = logFromPacket(
           packet,
-          MetadataEvent.Exit, 
+          MetadataEvent.Exiting, 
           metabytesToHex(myPeerIDBytes),
           metabytesToHex(fromPeerIDBytes),
           none(string),
@@ -165,6 +157,14 @@ proc handleMixNodeConnection(
           none(JsonNode)
       )
       echo metaDataLogStr(log)
+    var exitConn = MixExitConnection.new(message)
+    await mixProto.pHandler(exitConn, protocol)
+
+    if exitConn != nil:
+      try:
+        await exitConn.close()
+      except CatchableError as e:
+        error "Failed to close exit connection: ", err = e.msg
 
   of Success:
     # Add delay

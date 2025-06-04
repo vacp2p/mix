@@ -19,7 +19,7 @@ type MetadataEvent* = enum
   Publish
   Send
   Success
-  Exit
+  Exiting
   Received
 
 type MetadataLog* = object 
