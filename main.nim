@@ -235,13 +235,6 @@ proc main() {.async.} =
   )
 
   proc messageHandler(topic: string, data: seq[byte]) {.async.} =
-    func byteToHex(b: byte): string = 
-      b.toHex(2)
-    func bytesToHex(data: seq[byte]): string = 
-      data.map(byteToHex).join("")
-    if data.len < 16:
-      warn "Message too short"
-      return
 
     let
       timestampNs = uint64.fromBytesLE(data[0 ..< 8])
@@ -253,15 +246,16 @@ proc main() {.async.} =
       now = getTime()
       nsnow = now.toUnix().int64 * 1_000_000_000 + times.nanosecond(now).int64
       delay = recvTime - sentDate
-      fromPeerIdBytes = data[16..<20]
+      myPeerIdBytes = data[14..<17]
+      fromPeerIdBytes = data[17..<20]
 
     if defined(metadata):
       let packet = mdDeserialize(data[0 ..< 16])
       let log = logFromPacket(
           packet,
           MetadataEvent.Received, 
-          "me",
-          bytesToHex(fromPeerIdBytes),
+          metabytesToHex(myPeerIdBytes),
+          metabytesToHex(fromPeerIdBytes),
           none(string),
           0,
           cast[uint64](nsnow),

@@ -134,8 +134,10 @@ proc handleMixNodeConnection(
     var (message, protocol) = getMixMessage(deserializedResult)
     trace "# Received: ", receiver = multiAddr, message = message
     when defined(metadata):
-      for i in 0..<4:
-        message[i + 21] = fromPeerIDBytes[i]
+      # can write up to 25th byte (idx 24)
+      for i in 0..<3:
+        message[i + 19] = myPeerIDBytes[i+1]
+        message[i + 22] = fromPeerIDBytes[i+1]
     var exitConn = MixExitConnection.new(message)
     await mixProto.pHandler(exitConn, protocol)
 
@@ -144,7 +146,6 @@ proc handleMixNodeConnection(
         await exitConn.close()
       except CatchableError as e:
         error "Failed to close exit connection: ", err = e.msg
-
     when defined(metadata):
       let
         endTime = getTime()
