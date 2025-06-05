@@ -24,7 +24,6 @@ type MetadataLog* = object
   fromId*: string
   toId*: Option[string]
   msgId*: uint64
-  # sentTs*: uint64
   # Moment the packet was received on this hop
   entryTs*: uint64
   # Moment the packet was handled/forwarded on this hop
@@ -34,7 +33,6 @@ type MetadataLog* = object
 
 # piggybacking over the top of sphinx
 type MetadataPacket* = object
-  # genesisTs*: uint64
   msgId*: uint64
 
 
