@@ -9,6 +9,7 @@ requires "ggplotnim"
 requires "stew >= 0.4.0"
 requires "chronos >= 4.0.3"
 requires "https://github.com/vacp2p/nim-libp2p#gossipsub-custom-conn"
+
 requires "nim >= 2.0.8"
 requires "nimcrypto >= 0.6.0"
 requires "serialization >= 0.2.2"
