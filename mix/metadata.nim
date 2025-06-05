@@ -10,10 +10,6 @@ when not defined(metadata):
 
 import std/json
 
-func metabyteToHex*(b: byte): string = 
-  b.toHex(2)
-func metabytesToHex*(data: seq[byte]): string = 
-  data.map(metabyteToHex).join("")
 
 type MetadataEvent* = enum
   Publish
@@ -61,7 +57,6 @@ proc logFromPacket*(
     fromId: fromId,
     toId: toId,
     msgId: packet.msgId,
-    # sentTs: packet.sentAt,
     # Moment the packet was received on this hop
     entryTs: entryTs, #entryTs,
     # Moment the packet was handled/forwarded on this hop
@@ -73,19 +68,12 @@ proc logFromPacket*(
 
 proc mdSerialize*(metadata: MetadataPacket): seq[byte] =
     var res: seq[byte]
-    # res.add(toBytesLE(uint64(metadata.sentAt)))
     res.add(toBytesLE(metadata.msgId))
-    # res.add(metadata.senderPeer)
     return res
 
 proc mdDeserialize*(data: seq[byte]): MetadataPacket =
   doAssert(data.len == 16, fmt("only deser length of 16: {data}"))
-
-  # let sentAt = uint64.fromBytesLE(data[0 ..< 8])
   let msgid = uint64.fromBytesLE(data[0 ..< 8])
-  # var sender: array[2, byte]
-  # sender[0] = data[16]
-  # sender[1] = data[17]
   MetadataPacket( msgId: msgid)
 
 proc leftTruncate(s: string, length: int): string =
@@ -94,24 +82,20 @@ proc leftTruncate(s: string, length: int): string =
   else:
     return s
 
-proc metaDataLogStr*(md: MetadataLog): string = 
-  # var frmIdStr: string 
-  # if md.fromId.isSome():
-  #   frmIdStr = $(md.toId.get())
-  # else:
-  #   frmIdStr = "None"
+proc `$`*(md: MetadataLog): string = 
 
-  var toIdStr: string 
+  var toIdStr: string
   if md.toId.isSome():
     toIdStr = $(md.toId.get())
   else:
     toIdStr = "None"
-
+ 
   var extraStr: string
   if md.extras.isSome():
     extraStr = $(md.extras.get())
   else:
-    extraStr = "None"
+    extraStr = "None" 
+
   fmt"event: {md.event:<8}|myId: {leftTruncate(md.myId, 6):<6}|fromId: {leftTruncate(md.fromId, 6):<6}|toId: {leftTruncate(toIdStr, 6):<6}|msgId: {md.msgId:<3}|entryTs: {leftTruncate($md.entryTs, 10):<10}| exitTs: {leftTruncate($md.exitTs, 10):<10}| extras: {extraStr}"
 
 proc metaDataLogJson*(md: MetadataLog): JsonNode = 

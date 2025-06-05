@@ -261,7 +261,7 @@ proc main() {.async.} =
           cast[uint64](nsnow),
           none(JsonNode)
       )
-      echo metaDataLogStr(log)
+      echo $log
 
 
   proc messageValidator(

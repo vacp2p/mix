@@ -19,6 +19,10 @@ It provides a basis for future development and invites community experimentation
 - **Random Path Selection**: Routes messages through randomly selected mix nodes.
 - **Pluggable Components**: Allows for customizable spam protection, peer discovery, and incentivization mechanisms.
 
+## Features in developement
+
+- **metadata and logging**: Allows data to be piggy-backed on top of a sphinx packet in plain-text for development purposes. Activate with `-d:metadata`
+
 ## Installation
 
 1. **Clone the repository**

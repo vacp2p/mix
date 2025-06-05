@@ -1,6 +1,6 @@
 import chronicles, chronos, sequtils, strutils, os
 import std/[strformat, sysrand]
-import stew/endians2
+import stew/[endians2, byteutils]
 import
   ./[
     config, curve25519, exit_connection, fragmentation, mix_message, mix_node, protocol,
@@ -19,7 +19,6 @@ when defined(metadata):
 proc toUnixNs(t: Time): int64 =
   t.toUnix().int64 * 1_000_000_000 + times.nanosecond(t).int64
 const MixProtocolID* = "/mix/1.0.0"
-# nim c -d:metadata ...
 
 type MixProtocol* = ref object of LPProtocol
   mixNodeInfo: MixNodeInfo
@@ -147,16 +146,14 @@ proc handleMixNodeConnection(
       let log = logFromPacket(
           packet,
           MetadataEvent.Exiting, 
-          metabytesToHex(myPeerIDBytes),
-          metabytesToHex(fromPeerIDBytes),
+          byteutils.toHex(myPeerIDBytes),
+          byteutils.toHex(fromPeerIDBytes),
           none(string),
-          # Moment the packet was received on this hop
           cast[uint64](startTimeNs),
-          # # Moment the packet was handled/forwarded on this hop
           cast[uint64](endTimeNs),
           none(JsonNode)
       )
-      echo metaDataLogStr(log)
+      echo $log
     var exitConn = MixExitConnection.new(message)
     await mixProto.pHandler(exitConn, protocol)
 
@@ -210,16 +207,14 @@ proc handleMixNodeConnection(
       let log = logFromPacket(
           packet,
           MetadataEvent.Success, 
-          metabytesToHex(myPeerIDBytes),
-          metabytesToHex(fromPeerIDBytes),
-          some(metabytesToHex(toPeerIDBytes)),
-          # Moment the packet was received on this hop
+          byteutils.toHex(myPeerIDBytes),
+          byteutils.toHex(fromPeerIDBytes),
+          some(byteutils.toHex(toPeerIDBytes)),
           cast[uint64](startTimeNs),
-          # # Moment the packet was handled/forwarded on this hop
           cast[uint64](endTimeNs),
           none(JsonNode)
       )
-      echo metaDataLogStr(log)
+      echo $log
     var nextHopConn: Connection
     try:
       nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
@@ -355,16 +350,14 @@ proc anonymizeLocalProtocolSend*(
     let log = logFromPacket(
         packet,
         MetadataEvent.Send, 
-        metabytesToHex(myPeerIDBytes),
+        byteutils.toHex(myPeerIDBytes),
         "XXXX",
-        some(metabytesToHex(toPeerIDBytes)),
-        # Moment the packet was received on this hop
+        some(byteutils.toHex(toPeerIDBytes)),
         cast[uint64](startTimeNs),
-        # # Moment the packet was handled/forwarded on this hop
         cast[uint64](endTimeNs),
         none(JsonNode)
     )
-    echo metaDataLogStr(log)
+    echo $log
 
   var nextHopConn: Connection
   try:
