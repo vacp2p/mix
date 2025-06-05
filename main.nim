@@ -11,7 +11,7 @@ import node
 import json
 import
   mix/[
-    entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol,
+    entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol, metadata,
     utils,
   ]
 import
@@ -235,9 +235,6 @@ proc main() {.async.} =
   )
 
   proc messageHandler(topic: string, data: seq[byte]) {.async.} =
-    if data.len < 16:
-      warn "Message too short"
-      return
 
     let
       timestampNs = uint64.fromBytesLE(data[0 ..< 8])
@@ -245,10 +242,27 @@ proc main() {.async.} =
       sentMoment = nanoseconds(int64(timestampNs))
       sentNanosecs = nanoseconds(sentMoment - seconds(sentMoment.seconds))
       sentDate = initTime(sentMoment.seconds, sentNanosecs)
-      recvTime = getTime()
+      recvTime = getTime()  
+      now = getTime()
+      nsnow = now.toUnix().int64 * 1_000_000_000 + times.nanosecond(now).int64
       delay = recvTime - sentDate
+      myPeerIdBytes = data[14..<17]
+      fromPeerIdBytes = data[17..<20]
 
-    info "Received message", msgId = msgId, sentAt = timestampNs, delayMs = delay.inMilliseconds()
+    if defined(metadata):
+      let packet = mdDeserialize(data[0 ..< 16])
+      let log = logFromPacket(
+          packet,
+          MetadataEvent.Received, 
+          metabytesToHex(myPeerIdBytes),
+          metabytesToHex(fromPeerIdBytes),
+          none(string),
+          0,
+          cast[uint64](nsnow),
+          none(JsonNode)
+      )
+      echo $log
+
 
   proc messageValidator(
       topic: string, msg: Message
@@ -306,18 +320,20 @@ proc main() {.async.} =
 
   info "Publishing turn", id = myId
 
-  let count = 50
-  for msg in high(int) - count ..< high(int): #client.param(int, "message_count"):
+  let count = 26
+  for msg in 0 .. count: #client.param(int, "message_count"):
     if msg mod publisherCount == myId:
       # info "Sending message", time = times.getTime()
       let now = getTime()
       let timestampNs = now.toUnix().int64 * 1_000_000_000 + times.nanosecond(now).int64
       let msgId = uint64(msg)
 
-      var payload: seq[byte]
-      payload.add(toBytesLE(uint64(timestampNs)))
-      payload.add(toBytesLE(msgId))
-      payload.add(newSeq[byte](msg_size - 16))  # Fill the rest with padding
+
+      var payload: seq[byte] = @[]
+      if defined(metadata):
+        payload.add(mdSerialize(MetadataPacket(msgId: msgId)))
+        
+      payload.add(newSeq[byte](msg_size - payload.len))  # Fill the rest with padding
 
       info "Publishing", msgId = msgId, timestamp = timestampNs
 
