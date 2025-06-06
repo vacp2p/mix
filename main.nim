@@ -197,7 +197,7 @@ proc main() {.async.} =
       anonymize = true,
       customConnCallbacks = some(
         CustomConnectionCallbacks(
-          customConnCreationCB: mixConn, peerSelectionCB: mixPeerSelect
+          customConnCreationCB: mixConn, customPeerSelectionCB: mixPeerSelect
         )
       ),
     )
@@ -254,8 +254,8 @@ proc main() {.async.} =
       let log = logFromPacket(
           packet,
           MetadataEvent.Received, 
-          metabytesToHex(myPeerIdBytes),
-          metabytesToHex(fromPeerIdBytes),
+          byteutils.toHex(myPeerIdBytes),
+          byteutils.toHex(fromPeerIdBytes),
           none(string),
           0,
           cast[uint64](nsnow),
