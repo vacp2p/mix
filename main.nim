@@ -127,7 +127,7 @@ proc startMetricsServer(
 
 const uidLen = 32
 
-func byteToHex(b: byte): string = 
+func byteToHex(b: byte): string =
   b.toHex(2)
 
 proc main() {.async.} =
@@ -248,7 +248,8 @@ proc main() {.async.} =
       recvTime = getTime()
       delay = recvTime - sentDate
 
-    info "Received message", msgId = msgId, sentAt = timestampNs, delayMs = delay.inMilliseconds()
+    info "Received message",
+      msgId = msgId, sentAt = timestampNs, delayMs = delay.inMilliseconds()
 
   proc messageValidator(
       topic: string, msg: Message
@@ -317,7 +318,7 @@ proc main() {.async.} =
       var payload: seq[byte]
       payload.add(toBytesLE(uint64(timestampNs)))
       payload.add(toBytesLE(msgId))
-      payload.add(newSeq[byte](msg_size - 16))  # Fill the rest with padding
+      payload.add(newSeq[byte](msg_size - 16)) # Fill the rest with padding
 
       info "Publishing", msgId = msgId, timestamp = timestampNs
 

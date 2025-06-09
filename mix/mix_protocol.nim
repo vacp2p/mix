@@ -62,7 +62,6 @@ proc toUnixNs(t: Time): int64 =
 # func bytesToHex(data: seq[byte]): string = 
 #   data.map(byteToHex).join(" ")
 
-
 proc handleMixNodeConnection(
     mixProto: MixProtocol, conn: Connection
 ) {.async: (raises: [CancelledError]).} =
@@ -104,7 +103,6 @@ proc handleMixNodeConnection(
     error "Failed to initialize my PeerId", err = error
     return
 
-
   let
     orig = uint64.fromBytesLE(metadata[5 ..< 13])
     msgid = uint64.fromBytesLE(metadata[13 ..< 21])
@@ -144,9 +142,15 @@ proc handleMixNodeConnection(
       endTime = getTime()
       endTimeNs = toUnixNs(endTime)
       processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
-    
-    info "Exit", msgid=msgid, fromPeerID=fromPeerID, toPeerID="None", myPeerId=myPeerId, orig=orig, current=startTimeNs, procDelay=processingDelay
 
+    info "Exit",
+      msgid = msgid,
+      fromPeerID = fromPeerID,
+      toPeerID = "None",
+      myPeerId = myPeerId,
+      orig = orig,
+      current = startTimeNs,
+      procDelay = processingDelay
   of Success:
     # Add delay
     let delayMillis = (delay[0].int shl 8) or delay[1].int
@@ -183,7 +187,14 @@ proc handleMixNodeConnection(
       processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
       toPeerID = shortLog(peerId)
 
-    info "Intermediate", msgid=msgid, fromPeerID=fromPeerID, toPeerID=toPeerID, myPeerId=myPeerId, orig=orig, current=startTimeNs, procDelay=processingDelay
+    info "Intermediate",
+      msgid = msgid,
+      fromPeerID = fromPeerID,
+      toPeerID = toPeerID,
+      myPeerId = myPeerId,
+      orig = orig,
+      current = startTimeNs,
+      procDelay = processingDelay
 
     var nextHopConn: Connection
     try:
@@ -313,7 +324,14 @@ proc anonymizeLocalProtocolSend*(
     endTimeNs = toUnixNs(endTime)
     processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
 
-  info "Sender", msgid=msgid, fromPeerID="None", toPeerID=toPeerID, myPeerId=myPeerId, orig=orig, current=startTimeNs, procDelay=processingDelay
+  info "Sender",
+    msgid = msgid,
+    fromPeerID = "None",
+    toPeerID = toPeerID,
+    myPeerId = myPeerId,
+    orig = orig,
+    current = startTimeNs,
+    procDelay = processingDelay
 
   var nextHopConn: Connection
   try:

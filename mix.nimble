@@ -1,4 +1,4 @@
-packageName   = "mix"
+packageName = "mix"
 version = "0.1.0"
 author = "Akshaya"
 description = "A custom Mix Protocol"
