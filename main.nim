@@ -20,7 +20,7 @@ import
     crypto/secp,
     multiaddress,
     builders,
-    muxers/mplex/lpchannel,
+    muxers/yamux/yamux,
     protocols/pubsub/gossipsub,
     protocols/pubsub/pubsubpeer,
     protocols/pubsub/rpc/messages,
@@ -58,7 +58,7 @@ proc createSwitch(id, port: int, isMix: bool, filePath: string): Switch =
       .withPrivateKey(PrivateKey(scheme: Secp256k1, skkey: libp2pPrivKey))
       .withAddress(multiAddr)
       .withRng(crypto.newRng())
-      .withMplex()
+      .withYamux()
       .withTcpTransport()
       .withNoise()
       .build()
