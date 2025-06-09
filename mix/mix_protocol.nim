@@ -1,6 +1,6 @@
 import chronicles, chronos, sequtils, strutils, os
 import std/[strformat, sysrand]
-import stew/[endians2, byteutils]
+import stew/endians2
 import
   ./[
     config, curve25519, exit_connection, fragmentation, mix_message, mix_node, protocol,
@@ -12,12 +12,6 @@ import
     [protocols/ping, protocols/protocol, stream/connection, stream/lpstream, switch]
 from times import Time, getTime, toUnix, fromUnix, `-`, initTime, `$`, inMilliseconds
 
-when defined(metadata):
-  import metadata
-  import json
-
-proc toUnixNs(t: Time): int64 =
-  t.toUnix().int64 * 1_000_000_000 + times.nanosecond(t).int64
 const MixProtocolID* = "/mix/1.0.0"
 
 type MixProtocol* = ref object of LPProtocol
@@ -60,6 +54,13 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   let value = cast[uint64](bytes)
   return ok(int(value mod uint64(max)))
 
+proc toUnixNs(t: Time): int64 =
+  t.toUnix().int64 * 1_000_000_000 + times.nanosecond(t).int64
+
+# func byteToHex(b: byte): string = 
+#   b.toHex(2)
+# func bytesToHex(data: seq[byte]): string = 
+#   data.map(byteToHex).join(" ")
 
 
 proc handleMixNodeConnection(
@@ -81,7 +82,6 @@ proc handleMixNodeConnection(
         await conn.close()
       except CatchableError as e:
         error "Failed to close incoming stream: ", err = e.msg
-  let fromPeerIDBytes = fromPeerId[6..< 10].mapIt(cast[byte](it))
 
   let
     startTime = getTime()
@@ -105,12 +105,10 @@ proc handleMixNodeConnection(
     return
 
 
-  when defined(metadata):
-    let
-      orig = uint64.fromBytesLE(metadata[5 ..< 13])
-      msgid = uint64.fromBytesLE(metadata[13 ..< 21])
-      myPeerId = shortLog(ownPeerId)
-      myPeerIDBytes = myPeerId[6..< 10].mapIt(cast[byte](it))
+  let
+    orig = uint64.fromBytesLE(metadata[5 ..< 13])
+    msgid = uint64.fromBytesLE(metadata[13 ..< 21])
+    myPeerId = shortLog(ownPeerId)
   case status
   of Exit:
     if (nextHop != Hop()) or (delay != @[]):
@@ -130,31 +128,10 @@ proc handleMixNodeConnection(
       error "Deserialization failed", err = error
       return
 
-    var (message, protocol) = getMixMessage(deserializedResult)
+    let
+      (message, protocol) = getMixMessage(deserializedResult)
+      exitConn = MixExitConnection.new(message)
     trace "# Received: ", receiver = multiAddr, message = message
-    when defined(metadata):
-      # can write up to 25th byte (idx 24)
-      for i in 0..<3:
-        message[i + 19] = myPeerIDBytes[i+1]
-        message[i + 22] = fromPeerIDBytes[i+1]
-    when defined(metadata):
-      let
-        endTime = getTime()
-        endTimeNs = toUnixNs(endTime)
-        processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
-      let packet = mdDeserialize(metadata[5 ..< 21])
-      let log = logFromPacket(
-          packet,
-          MetadataEvent.Exiting, 
-          byteutils.toHex(myPeerIDBytes),
-          byteutils.toHex(fromPeerIDBytes),
-          none(string),
-          cast[uint64](startTimeNs),
-          cast[uint64](endTimeNs),
-          none(JsonNode)
-      )
-      echo $log
-    var exitConn = MixExitConnection.new(message)
     await mixProto.pHandler(exitConn, protocol)
 
     if exitConn != nil:
@@ -162,6 +139,13 @@ proc handleMixNodeConnection(
         await exitConn.close()
       except CatchableError as e:
         error "Failed to close exit connection: ", err = e.msg
+
+    let
+      endTime = getTime()
+      endTimeNs = toUnixNs(endTime)
+      processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
+    
+    info "Exit", msgid=msgid, fromPeerID=fromPeerID, toPeerID="None", myPeerId=myPeerId, orig=orig, current=startTimeNs, procDelay=processingDelay
 
   of Success:
     # Add delay
@@ -193,28 +177,14 @@ proc handleMixNodeConnection(
       error "Failed to initialize PeerId", err = error
       return
 
-    when defined(metadata):
-      let
-        endTime = getTime()
-        endTimeNs = toUnixNs(endTime)
-        processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
-        toPeerID = shortLog(peerId)
-      let toPeerIDBytes = toPeerId[6..< 10].mapIt(cast[byte](it))
-      let myPeerIDBytes = myPeerId[6..< 10].mapIt(cast[byte](it))
+    let
+      endTime = getTime()
+      endTimeNs = toUnixNs(endTime)
+      processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
+      toPeerID = shortLog(peerId)
 
+    info "Intermediate", msgid=msgid, fromPeerID=fromPeerID, toPeerID=toPeerID, myPeerId=myPeerId, orig=orig, current=startTimeNs, procDelay=processingDelay
 
-      let packet = mdDeserialize(metadata[5 ..< 21])
-      let log = logFromPacket(
-          packet,
-          MetadataEvent.Success, 
-          byteutils.toHex(myPeerIDBytes),
-          byteutils.toHex(fromPeerIDBytes),
-          some(byteutils.toHex(toPeerIDBytes)),
-          cast[uint64](startTimeNs),
-          cast[uint64](endTimeNs),
-          none(JsonNode)
-      )
-      echo $log
     var nextHopConn: Connection
     try:
       nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
@@ -333,31 +303,17 @@ proc anonymizeLocalProtocolSend*(
     error "Failed to initialize my PeerId", err = error
     return
 
+  let
+    orig = uint64.fromBytesLE(msg[5 ..< 13])
+    # whats happening bytes 8..13
+    msgid = uint64.fromBytesLE(msg[13 ..< 21])
+    toPeerID = shortLog(firstMixPeerId)
+    myPeerId = shortLog(ownPeerId)
+    endTime = getTime()
+    endTimeNs = toUnixNs(endTime)
+    processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
 
-  when defined(metadata):
-    let
-      orig = uint64.fromBytesLE(msg[5 ..< 13])
-      # whats happening bytes 8..13
-      msgid = uint64.fromBytesLE(msg[13 ..< 21])
-      toPeerID = shortLog(firstMixPeerId)
-      myPeerId = shortLog(ownPeerId)
-      endTime = getTime()
-      endTimeNs = toUnixNs(endTime)
-      processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
-      toPeerIDBytes = toPeerId[6..< 10].mapIt(cast[byte](it))
-      myPeerIDBytes = myPeerId[6..< 10].mapIt(cast[byte](it))
-    let packet = mdDeserialize(msg[5 ..< 21])
-    let log = logFromPacket(
-        packet,
-        MetadataEvent.Send, 
-        byteutils.toHex(myPeerIDBytes),
-        "XXXX",
-        some(byteutils.toHex(toPeerIDBytes)),
-        cast[uint64](startTimeNs),
-        cast[uint64](endTimeNs),
-        none(JsonNode)
-    )
-    echo $log
+  info "Sender", msgid=msgid, fromPeerID="None", toPeerID=toPeerID, myPeerId=myPeerId, orig=orig, current=startTimeNs, procDelay=processingDelay
 
   var nextHopConn: Connection
   try:
