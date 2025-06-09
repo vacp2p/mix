@@ -197,7 +197,7 @@ proc main() {.async.} =
       anonymize = true,
       customConnCallbacks = some(
         CustomConnectionCallbacks(
-          customConnCreationCB: mixConn, peerSelectionCB: mixPeerSelect
+          customConnCreationCB: mixConn, customPeerSelectionCB: mixPeerSelect
         )
       ),
     )
