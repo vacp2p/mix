@@ -70,7 +70,7 @@ proc handleMixNodeConnection(
     metadata: seq[byte]
     fromPeerID: string
   try:
-    metadata = await conn.readLp(21)
+    metadata = await conn.readLp(16)
     receivedBytes = await conn.readLp(packetSize)
     fromPeerID = shortLog(conn.peerId)
   except Exception as e:
@@ -104,8 +104,8 @@ proc handleMixNodeConnection(
     return
 
   let
-    orig = uint64.fromBytesLE(metadata[5 ..< 13])
-    msgid = uint64.fromBytesLE(metadata[13 ..< 21])
+    orig = uint64.fromBytesLE(metadata[0 ..< 8])
+    msgid = uint64.fromBytesLE(metadata[8 ..< 16])
     myPeerId = shortLog(ownPeerId)
   case status
   of Exit:
@@ -315,9 +315,9 @@ proc anonymizeLocalProtocolSend*(
     return
 
   let
-    orig = uint64.fromBytesLE(msg[5 ..< 13])
+    orig = uint64.fromBytesLE(msg[8 ..< 16])
     # whats happening bytes 8..13
-    msgid = uint64.fromBytesLE(msg[13 ..< 21])
+    msgid = uint64.fromBytesLE(msg[16 ..< 24])
     toPeerID = shortLog(firstMixPeerId)
     myPeerId = shortLog(ownPeerId)
     endTime = getTime()
@@ -337,7 +337,7 @@ proc anonymizeLocalProtocolSend*(
   try:
     nextHopConn =
       await mixProto.switch.dial(firstMixPeerId, @[firstMixAddr], @[MixProtocolID])
-    await nextHopConn.writeLp(msg[0 ..< 21])
+    await nextHopConn.writeLp(msg[8 ..< 24])
     await nextHopConn.writeLp(sphinxPacket)
   except CatchableError as e:
     error "Failed to send message to next hop: ", err = e.msg
