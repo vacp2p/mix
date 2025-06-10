@@ -308,7 +308,7 @@ proc main() {.async.} =
   info "Publishing turn", id = myId
 
   let count = 50
-  for msg in high(int) - count ..< high(int): #client.param(int, "message_count"):
+  for 0..<3: #client.param(int, "message_count"):
     if msg mod publisherCount == myId:
       # info "Sending message", time = times.getTime()
       let now = getTime()
