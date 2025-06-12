@@ -127,7 +127,7 @@ func byteToHex(b: byte): string =
 
 proc main() {.async.} =
   let args = commandLineParams()
-  echo "args: {id} {count} {rate} {size} {pub_count} {mix_count} {conn to}"
+  echo "args: {id} {count} {rate} {size} {pub_count} {conn to}"
   randomize()
 
   let 
@@ -144,8 +144,8 @@ proc main() {.async.} =
     node_count = parseInt(args[1]) # parseInt(getEnv("NODES"))
     msg_rate = parseInt(args[2]) # parseInt(getEnv("MSGRATE"))
     msg_size = parseInt(args[3]) # parseInt(getEnv("MSGSIZE"))
-    publisherCount = parseInt(args[4]) # parseInt(getEnv("PUBLISHERS"))
-    mixCount = publisherCount # publisherCount # Publishers will be the mix nodes for now
+    publisherCount = 1 # parseInt(getEnv("PUBLISHERS"))
+    mixCount = node_count # publisherCount # Publishers will be the mix nodes for now
     connectTo = parseInt(args[5]) # parseInt(getEnv("CONNECTTO"))
     filePath = "./infos"
     rng = libp2p.newRng()
@@ -156,13 +156,12 @@ proc main() {.async.} =
 
 
   let
-    isPublisher = myId < publisherCount
+    isPublisher = myId < mixCount
       # [0..<publisherCount] contains all the publishers
-    isMix = isPublisher # Publishers will be the mix nodes for now
+    isMix = true # Publishers will be the mix nodes for now
     myport = 50000 + myId
     switch = createSwitch(myId, myport, isMix, filePath)
 
-  info "port", pt = myport
 
   await sleepAsync(5.seconds)
 
@@ -218,7 +217,7 @@ proc main() {.async.} =
     )
 
   # Metrics
-  info "Starting metrics HTTP server"
+  # info "Starting metrics HTTP server"
   let metricsServer = startMetricsServer(parseIpAddress("0.0.0.0"), Port(8008))
 
   gossipSub.parameters.floodPublish = true
@@ -246,6 +245,9 @@ proc main() {.async.} =
 
     let
       timestampNs = uint64.fromBytesLE(data[0 ..< 8])
+      secs: int64 = cast[int64](timestampNs).div(1_000_000_000)
+      nanos = times.NanosecondRange(cast[int64](timestampNs).mod(1_000_000_000))
+      time = times.initTime(secs, nanos)
       msgId = uint64.fromBytesLE(data[8 ..< 16])
       sentMoment = nanoseconds(int64(timestampNs))
       sentNanosecs = nanoseconds(sentMoment - seconds(sentMoment.seconds))
@@ -254,7 +256,7 @@ proc main() {.async.} =
       delay = recvTime - sentDate
 
     info "Received message",
-      msgId = msgId, sentAt = timestampNs, delayMs = delay.inMilliseconds()
+      msgId = msgId, sentAt = times.format(time, "mm:ss.fff")
 
   proc messageValidator(
       topic: string, msg: Message
@@ -266,9 +268,9 @@ proc main() {.async.} =
   switch.mount(gossipSub)
   await switch.start()
 
-  info "Listening", addrs = switch.peerInfo.addrs
+  # info "Listening", addrs = switch.peerInfo.addrs
 
-  let sleeptime = 20
+  let sleeptime = 10
   info "Waiting for: ", time = sleeptime
 
   await sleepAsync(sleeptime.seconds)
@@ -283,12 +285,12 @@ proc main() {.async.} =
     let pubInfo = readPubInfoFromFile(i, filePath / fmt"libp2pPubInfo").expect(
         "should be able to read pubinfo"
       )
-    echo fmt "{pubInfo}"
     let (multiAddr, _) = getPubInfo(pubInfo)
     let ma = MultiAddress.init(multiAddr).expect("should be a multiaddr")
     addrs.add ma
 
   rng.shuffle(addrs)
+  var conn_count = 0
   var index = 0
   while true:
     if connected >= connectTo:
@@ -300,21 +302,22 @@ proc main() {.async.} =
           await switch.connect(addrs[index], allowUnknownPeerId = true).wait(20.seconds)
         connected.inc()
         index.inc()
-        info "Connected!"
+        conn_count += 1
         break
       except CatchableError as exc:
         error "Failed to dial", err = exc.msg
         info "Waiting 15 seconds..."
         await sleepAsync(15.seconds)
+  doAssert(conn_count == connectTo)
 
   await sleepAsync(2.seconds)
 
-  info "Mesh size", meshSize = gossipSub.mesh.getOrDefault("test").len
+  # info "Mesh size", meshSize = gossipSub.mesh.getOrDefault("test").len
 
-  info "Publishing turn", id = myId
+  # info "Publishing turn", id = myId
 
   let count = 2
-  for msg in 0 ..< 2: #client.param(int, "message_count"):
+  for msg in 0 ..< 1: #client.param(int, "message_count"):
     if msg mod publisherCount == myId:
       # info "Sending message", time = times.getTime()
       let now = getTime()
@@ -333,5 +336,7 @@ proc main() {.async.} =
         error "publish fail", res = pub_res
         doAssert(pub_res > 0)
       await sleepAsync(msg_rate)
+  await sleepAsync(10.seconds())
+  info "Done", node=myId
 
 waitFor(main())

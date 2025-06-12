@@ -1,3 +1,9 @@
+# A node in a swarm. for a 5 node swarm, with just the one publisher:
+#[
+nim c main.nim 
+rm -rf infos
+^bash -c 'for i in {0..4}; do alacritty -e bash -c "./main $i 5 20 50 1 4; echo Done. Press enter to close...; read" & done'
+]#
 import chronicles, chronos, sequtils, strutils, os
 import std/[strformat, sysrand]
 import stew/endians2
@@ -54,8 +60,6 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   let value = cast[uint64](bytes)
   return ok(int(value mod uint64(max)))
 
-proc toUnixNs(t: Time): int64 =
-  t.toUnix().int64 * 1_000_000_000 + times.nanosecond(t).int64
 
 # func byteToHex(b: byte): string = 
 #   b.toHex(2)
@@ -84,7 +88,6 @@ proc handleMixNodeConnection(
 
   let
     startTime = getTime()
-    startTimeNs = toUnixNs(startTime)
 
   if metadata.len == 0 or receivedBytes.len == 0:
     return # No data, end of stream
@@ -107,6 +110,7 @@ proc handleMixNodeConnection(
     orig = uint64.fromBytesLE(metadata[0 ..< 8])
     msgid = uint64.fromBytesLE(metadata[8 ..< 16])
     myPeerId = shortLog(ownPeerId)
+  await sleepAsync(3.seconds())
   case status
   of Exit:
     if (nextHop != Hop()) or (delay != @[]):
@@ -138,10 +142,6 @@ proc handleMixNodeConnection(
       except CatchableError as e:
         error "Failed to close exit connection: ", err = e.msg
 
-    let
-      endTime = getTime()
-      endTimeNs = toUnixNs(endTime)
-      processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
 
     info "Exit",
       msgid = msgid,
@@ -149,8 +149,7 @@ proc handleMixNodeConnection(
       toPeerID = "None",
       myPeerId = myPeerId,
       orig = orig,
-      current = startTimeNs,
-      procDelay = processingDelay
+      current = times.format(startTime, "mm:ss.fff")
   of Success:
     # Add delay
     let delayMillis = (delay[0].int shl 8) or delay[1].int
@@ -183,8 +182,6 @@ proc handleMixNodeConnection(
 
     let
       endTime = getTime()
-      endTimeNs = toUnixNs(endTime)
-      processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
       toPeerID = shortLog(peerId)
 
     info "Intermediate",
@@ -193,8 +190,7 @@ proc handleMixNodeConnection(
       toPeerID = toPeerID,
       myPeerId = myPeerId,
       orig = orig,
-      current = startTimeNs,
-      procDelay = processingDelay
+      current = times.format(startTime, "mm:ss.fff")
 
     var nextHopConn: Connection
     try:
@@ -223,7 +219,6 @@ proc anonymizeLocalProtocolSend*(
 ) {.async.} =
   let
     startTime = getTime()
-    startTimeNs = toUnixNs(startTime)
 
   let mixMsg = initMixMessage(msg, proto)
 
@@ -321,8 +316,6 @@ proc anonymizeLocalProtocolSend*(
     toPeerID = shortLog(firstMixPeerId)
     myPeerId = shortLog(ownPeerId)
     endTime = getTime()
-    endTimeNs = toUnixNs(endTime)
-    processingDelay = float(endTimeNs - startTimeNs) / 1_000_000.0
 
   info "Sender",
     msgid = msgid,
@@ -330,8 +323,7 @@ proc anonymizeLocalProtocolSend*(
     toPeerID = toPeerID,
     myPeerId = myPeerId,
     orig = orig,
-    current = startTimeNs,
-    procDelay = processingDelay
+    current = times.format(startTime, "mm:ss.fff")
 
   var nextHopConn: Connection
   try:
