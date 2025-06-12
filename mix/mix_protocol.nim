@@ -1,4 +1,4 @@
-# A node in a swarm. for a 5 node swarm, with just the one publisher:
+# A node in a swarm. for a 5 node swarm, with just the one publisher (using nushell):
 #[
 nim c main.nim 
 rm -rf infos
@@ -60,11 +60,9 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   let value = cast[uint64](bytes)
   return ok(int(value mod uint64(max)))
 
+proc toUnixNs(t: Time): int64 =
+  t.toUnix().int64 * 1_000_000_000 + times.nanosecond(t).int64
 
-# func byteToHex(b: byte): string = 
-#   b.toHex(2)
-# func bytesToHex(data: seq[byte]): string = 
-#   data.map(byteToHex).join(" ")
 
 proc handleMixNodeConnection(
     mixProto: MixProtocol, conn: Connection
@@ -130,9 +128,12 @@ proc handleMixNodeConnection(
       error "Deserialization failed", err = error
       return
 
-    let
-      (message, protocol) = getMixMessage(deserializedResult)
-      exitConn = MixExitConnection.new(message)
+    var (message, protocol) = getMixMessage(deserializedResult)
+    let now = getTime()
+    let nowNs = now.toUnix().int64 * 1_000_000_000 + times.nanosecond(now).int64
+    let now_ref_thing = toBytesLE(uint64(nowNs))
+    message[5..<13] = now_ref_thing
+    let exitConn = MixExitConnection.new(message)
     trace "# Received: ", receiver = multiAddr, message = message
     await mixProto.pHandler(exitConn, protocol)
 

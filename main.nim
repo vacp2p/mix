@@ -249,14 +249,9 @@ proc main() {.async.} =
       nanos = times.NanosecondRange(cast[int64](timestampNs).mod(1_000_000_000))
       time = times.initTime(secs, nanos)
       msgId = uint64.fromBytesLE(data[8 ..< 16])
-      sentMoment = nanoseconds(int64(timestampNs))
-      sentNanosecs = nanoseconds(sentMoment - seconds(sentMoment.seconds))
-      sentDate = initTime(sentMoment.seconds, sentNanosecs)
-      recvTime = getTime()
-      delay = recvTime - sentDate
 
     info "Received message",
-      msgId = msgId, sentAt = times.format(time, "mm:ss.fff")
+      msgId = msgId, exitAt = times.format(time, "mm:ss.fff")
 
   proc messageValidator(
       topic: string, msg: Message
