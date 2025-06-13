@@ -145,16 +145,14 @@ proc handleMixNodeConnection(
 
 
     info "Exit",
-      msgid = msgid,
-      fromPeerID = fromPeerID,
-      toPeerID = "None",
-      myPeerId = myPeerId,
-      orig = orig,
-      current = times.format(startTime, "mm:ss.fff")
+      tm = times.format(now, "mm:ss.fff"),
+      fm = fromPeerID[fromPeerId.len - 2 ..< fromPeerId.len],
+      me = myPeerId[myPeerId.len - 2 ..< myPeerId.len],
+      to = "XX"
   of Success:
     # Add delay
     let delayMillis = (delay[0].int shl 8) or delay[1].int
-    await sleepAsync(milliseconds(delayMillis))
+    # await sleepAsync(milliseconds(delayMillis))
 
     # Forward to next hop
     let nextHopBytes = getHop(nextHop)
@@ -186,12 +184,10 @@ proc handleMixNodeConnection(
       toPeerID = shortLog(peerId)
 
     info "Intermediate",
-      msgid = msgid,
-      fromPeerID = fromPeerID,
-      toPeerID = toPeerID,
-      myPeerId = myPeerId,
-      orig = orig,
-      current = times.format(startTime, "mm:ss.fff")
+      tm = times.format(startTime, "mm:ss.fff"),
+      fm = fromPeerID[fromPeerId.len - 2 ..< fromPeerId.len],
+      me = myPeerId[myPeerId.len - 2 ..< myPeerId.len],
+      to = toPeerID[toPeerID.len - 2 ..< toPeerID.len]
 
     var nextHopConn: Connection
     try:
@@ -319,12 +315,10 @@ proc anonymizeLocalProtocolSend*(
     endTime = getTime()
 
   info "Sender",
-    msgid = msgid,
-    fromPeerID = "None",
-    toPeerID = toPeerID,
-    myPeerId = myPeerId,
-    orig = orig,
-    current = times.format(startTime, "mm:ss.fff")
+    tm = times.format(startTime, "mm:ss.fff"),
+    frm = "XX",
+    me = myPeerId[myPeerId.len - 2 ..< myPeerId.len],
+    to = toPeerID[toPeerID.len - 2 ..< toPeerID.len]
 
   var nextHopConn: Connection
   try:

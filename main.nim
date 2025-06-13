@@ -1,3 +1,8 @@
+#[
+in nu shell run as so (requires alacritty):
+rm -rf infos log-*; ^bash -c 'for i in {0..4}; do alacritty -e bash -c "./main $i 5 20 50 1 4 | tee >(grep INF > log-$i.txt) | grep INF; echo Done. Press enter to close...; read" & done
+^rm previos files                      ^5 nodes     ^make a terminal    ^run                    ^ output info logs to file     ^display info in terminal
+]#
 import chronos, chronicles, hashes, math, sequtils, strutils, tables, os
 import nimcrypto/sysrand
 import metrics, metrics/chronos_httpserver
@@ -250,8 +255,8 @@ proc main() {.async.} =
       time = times.initTime(secs, nanos)
       msgId = uint64.fromBytesLE(data[8 ..< 16])
 
-    info "Received message",
-      msgId = msgId, exitAt = times.format(time, "mm:ss.fff")
+    info "Handler",
+      tm = times.format(time, "mm:ss.fff")
 
   proc messageValidator(
       topic: string, msg: Message
@@ -265,7 +270,7 @@ proc main() {.async.} =
 
   # info "Listening", addrs = switch.peerInfo.addrs
 
-  let sleeptime = 10
+  let sleeptime = 2
   info "Waiting for: ", time = sleeptime
 
   await sleepAsync(sleeptime.seconds)
