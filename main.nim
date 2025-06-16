@@ -256,7 +256,7 @@ proc main() {.async.} =
       msgId = uint64.fromBytesLE(data[8 ..< 16])
 
     info "Handler",
-      tm = times.format(time, "mm:ss.fff")
+      nw = times.format(getTime(), "mm:ss.ffffff"), tm=times.format(time, "mm:ss.ffffff")
 
   proc messageValidator(
       topic: string, msg: Message

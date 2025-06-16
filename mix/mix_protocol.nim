@@ -1,9 +1,3 @@
-# A node in a swarm. for a 5 node swarm, with just the one publisher (using nushell):
-#[
-nim c main.nim 
-rm -rf infos
-^bash -c 'for i in {0..4}; do alacritty -e bash -c "./main $i 5 20 50 1 4; echo Done. Press enter to close...; read" & done'
-]#
 import chronicles, chronos, sequtils, strutils, os
 import std/[strformat, sysrand]
 import stew/endians2
@@ -135,6 +129,11 @@ proc handleMixNodeConnection(
     message[5..<13] = now_ref_thing
     let exitConn = MixExitConnection.new(message)
     trace "# Received: ", receiver = multiAddr, message = message
+    info "Exit",
+      tm = times.format(now, "mm:ss.ffffff"),
+      fm = fromPeerID[fromPeerId.len - 2 ..< fromPeerId.len],
+      me = myPeerId[myPeerId.len - 2 ..< myPeerId.len],
+      to = "XX"
     await mixProto.pHandler(exitConn, protocol)
 
     if exitConn != nil:
@@ -144,11 +143,6 @@ proc handleMixNodeConnection(
         error "Failed to close exit connection: ", err = e.msg
 
 
-    info "Exit",
-      tm = times.format(now, "mm:ss.fff"),
-      fm = fromPeerID[fromPeerId.len - 2 ..< fromPeerId.len],
-      me = myPeerId[myPeerId.len - 2 ..< myPeerId.len],
-      to = "XX"
   of Success:
     # Add delay
     let delayMillis = (delay[0].int shl 8) or delay[1].int
@@ -184,7 +178,7 @@ proc handleMixNodeConnection(
       toPeerID = shortLog(peerId)
 
     info "Intermediate",
-      tm = times.format(startTime, "mm:ss.fff"),
+      tm = times.format(startTime, "mm:ss.ffffff"),
       fm = fromPeerID[fromPeerId.len - 2 ..< fromPeerId.len],
       me = myPeerId[myPeerId.len - 2 ..< myPeerId.len],
       to = toPeerID[toPeerID.len - 2 ..< toPeerID.len]
@@ -315,7 +309,7 @@ proc anonymizeLocalProtocolSend*(
     endTime = getTime()
 
   info "Sender",
-    tm = times.format(startTime, "mm:ss.fff"),
+    tm = times.format(startTime, "mm:ss.ffffff"),
     frm = "XX",
     me = myPeerId[myPeerId.len - 2 ..< myPeerId.len],
     to = toPeerID[toPeerID.len - 2 ..< toPeerID.len]
