@@ -5,6 +5,7 @@ import ./protocols/noresp_ping
 
 const protocolTypeSize* = 2
 
+# Currently interpreted as 16bit integer
 type ProtocolType* = enum
   PingProtocol = PingCodec
   GossipSub12 = GossipSubCodec_12
