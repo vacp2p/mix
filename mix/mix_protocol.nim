@@ -130,13 +130,6 @@ proc handleMixNodeConnection(
       (message, protocol) = getMixMessage(deserializedResult)
       exitConn = MixExitConnection.new(message)
     trace "# Received: ", receiver = multiAddr, message = message
-    await mixProto.pHandler(exitConn, protocol)
-
-    if exitConn != nil:
-      try:
-        await exitConn.close()
-      except CatchableError as e:
-        error "Failed to close exit connection: ", err = e.msg
 
     let
       endTime = getTime()
@@ -151,6 +144,14 @@ proc handleMixNodeConnection(
       orig = orig,
       current = startTimeNs,
       procDelay = processingDelay
+
+    await mixProto.pHandler(exitConn, protocol)
+
+    if exitConn != nil:
+      try:
+        await exitConn.close()
+      except CatchableError as e:
+        error "Failed to close exit connection: ", err = e.msg
   of Success:
     # Add delay
     let delayMillis = (delay[0].int shl 8) or delay[1].int
