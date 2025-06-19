@@ -6,7 +6,7 @@ suite "mix_message_tests":
   test "serialize_and_deserialize_mix_message":
     let
       message = "Hello World!"
-      protocol = ProtocolType.Ping
+      protocol = ProtocolType.PingProtocol
       mixMsg = initMixMessage(cast[seq[byte]](message), protocol)
 
     let serializedResult = serializeMixMessage(mixMsg)
