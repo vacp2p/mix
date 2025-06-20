@@ -48,8 +48,18 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   let value = cast[uint64](bytes)
   return ok(int(value mod uint64(max)))
 
-proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async.} =
-  var receivedBytes = await conn.readLp(packetSize)
+proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async: (raises: [CancelledError]).} =
+  var receivedBytes: seq[byte]
+  try:
+    receivedBytes = await conn.readLp(packetSize)
+  except Exception as e:
+    error "Failed to read: ", err = e.msg
+  finally:
+    if conn != nil:
+      try:
+        await conn.close()
+      except CatchableError as e:
+        error "Failed to close incoming stream: ", err = e.msg
 
   if receivedBytes.len == 0:
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "NO_DATA"])
@@ -362,7 +372,7 @@ proc initialize*(
   mixProtocol.init()
 
 method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
-  proc handle(conn: Connection, proto: string) {.async.} =
+  proc handle(conn: Connection, proto: string) {.async: (raises: [CancelledError]).} =
     await mixProtocol.handleMixNodeConnection(conn)
 
   mixProtocol.codecs = @[MixProtocolID]
@@ -370,8 +380,8 @@ method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
 
 method setNodePool*(
     mixProtocol: MixProtocol, mixNodeTable: Table[PeerId, MixPubInfo]
-) {.gcsafe, raises: [].} =
+) {.base, gcsafe, raises: [].} =
   mixProtocol.pubNodeInfo = mixNodeTable
 
-method getNodePoolSize*(mixProtocol: MixProtocol): int {.gcsafe, raises: [].} =
+method getNodePoolSize*(mixProtocol: MixProtocol): int {.base, gcsafe, raises: [].} =
   mixProtocol.pubNodeInfo.len
