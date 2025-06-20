@@ -38,7 +38,7 @@ proc new*(
   noRespPing
 
 method init*(p: NoRespPing) =
-  proc handle(conn: Connection, proto: string) {.async.} =
+  proc handle(conn: Connection, proto: string) {.async: (raises: [CancelledError]).} =
     try:
       trace "handling ping"
       var buf: array[NoRespPingSize, byte]
