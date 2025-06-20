@@ -231,7 +231,9 @@ proc anonymizeLocalProtocolSend*(
   mix_messages_recvd.inc(labelValues = ["Entry"])
 
   # not clear on the role of peerID here. I think it's related te the 5bytes pepending that we've seen?
+  info "unpadded", d8a=serialized
   let paddedMsg = padMessage(serialized, peerID)
+  info "padded  ", d8a=paddedMsg
 
   var
     multiAddrs: seq[string] = @[]
@@ -259,6 +261,7 @@ proc anonymizeLocalProtocolSend*(
     i = 0
   # build the route for the message.
   # TODO: put this into a helper function
+  # TODO: make a return path
   while i < L:
     let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
       error "Failed to generate random number", err = error
@@ -303,6 +306,7 @@ proc anonymizeLocalProtocolSend*(
   #Encode destination
   # Is this the final destination, or destination for the initial Hop?
   let dest = $destMultiAddr & "/p2p/" & $destPeerId
+  info "dest", dest=dest
   let destAddrBytes = multiAddrToBytes(dest).valueOr:
     error "Failed to convert multiaddress to bytes", err = error
     mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
