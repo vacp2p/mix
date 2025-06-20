@@ -196,79 +196,27 @@ proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async: (
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "INVALID_MAC"])
     discard
 
-proc anonymizeLocalProtocolSend*(
-    mixProto: MixProtocol,
-    msg: seq[byte],
-    proto: ProtocolType,
-    destMultiAddr: MultiAddress,
-    destPeerId: PeerId,
-) {.async.} =
-  # MixMessage(@msg, proto)
-  let mixMsg = initMixMessage(msg, proto)
-
-  # [msg] ++ uint16(proto)
-  let serialized = serializeMixMessage(mixMsg).valueOr:
-    error "Serialization failed", err = error
-    mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
-    return
-  if len(serialized) > dataSize:
-    error "Message size exceeds maximum payload size",
-      size = len(serialized), limit = dataSize
-    mix_messages_error.inc(labelValues = ["Entry", "INVALID_SIZE"])
-    return
-  # raw get of private values
-  let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
-
-  
-  # unclear about which peer this would be. My guess is this function is called
-  # as part of _ONE_ of the initial dispatches. Remember, mix typicall sends
-  # out several packets across independant routes.
-  let peerId = getPeerIdFromMultiAddr(multiAddr).valueOr:
-    error "Failed to get peer id from multiaddress", err = error
-    mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
-    return
-  # This is specifically tied to the metrics label
-  mix_messages_recvd.inc(labelValues = ["Entry"])
-
-  # not clear on the role of peerID here. I think it's related te the 5bytes pepending that we've seen?
-  info "unpadded", d8a=serialized
-  let paddedMsg = padMessage(serialized, peerID)
-  info "padded  ", d8a=paddedMsg
-
+proc makeRoute(
+  mixProto: MixProtocol,
+  pubNodeInfoKeys: seq[PeerId],
+  numMixNodes: int,
+  destPeerId: PeerId,
+  paddedMsg: MessageChunk
+): Result[seq[byte], string] =
   var
+    availableIndices = toSeq(0 ..< numMixNodes)
     multiAddrs: seq[string] = @[]
     publicKeys: seq[FieldElement] = @[]
     hop: seq[Hop] = @[]
     delay: seq[seq[byte]] = @[]
-
-  # Select L mix nodes at random
-  let numMixNodes = mixProto.pubNodeInfo.len
-  var numAvailableNodes = numMixNodes
-  if mixProto.pubNodeInfo.hasKey(destPeerId):
-    info "Destination peer is a mix node", destPeerId = destPeerId
-    numAvailableNodes = numMixNodes - 1
-
-  if numAvailableNodes < L:
-    error "No. of public mix nodes less than path length.",
-      numMixNodes = numAvailableNodes, pathLength = L
-    mix_messages_error.inc(labelValues = ["Entry", "LOW_MIX_POOL"])
-    return
-
-  var
-    pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
-    randPeerId: PeerId
-    availableIndices = toSeq(0 ..< numMixNodes)
     i = 0
-  # build the route for the message.
-  # TODO: put this into a helper function
-  # TODO: make a return path
   while i < L:
     let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
       error "Failed to generate random number", err = error
       mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
       return
     let selectedIndex = availableIndices[randomIndexPosition]
-    randPeerId = pubNodeInfoKeys[selectedIndex]
+    let randPeerId = pubNodeInfoKeys[selectedIndex]
     availableIndices.del(randomIndexPosition)
     # Skip the destination peer
     if randPeerId == destPeerId:
@@ -297,16 +245,71 @@ proc anonymizeLocalProtocolSend*(
       return
     delay.add(uint16ToBytes(uint16(delayMilliSec)))
     i = i + 1
-  # TODO: put this above the route-generation
-  let serializedRes = serializeMessageChunk(paddedMsg).valueOr:
+  return serializeMessageChunk(paddedMsg)
+    # error "Failed to serialize padded message", err = error
+    # mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
+    # return
+
+proc anonymizeLocalProtocolSend*(
+    mixProto: MixProtocol,
+    msg: seq[byte],
+    proto: ProtocolType,
+    destMultiAddr: MultiAddress,
+    destPeerId: PeerId,
+) {.async.} =
+  let mixMsg = initMixMessage(msg, proto)
+
+  let serialized = serializeMixMessage(mixMsg).valueOr:
+    error "Serialization failed", err = error
+    mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
+    return
+  if len(serialized) > dataSize:
+    error "Message size exceeds maximum payload size",
+      size = len(serialized), limit = dataSize
+    mix_messages_error.inc(labelValues = ["Entry", "INVALID_SIZE"])
+    return
+  let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
+
+  let peerId = getPeerIdFromMultiAddr(multiAddr).valueOr:
+    error "Failed to get peer id from multiaddress", err = error
+    mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
+    return
+  mix_messages_recvd.inc(labelValues = ["Entry"])
+
+  let paddedMsg = padMessage(serialized, peerID)
+
+  var
+    multiAddrs: seq[string] = @[]
+    publicKeys: seq[FieldElement] = @[]
+    hop: seq[Hop] = @[]
+    delay: seq[seq[byte]] = @[]
+
+  # Select L mix nodes at random
+  let numMixNodes = mixProto.pubNodeInfo.len
+  var numAvailableNodes = numMixNodes
+  if mixProto.pubNodeInfo.hasKey(destPeerId):
+    info "Destination peer is a mix node", destPeerId = destPeerId
+    numAvailableNodes = numMixNodes - 1
+
+  if numAvailableNodes < L:
+    error "No. of public mix nodes less than path length.",
+      numMixNodes = numAvailableNodes, pathLength = L
+    mix_messages_error.inc(labelValues = ["Entry", "LOW_MIX_POOL"])
+    return
+
+  let serializedRes = makeRoute(
+    mixProto,
+    toSeq(mixProto.pubNodeInfo.keys),
+    mixProto.pubNodeInfo.len,
+    destPeerId,
+    padMessage(serialized, peerID)
+  ).valueOr:
     error "Failed to serialize padded message", err = error
     mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
     return
 
   #Encode destination
-  # Is this the final destination, or destination for the initial Hop?
   let dest = $destMultiAddr & "/p2p/" & $destPeerId
-  info "dest", dest=dest
   let destAddrBytes = multiAddrToBytes(dest).valueOr:
     error "Failed to convert multiaddress to bytes", err = error
     mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
@@ -314,8 +317,6 @@ proc anonymizeLocalProtocolSend*(
   let destHop = initHop(destAddrBytes)
 
   # Wrap in Sphinx packet
-  # This is the key moment for SURB. we want to be able to think about who needs to provide what, and how the message at the exit
-  # can be placed into the sphinx packet
   let sphinxPacket = wrapInSphinxPacket(
     initMessage(serializedRes), publicKeys, delay, hop, destHop
   ).valueOr:
