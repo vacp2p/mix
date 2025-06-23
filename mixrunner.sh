@@ -1,5 +1,4 @@
-#! /usr/bin/env nix-shell
-#! nix-shell -i bash -p bash
+#!/bin/bash
 
 N="$1"
 DATADIR="$2"
@@ -22,11 +21,11 @@ for i in $(seq 0 $((N-1))); do
     --hostname node-$i \
     -v "$DATADIR":/data \
     -e NODES="$N" \
-    -e MSGRATE=10 \
-    -e MSGSIZE=20 \
-    -e PUBLISHERS=5 \
+    -e MESSAGES=1 \
+    -e MSGRATE=1000 \
+    -e MSGSIZE=100 \
+    -e PUBLISHERS=4 \
     -e CONNECTTO=4 \
-    -e LOG_LEVEL=TRACE \
     --entrypoint /node/main \
     mixrunner
 done

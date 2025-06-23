@@ -127,15 +127,13 @@ proc startMetricsServer(
 
 const uidLen = 32
 
-func byteToHex(b: byte): string =
-  b.toHex(2)
-
 proc main() {.async.} =
   randomize()
 
   let
     hostname = getHostname()
     node_count = parseInt(getEnv("NODES"))
+    messages = parseInt(getEnv("MESSAGES"))
     msg_rate = parseInt(getEnv("MSGRATE"))
     msg_size = parseInt(getEnv("MSGSIZE"))
     publisherCount = parseInt(getEnv("PUBLISHERS"))
@@ -218,7 +216,7 @@ proc main() {.async.} =
 
   gossipSub.parameters.floodPublish = true
   gossipSub.parameters.opportunisticGraftThreshold = -10000
-  gossipSub.parameters.heartbeatInterval = 1.seconds
+  gossipSub.parameters.heartbeatInterval = 10.seconds
   gossipSub.parameters.pruneBackoff = 60.seconds
   gossipSub.parameters.gossipFactor = 0.25
   gossipSub.parameters.d = 6
@@ -261,12 +259,12 @@ proc main() {.async.} =
   switch.mount(gossipSub)
   await switch.start()
 
+  info "PeerId ", peerid = switch.peerInfo.peerId
   info "Listening", addrs = switch.peerInfo.addrs
 
-  let sleeptime = 20
-  info "Waiting for: ", time = sleeptime
+  info "Waiting 20 seconds for node building..."
 
-  await sleepAsync(sleeptime.seconds)
+  await sleepAsync(20.seconds)
 
   var connected = 0
   var addrs: seq[MultiAddress]
@@ -306,11 +304,10 @@ proc main() {.async.} =
   info "Mesh size", meshSize = gossipSub.mesh.getOrDefault("test").len
 
   info "Publishing turn", id = myId
-
-  let count = 50
-  for msg in high(int) - count ..< high(int): #client.param(int, "message_count"):
+  for msg in 0 ..< messages: #client.param(int, "message_count"):
+    await sleepAsync(msg_rate)
     if msg mod publisherCount == myId:
-      # info "Sending message", time = times.getTime()
+
       let now = getTime()
       let timestampNs = now.toUnix().int64 * 1_000_000_000 + times.nanosecond(now).int64
       let msgId = uint64(msg)
@@ -320,12 +317,9 @@ proc main() {.async.} =
       payload.add(toBytesLE(msgId))
       payload.add(newSeq[byte](msg_size - 16)) # Fill the rest with padding
 
-      info "Publishing", msgId = msgId, timestamp = timestampNs
+      info "Publishing message", msgId = msgId, timestamp = timestampNs
 
-      let pub_res = await gossipSub.publish("test", payload, useCustomConn = true)
-      if pub_res <= 0:
-        error "publish fail", res = pub_res
-        doAssert(pub_res > 0)
-      await sleepAsync(msg_rate)
+      doAssert((await gossipSub.publish("test", payload, useCustomConn = true)) > 0)
+  await sleepAsync(999999999)
 
 waitFor(main())
