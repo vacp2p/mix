@@ -43,6 +43,7 @@ proc deserializeMessage*(serializedMessage: openArray[byte]): Result[Message, st
   let content = serializedMessage[k ..^ 1]
   return ok(Message(Content: content))
 
+# TODO: shouldn't this be `type Hop* = distinct MultiAddress`?
 type Hop* = object
   MultiAddress: seq[byte]
 

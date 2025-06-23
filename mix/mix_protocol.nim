@@ -196,6 +196,60 @@ proc handleMixNodeConnection(mixProto: MixProtocol, conn: Connection) {.async: (
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "INVALID_MAC"])
     discard
 
+proc makeRoute(
+  mixProto: MixProtocol,
+  pubNodeInfoKeys: seq[PeerId],
+  numMixNodes: int,
+  destPeerId: PeerId,
+  paddedMsg: MessageChunk
+): Result[seq[byte], string] =
+  var
+    availableIndices = toSeq(0 ..< numMixNodes)
+    multiAddrs: seq[string] = @[]
+    publicKeys: seq[FieldElement] = @[]
+    hop: seq[Hop] = @[]
+    delay: seq[seq[byte]] = @[]
+    i = 0
+  while i < L:
+    let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
+      error "Failed to generate random number", err = error
+      mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
+      return
+    let selectedIndex = availableIndices[randomIndexPosition]
+    let randPeerId = pubNodeInfoKeys[selectedIndex]
+    availableIndices.del(randomIndexPosition)
+    # Skip the destination peer
+    if randPeerId == destPeerId:
+      continue
+
+    info "Selected mix node: ", indexInPath = i, peerId = randPeerId
+
+    # Extract multiaddress, mix public key, and hop
+    let (multiAddr, mixPubKey, _) =
+      getMixPubInfo(mixProto.pubNodeInfo.getOrDefault(randPeerId))
+    multiAddrs.add(multiAddr)
+    publicKeys.add(mixPubKey)
+
+    let multiAddrBytes = multiAddrToBytes(multiAddr).valueOr:
+      error "Failed to convert multiaddress to bytes", err = error
+      mix_messages_error.inc(labelValues = ["Entry", "INVALID_MIX_INFO"])
+      #TODO: should we skip and pick a different node here??
+      return
+
+    hop.add(initHop(multiAddrBytes))
+
+    # Compute delay
+    let delayMilliSec = cryptoRandomInt(3).valueOr:
+      error "Failed to generate random number", err = error
+      mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
+      return
+    delay.add(uint16ToBytes(uint16(delayMilliSec)))
+    i = i + 1
+  return serializeMessageChunk(paddedMsg)
+    # error "Failed to serialize padded message", err = error
+    # mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
+    # return
+
 proc anonymizeLocalProtocolSend*(
     mixProto: MixProtocol,
     msg: seq[byte],
@@ -243,47 +297,13 @@ proc anonymizeLocalProtocolSend*(
     mix_messages_error.inc(labelValues = ["Entry", "LOW_MIX_POOL"])
     return
 
-  var
-    pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
-    randPeerId: PeerId
-    availableIndices = toSeq(0 ..< numMixNodes)
-    i = 0
-  while i < L:
-    let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
-      error "Failed to generate random number", err = error
-      mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
-      return
-    let selectedIndex = availableIndices[randomIndexPosition]
-    randPeerId = pubNodeInfoKeys[selectedIndex]
-    availableIndices.del(randomIndexPosition)
-    # Skip the destination peer
-    if randPeerId == destPeerId:
-      continue
-
-    info "Selected mix node: ", indexInPath = i, peerId = randPeerId
-
-    # Extract multiaddress, mix public key, and hop
-    let (multiAddr, mixPubKey, _) =
-      getMixPubInfo(mixProto.pubNodeInfo.getOrDefault(randPeerId))
-    multiAddrs.add(multiAddr)
-    publicKeys.add(mixPubKey)
-
-    let multiAddrBytes = multiAddrToBytes(multiAddr).valueOr:
-      error "Failed to convert multiaddress to bytes", err = error
-      mix_messages_error.inc(labelValues = ["Entry", "INVALID_MIX_INFO"])
-      #TODO: should we skip and pick a different node here??
-      return
-
-    hop.add(initHop(multiAddrBytes))
-
-    # Compute delay
-    let delayMilliSec = cryptoRandomInt(3).valueOr:
-      error "Failed to generate random number", err = error
-      mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
-      return
-    delay.add(uint16ToBytes(uint16(delayMilliSec)))
-    i = i + 1
-  let serializedRes = serializeMessageChunk(paddedMsg).valueOr:
+  let serializedRes = makeRoute(
+    mixProto,
+    toSeq(mixProto.pubNodeInfo.keys),
+    mixProto.pubNodeInfo.len,
+    destPeerId,
+    padMessage(serialized, peerID)
+  ).valueOr:
     error "Failed to serialize padded message", err = error
     mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
     return
