@@ -1,6 +1,5 @@
 import results
 import ./config
-# TODO(general): ser/deser error enum
 
 type Header* = object
   Alpha: seq[byte]
@@ -44,7 +43,6 @@ proc deserializeMessage*(serializedMessage: openArray[byte]): Result[Message, st
   let content = serializedMessage[k ..^ 1]
   return ok(Message(Content: content))
 
-# TODO: MultiAddress should be a distinct type
 type Hop* = object
   MultiAddress: seq[byte]
 
@@ -83,8 +81,8 @@ proc serializeRoutingInfo*(info: RoutingInfo): Result[seq[byte], string] =
     return err("Delay must be exactly " & $delaySize & " bytes")
   if len(info.Gamma) != gammaSize:
     return err("Gamma must be exactly " & $gammaSize & " bytes")
-  if len(info.Beta) != (((MAX_PATH_LEN * (t + 1)) - t) * k):
-    return err("Beta must be exactly " & $(((MAX_PATH_LEN * (t + 1)) - t) * k) & " bytes")
+  if len(info.Beta) != (((r * (t + 1)) - t) * k):
+    return err("Beta must be exactly " & $(((r * (t + 1)) - t) * k) & " bytes")
 
   let addrBytes = serializeHop(info.Addr).valueOr:
     return err("Serialize hop error: " & error)
@@ -104,7 +102,7 @@ proc deserializeRoutingInfo*(data: openArray[byte]): Result[RoutingInfo, string]
       Delay: data[addrSize .. (addrSize + delaySize - 1)],
       Gamma: data[(addrSize + delaySize) .. (addrSize + delaySize + gammaSize - 1)],
       Beta:
-        data[(addrSize + delaySize + gammaSize) .. (((MAX_PATH_LEN * (t + 1)) + t + 2) * k) - 1],
+        data[(addrSize + delaySize + gammaSize) .. (((r * (t + 1)) + t + 2) * k) - 1],
     )
   )
 

@@ -2,15 +2,13 @@ import results, sequtils
 import std/math
 import ./[config, crypto, curve25519, serialization, tag_manager]
 
-# TODO: This should not mix happy and error paths in an enum
 # Define possible outcomes of processing a Sphinx packet
 type ProcessingStatus* = enum
-  Exit
-  Intermediary
-  Duplicate 
+  Exit # Packet processed successfully at exit
+  Success # Packet processed successfully
+  Duplicate # Packet was discarded due to duplicate tag
   InvalidMAC
-  
-  
+    # Packet was discarded due to MAC verification failure
 
     # const lambda* = 500 # Parameter for exp distribution for generating random delay
 
@@ -84,7 +82,7 @@ proc computeFillerStrings(s: seq[seq[byte]]): Result[seq[byte], string] =
       zeroPadding = newSeq[byte](fillerLength)
 
     let fillerRes = aes_ctr_start_index(
-      aes_key, iv, filler & zeroPadding, (((t + 1) * (MAX_PATH_LEN - i)) + t + 2) * k
+      aes_key, iv, filler & zeroPadding, (((t + 1) * (r - i)) + t + 2) * k
     )
     if fillerRes.isErr:
       return err("Error in aes with start index: " & fillerRes.error)
@@ -141,7 +139,7 @@ proc computeBetaGammaDelta(
     # Compute Beta and Gamma
     if i == sLen - 1:
       let
-        paddingLength = (((t + 1) * (MAX_PATH_LEN - PATH_LEN)) + t + 2) * k
+        paddingLength = (((t + 1) * (r - L)) + t + 2) * k
         zeroPadding = newSeq[byte](paddingLength)
 
       let aesRes = aes_ctr(beta_aes_key, beta_iv, zeroPadding).valueOr:
@@ -157,7 +155,7 @@ proc computeBetaGammaDelta(
       delta = deltaRes.get()
     else:
       let routingInfo = initRoutingInfo(
-        hop[i + 1], delay[i + 1], gamma, beta[0 .. (((MAX_PATH_LEN * (t + 1)) - t) * k) - 1]
+        hop[i + 1], delay[i + 1], gamma, beta[0 .. (((r * (t + 1)) - t) * k) - 1]
       )
 
       let serializeRes = serializeRoutingInfo(routingInfo).valueOr:
@@ -203,7 +201,6 @@ proc wrapInSphinxPacket*(
 
   return ok(serializeRes)
 
-# TODO: create a nice error handling story
 proc processSphinxPacket*(
     serSphinxPacket: seq[byte], privateKey: FieldElement, tm: var TagManager
 ): Result[(Hop, seq[byte], seq[byte], ProcessingStatus), string] =
@@ -224,14 +221,12 @@ proc processSphinxPacket*(
     sBytes = fieldElementToBytes(s)
 
   # Check if the tag has been seen
-  # TODO: set the return type such that only `Duplicate` is needed
   if isTagSeen(tm, s):
     return ok((Hop(), @[], @[], Duplicate))
 
   # Compute MAC
   let mac_key = kdf(deriveKeyMaterial("mac_key", sBytes))
 
-  # TODO: set the return type such that only `InvalidMac` is needed
   if not (toseq(hmac(mac_key, beta)) == gamma):
     # If MAC not verified
     return ok((Hop(), @[], @[], InvalidMAC))
@@ -262,7 +257,7 @@ proc processSphinxPacket*(
     return err("Error in aes: " & error)
 
   # Check if B has the required prefix for the original message
-  paddingLength = (((t + 1) * (MAX_PATH_LEN - PATH_LEN)) + t + 2) * k
+  paddingLength = (((t + 1) * (r - L)) + t + 2) * k
   zeroPadding = newSeq[byte](paddingLength)
 
   if B[0 .. paddingLength - 1] == zeroPadding:
@@ -295,4 +290,4 @@ proc processSphinxPacket*(
     let serializeRes = serializeSphinxPacket(sphinxPkt).valueOr:
       return err("Sphinx packet serialization error: " & error)
 
-    return ok((address, delay, serializeRes, Intermediary))
+    return ok((address, delay, serializeRes, Success))

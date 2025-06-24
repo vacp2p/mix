@@ -78,8 +78,8 @@ suite "Sphinx Tests":
       fail()
     let (address1, delay1, processedPacket1, status1) = res1.get()
 
-    if status1 != Intermediary:
-      error "Processing status should be Intermediary"
+    if status1 != Success:
+      error "Processing status should be Success"
       fail()
 
     if processedPacket1.len != packetSize:
@@ -93,8 +93,8 @@ suite "Sphinx Tests":
       fail()
     let (address2, delay2, processedPacket2, status2) = res2.get()
 
-    if status2 != Intermediary:
-      error "Processing status should be Intermediary"
+    if status2 != Success:
+      error "Processing status should be Success"
       fail()
 
     if processedPacket2.len != packetSize:
@@ -172,8 +172,8 @@ suite "Sphinx Tests":
       fail()
     let (_, _, _, status1) = res1.get()
 
-    if status1 != Intermediary:
-      error "Processing status should be Intermediary"
+    if status1 != Success:
+      error "Processing status should be Success"
       fail()
 
     let res2 = processSphinxPacket(packet, privateKeys[0], tm)
@@ -213,8 +213,8 @@ suite "Sphinx Tests":
         fail()
       let (address1, delay1, processedPacket1, status1) = res1.get()
 
-      if status1 != Intermediary:
-        error "Processing status should be Intermediary"
+      if status1 != Success:
+        error "Processing status should be Success"
         fail()
 
       if processedPacket1.len != packetSize:
@@ -228,8 +228,8 @@ suite "Sphinx Tests":
         fail()
       let (address2, delay2, processedPacket2, status2) = res2.get()
 
-      if status2 != Intermediary:
-        error "Processing status should be Intermediary"
+      if status2 != Success:
+        error "Processing status should be Success"
         fail()
 
       if processedPacket2.len != packetSize:
