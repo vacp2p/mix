@@ -6,8 +6,6 @@ import ./[config, curve25519, utils]
 const MixNodeInfoSize* =
   addrSize + (2 * FieldElementSize) + (SkRawPublicKeySize + SkRawPrivateKeySize)
 const MixPubInfoSize* = addrSize + FieldElementSize + SkRawPublicKeySize
-const nodeInfoFolderPath* = "nodeInfo"
-const pubInfoFolderPath* = "pubInfo"
 
 type MixNodeInfo* = object
   multiAddr: string
@@ -98,7 +96,9 @@ proc deserializeMixNodeInfo*(data: openArray[byte]): Result[MixNodeInfo, string]
 proc isNodeMultiaddress*(mixNodeInfo: MixNodeInfo, multiAddr: string): bool =
   return mixNodeInfo.multiAddr == multiAddr
 
-proc writeMixNodeInfoToFile*(node: MixNodeInfo, index: int): Result[void, string] =
+proc writeMixNodeInfoToFile*(
+    node: MixNodeInfo, index: int, nodeInfoFolderPath: string = "./nodeInfo"
+): Result[void, string] =
   if not dirExists(nodeInfoFolderPath):
     createDir(nodeInfoFolderPath)
   let filename = nodeInfoFolderPath / fmt"mixNode_{index}"
@@ -114,7 +114,9 @@ proc writeMixNodeInfoToFile*(node: MixNodeInfo, index: int): Result[void, string
   file.writeData(addr serializedData[0], serializedData.len)
   return ok()
 
-proc readMixNodeInfoFromFile*(index: int): Result[MixNodeInfo, string] =
+proc readMixNodeInfoFromFile*(
+    index: int, nodeInfoFolderPath: string = "./nodeInfo"
+): Result[MixNodeInfo, string] =
   try:
     let filename = nodeInfoFolderPath / fmt"mixNode_{index}"
     if not fileExists(filename):
@@ -141,7 +143,7 @@ proc readMixNodeInfoFromFile*(index: int): Result[MixNodeInfo, string] =
   except OSError as e:
     return err("OS error: " & $e.msg)
 
-proc deleteNodeInfoFolder*() =
+proc deleteNodeInfoFolder*(nodeInfoFolderPath: string = "./nodeInfo") =
   if dirExists(nodeInfoFolderPath):
     removeDir(nodeInfoFolderPath)
 
@@ -154,9 +156,6 @@ proc initMixPubInfo*(
     multiAddr: string, mixPubKey: FieldElement, libp2pPubKey: SkPublicKey
 ): MixPubInfo =
   MixPubInfo(multiAddr: multiAddr, mixPubKey: mixPubKey, libp2pPubKey: libp2pPubKey)
-
-proc createMixPubInfo*(multiAddr: string, mixPubKey: FieldElement): MixPubInfo =
-  MixPubInfo(multiAddr: multiAddr, mixPubKey: mixPubKey)
 
 proc getMixPubInfo*(info: MixPubInfo): (string, FieldElement, SkPublicKey) =
   (info.multiAddr, info.mixPubKey, info.libp2pPubKey)
@@ -189,7 +188,9 @@ proc deserializeMixPubInfo*(data: openArray[byte]): Result[MixPubInfo, string] =
 
   ok(MixPubInfo(multiAddr: multiAddr, mixPubKey: mixPubKey, libp2pPubKey: libp2pPubKey))
 
-proc writePubInfoToFile*(node: MixPubInfo, index: int): Result[void, string] =
+proc writeMixPubInfoToFile*(
+    node: MixPubInfo, index: int, pubInfoFolderPath: string = "./pubInfo"
+): Result[void, string] =
   if not dirExists(pubInfoFolderPath):
     createDir(pubInfoFolderPath)
   let filename = pubInfoFolderPath / fmt"mixNode_{index}"
@@ -205,7 +206,9 @@ proc writePubInfoToFile*(node: MixPubInfo, index: int): Result[void, string] =
   file.writeData(addr serializedData[0], serializedData.len)
   return ok()
 
-proc readMixPubInfoFromFile*(index: int): Result[MixPubInfo, string] =
+proc readMixPubInfoFromFile*(
+    index: int, pubInfoFolderPath: string = "./pubInfo"
+): Result[MixPubInfo, string] =
   try:
     let filename = pubInfoFolderPath / fmt"mixNode_{index}"
     if not fileExists(filename):
@@ -232,7 +235,7 @@ proc readMixPubInfoFromFile*(index: int): Result[MixPubInfo, string] =
   except OSError as e:
     return err("OS error: " & $e.msg)
 
-proc deletePubInfoFolder*() =
+proc deletePubInfoFolder*(pubInfoFolderPath: string = "./pubInfo") =
   if dirExists(pubInfoFolderPath):
     removeDir(pubInfoFolderPath)
 
@@ -264,7 +267,7 @@ proc generateMixNodes(
       libp2pPubKey = keyPair.pubkey
       pubKeyProto = PublicKey(scheme: Secp256k1, skkey: libp2pPubKey)
       peerId = PeerId.init(pubKeyProto).get()
-      multiAddr = fmt"/ip4/127.0.0.1/tcp/{basePort + i}/p2p/{peerId}"
+      multiAddr = fmt"/ip4/0.0.0.0/tcp/{basePort + i}/p2p/{peerId}"
 
     nodes[i] = MixNodeInfo(
       multiAddr: multiAddr,
@@ -298,3 +301,9 @@ proc getMixNodeByIndex*(index: int): Result[MixNodeInfo, string] =
   if index < 0 or index >= mixNodes.len:
     return err("Index must be between 0 and " & $(mixNodes.len))
   ok(mixNodes[index])
+
+proc initMixMultiAddrByIndex*(index: int, multiAddr: string): Result[void, string] =
+  if index < 0 or index >= mixNodes.len:
+    return err("Index must be between 0 and " & $(mixNodes.len))
+  mixNodes[index].multiAddr = multiAddr
+  ok()
