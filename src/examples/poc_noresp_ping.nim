@@ -1,7 +1,9 @@
 import chronicles, chronos, results, strutils
 import std/[enumerate, sysrand]
 import libp2p/[crypto/secp, multiaddress, builders, protocols/ping, switch]
-import ./[entry_connection, mix_node, mix_protocol, protocol], ./protocols/noresp_ping
+import
+  ../[entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol],
+  ../protocols/noresp_ping
 
 proc cryptoRandomInt(max: int): Result[int, string] =
   if max == 0:
@@ -42,7 +44,7 @@ proc setUpNodes(numNodes: int): seq[Switch] =
         continue
       let nodePubInfo = nodePubInfoRes.get()
 
-      let writePubRes = writePubInfoToFile(nodePubInfo, index)
+      let writePubRes = writeMixPubInfoToFile(nodePubInfo, index)
       if writePubRes.isErr:
         error "Failed to write pub info to file", nodeIndex = index, error = writePubRes.error
         continue
@@ -104,26 +106,11 @@ proc mixnetSimulation() {.async.} =
   if senderIndex < numberOfNodes - 1:
     receiverIndex = senderIndex + 1
 
-  var sendDialerFunc = proc(
-      msg: seq[byte],
-      proto: ProtocolType,
-      destMultiAddr: MultiAddress,
-      destPeerId: PeerId,
-  ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
-    try:
-      await mixProto[senderIndex].anonymizeLocalProtocolSend(
-        msg, proto, destMultiAddr, destPeerId
-      )
-    except CatchableError as e:
-      error "Error during execution of sendThroughMixnet: ", err = e.msg
-      # TODO: handle error
-    return
-
-  let conn = MixEntryConnection.new(
-    nodes[receiverIndex].peerInfo.addrs[0],
+  let conn = createMixEntryConnection(
+    mixProto[senderIndex],
+    some(nodes[receiverIndex].peerInfo.addrs[0]),
     nodes[receiverIndex].peerInfo.peerId,
-    ProtocolType.fromString(NoRespPingCodec),
-    sendDialerFunc,
+    NoRespPingCodec,
   )
 
   discard await noRespPingProto[senderIndex].noRespPing(conn)

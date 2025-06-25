@@ -14,10 +14,10 @@ import
   ]
 
 logScope:
-  topics = "libp2p anonping"
+  topics = "libp2p norespping"
 
 const
-  NoRespPingCodec* = "/anonping/1.0.0"
+  NoRespPingCodec* = "/norespping/1.0.0"
   NoRespPingSize = 32
 
 type
