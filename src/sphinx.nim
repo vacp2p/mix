@@ -180,7 +180,7 @@ proc wrapInSphinxPacket*(
     publicKeys: openArray[FieldElement],
     delay: seq[seq[byte]],
     hop: openArray[Hop],
-    destAddr: Option[Hop]
+    destAddr: Option[Hop],
 ): Result[seq[byte], string] =
   # Compute alphas and shared secrets
   let res1 = computeAlpha(publicKeys)

@@ -161,7 +161,6 @@ proc handleMixNodeConnection(
         error "Failed to dial next hop: ", err = e.msg
         mix_messages_error.inc(labelValues = ["Exit", "DAIL_FAILED"])
     mix_messages_forwarded.inc(labelValues = ["Exit"])
-
   of Success:
     trace "# Intermediate: ", multiAddr = multiAddr
     # Add delay
@@ -309,15 +308,16 @@ proc anonymizeLocalProtocolSend*(
     return
 
   #Encode destination if beyond exit node
-  let destHop: Option[Hop] = if destMultiAddr.isSome():
-    let dest = $destMultiAddr & "/p2p/" & $destPeerId
-    let destAddrBytes = multiAddrToBytes(dest).valueOr:
-      error "Failed to convert multiaddress to bytes", err = error
-      mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
-      return
-    some(initHop(destAddrBytes))
-  else: 
-    none(Hop)
+  let destHop: Option[Hop] =
+    if destMultiAddr.isSome():
+      let dest = $destMultiAddr & "/p2p/" & $destPeerId
+      let destAddrBytes = multiAddrToBytes(dest).valueOr:
+        error "Failed to convert multiaddress to bytes", err = error
+        mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
+        return
+      some(initHop(destAddrBytes))
+    else:
+      none(Hop)
 
   # Wrap in Sphinx packet
   let sphinxPacket = wrapInSphinxPacket(
