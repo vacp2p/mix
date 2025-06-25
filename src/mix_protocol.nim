@@ -43,6 +43,143 @@ proc loadAllButIndexMixPubInfo*(
       pubInfoTable[peerId] = pubInfo
   return ok(pubInfoTable)
 
+proc handleSuccess(
+    mixProto: MixProtocol,
+    nextHop: Hop,
+    delay: seq[byte],
+    processedPkt: seq[byte],
+    status: ProcessingStatus,
+) {.async: (raises: [CancelledError]).} =
+  trace "# Intermediate: ", multiAddr = multiAddr
+  # Add delay
+  let delayMillis = (delay[0].int shl 8) or delay[1].int
+  await sleepAsync(milliseconds(delayMillis))
+  mix_messages_recvd.inc(labelValues = ["Intermediate"])
+
+  # Forward to next hop
+  let nextHopBytes = getHop(nextHop)
+
+  let fullAddrStr = bytesToMultiAddr(nextHopBytes).valueOr:
+    error "Failed to convert bytes to multiaddress", err = error
+    mix_messages_error.inc(labelValues = ["Intermediate", "INVALID_NEXTHOP"])
+    return
+
+  let parts = fullAddrStr.split("/p2p/")
+  if parts.len != 2:
+    error "Invalid multiaddress format", parts = parts
+    mix_messages_error.inc(labelValues = ["Intermediate", "INVALID_NEXTHOP"])
+    return
+
+  let
+    locationAddrStr = parts[0]
+    peerIdStr = parts[1]
+
+  # Create MultiAddress and PeerId
+  let locationAddr = MultiAddress.init(locationAddrStr).valueOr:
+    error "Failed to parse location multiaddress: ", err = error
+    mix_messages_error.inc(labelValues = ["Intermediate", "INVALID_NEXTHOP"])
+    return
+
+  let peerId = PeerId.init(peerIdStr).valueOr:
+    error "Failed to initialize PeerId", err = error
+    mix_messages_error.inc(labelValues = ["Intermediate", "INVALID_NEXTHOP"])
+    return
+
+  var nextHopConn: Connection
+  try:
+    nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
+    await nextHopConn.writeLp(processedPkt)
+    await nextHopConn.close()
+  except CatchableError as e:
+    error "Failed to dial next hop: ", err = e.msg
+    mix_messages_error.inc(labelValues = ["Intermediate", "DAIL_FAILED"])
+  mix_messages_forwarded.inc(labelValues = ["Intermediate"])
+
+proc handleExit(
+    mixProto: MixProtocol,
+    nextHop: Hop,
+    delay: seq[byte],
+    processedPkt: seq[byte],
+    status: ProcessingStatus,
+) {.async: (raises: [CancelledError]).} =
+  mix_messages_recvd.inc(labelValues = ["Exit"])
+  if (nextHop == Hop()) xor (delay == @[]):
+    error "either both, or neither next-hop and delay can be empty"
+    return
+  let msgChunk = deserializeMessageChunk(processedPkt).valueOr:
+    error "Deserialization failed", err = error
+    mix_messages_error.inc(labelValues = ["Exit", "INVALID_SPHINX"])
+    return
+
+  let unpaddedMsg = unpadMessage(msgChunk).valueOr:
+    error "Unpadding message failed", err = error
+    mix_messages_error.inc(labelValues = ["Exit", "INVALID_SPHINX"])
+    return
+
+  let deserializedResult = deserializeMixMessage(unpaddedMsg).valueOr:
+    error "Deserialization failed", err = error
+    mix_messages_error.inc(labelValues = ["Exit", "INVALID_SPHINX"])
+    return
+
+  let (message, protocol) = getMixMessage(deserializedResult)
+  trace "# Received: ", receiver = multiAddr, message = message
+  if (nextHop == Hop()) and (delay == @[]):
+    let exitConn = MixExitConnection.new(message)
+    await mixProto.pHandler.get()(exitConn, protocol)
+
+    if exitConn != nil:
+      try:
+        await exitConn.close()
+      except CatchableError as e:
+        error "Failed to close exit connection: ", err = e.msg
+  elif (nextHop != Hop()) and (delay != @[]):
+    # TODO: Bring up exit-forwards-to-dest logic
+    # This is the exit node, forward to destination
+
+    # Add delay
+    let delayMillis = (delay[0].int shl 8) or delay[1].int
+    await sleepAsync(milliseconds(delayMillis))
+
+    # Forward to destination
+    let destBytes = getHop(nextHop)
+
+    let fullAddrStr = bytesToMultiAddr(destBytes).valueOr:
+      error "Failed to convert bytes to multiaddress", err = error
+      mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
+      return
+
+    let parts = fullAddrStr.split("/p2p/")
+    if parts.len != 2:
+      error "Invalid multiaddress format", parts = parts
+      mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
+      return
+
+    let
+      locationAddrStr = parts[0]
+      peerIdStr = parts[1]
+
+    # Create MultiAddress and PeerId
+    let locationAddr = MultiAddress.init(locationAddrStr).valueOr:
+      error "Failed to parse location multiaddress: ", err = error
+      mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
+      return
+
+    let peerId = PeerId.init(peerIdStr).valueOr:
+      error "Failed to initialize PeerId", err = error
+      mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
+      return
+
+    var destConn: Connection
+    try:
+      destConn = await mixProto.switch.dial(peerId, @[locationAddr], $protocol)
+      await destConn.writeLp(message)
+      #TODO: When response is implemented, we can read the response here
+      await destConn.close()
+    except CatchableError as e:
+      error "Failed to dial next hop: ", err = e.msg
+      mix_messages_error.inc(labelValues = ["Exit", "DAIL_FAILED"])
+  mix_messages_forwarded.inc(labelValues = ["Exit"])
+
 # ToDo: Change to a more secure random number generator for production.
 proc cryptoRandomInt(max: int): Result[int, string] =
   if max == 0:
@@ -84,128 +221,9 @@ proc handleMixNodeConnection(
 
   case status
   of Exit:
-    mix_messages_recvd.inc(labelValues = ["Exit"])
-    if (nextHop == Hop()) xor (delay == @[]):
-      error "either both, or neither next-hop and delay can be empty"
-      return
-    let msgChunk = deserializeMessageChunk(processedPkt).valueOr:
-      error "Deserialization failed", err = error
-      mix_messages_error.inc(labelValues = ["Exit", "INVALID_SPHINX"])
-      return
-
-    let unpaddedMsg = unpadMessage(msgChunk).valueOr:
-      error "Unpadding message failed", err = error
-      mix_messages_error.inc(labelValues = ["Exit", "INVALID_SPHINX"])
-      return
-
-    let deserializedResult = deserializeMixMessage(unpaddedMsg).valueOr:
-      error "Deserialization failed", err = error
-      mix_messages_error.inc(labelValues = ["Exit", "INVALID_SPHINX"])
-      return
-
-    let (message, protocol) = getMixMessage(deserializedResult)
-    trace "# Received: ", receiver = multiAddr, message = message
-    if (nextHop == Hop()) and (delay == @[]):
-      let exitConn = MixExitConnection.new(message)
-      await mixProto.pHandler.get()(exitConn, protocol)
-
-      if exitConn != nil:
-        try:
-          await exitConn.close()
-        except CatchableError as e:
-          error "Failed to close exit connection: ", err = e.msg
-    elif (nextHop != Hop()) and (delay != @[]):
-      # TODO: Bring up exit-forwards-to-dest logic
-      # This is the exit node, forward to destination
-
-      # Add delay
-      let delayMillis = (delay[0].int shl 8) or delay[1].int
-      await sleepAsync(milliseconds(delayMillis))
-
-      # Forward to destination
-      let destBytes = getHop(nextHop)
-
-      let fullAddrStr = bytesToMultiAddr(destBytes).valueOr:
-        error "Failed to convert bytes to multiaddress", err = error
-        mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
-        return
-
-      let parts = fullAddrStr.split("/p2p/")
-      if parts.len != 2:
-        error "Invalid multiaddress format", parts = parts
-        mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
-        return
-
-      let
-        locationAddrStr = parts[0]
-        peerIdStr = parts[1]
-
-      # Create MultiAddress and PeerId
-      let locationAddr = MultiAddress.init(locationAddrStr).valueOr:
-        error "Failed to parse location multiaddress: ", err = error
-        mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
-        return
-
-      let peerId = PeerId.init(peerIdStr).valueOr:
-        error "Failed to initialize PeerId", err = error
-        mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
-        return
-
-      var destConn: Connection
-      try:
-        destConn = await mixProto.switch.dial(peerId, @[locationAddr], $protocol)
-        await destConn.writeLp(message)
-        #TODO: When response is implemented, we can read the response here
-        await destConn.close()
-      except CatchableError as e:
-        error "Failed to dial next hop: ", err = e.msg
-        mix_messages_error.inc(labelValues = ["Exit", "DAIL_FAILED"])
-    mix_messages_forwarded.inc(labelValues = ["Exit"])
+    await handleExit(mixProto, nextHop, delay, processedPkt, status)
   of Success:
-    trace "# Intermediate: ", multiAddr = multiAddr
-    # Add delay
-    let delayMillis = (delay[0].int shl 8) or delay[1].int
-    await sleepAsync(milliseconds(delayMillis))
-    mix_messages_recvd.inc(labelValues = ["Intermediate"])
-
-    # Forward to next hop
-    let nextHopBytes = getHop(nextHop)
-
-    let fullAddrStr = bytesToMultiAddr(nextHopBytes).valueOr:
-      error "Failed to convert bytes to multiaddress", err = error
-      mix_messages_error.inc(labelValues = ["Intermediate", "INVALID_NEXTHOP"])
-      return
-
-    let parts = fullAddrStr.split("/p2p/")
-    if parts.len != 2:
-      error "Invalid multiaddress format", parts = parts
-      mix_messages_error.inc(labelValues = ["Intermediate", "INVALID_NEXTHOP"])
-      return
-
-    let
-      locationAddrStr = parts[0]
-      peerIdStr = parts[1]
-
-    # Create MultiAddress and PeerId
-    let locationAddr = MultiAddress.init(locationAddrStr).valueOr:
-      error "Failed to parse location multiaddress: ", err = error
-      mix_messages_error.inc(labelValues = ["Intermediate", "INVALID_NEXTHOP"])
-      return
-
-    let peerId = PeerId.init(peerIdStr).valueOr:
-      error "Failed to initialize PeerId", err = error
-      mix_messages_error.inc(labelValues = ["Intermediate", "INVALID_NEXTHOP"])
-      return
-
-    var nextHopConn: Connection
-    try:
-      nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
-      await nextHopConn.writeLp(processedPkt)
-      await nextHopConn.close()
-    except CatchableError as e:
-      error "Failed to dial next hop: ", err = e.msg
-      mix_messages_error.inc(labelValues = ["Intermediate", "DAIL_FAILED"])
-    mix_messages_forwarded.inc(labelValues = ["Intermediate"])
+    await handleSuccess(mixProto, nextHop, delay, processedPkt, status)
   of Duplicate:
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "DUPLICATE"])
     discard
