@@ -231,59 +231,17 @@ proc handleMixNodeConnection(
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "INVALID_MAC"])
     discard
 
-proc anonymizeLocalProtocolSend*(
-    mixProto: MixProtocol,
-    msg: seq[byte],
-    proto: ProtocolType,
-    destMultiAddr: Option[MultiAddress],
-    destPeerId: PeerId,
-) {.async.} =
-  let mixMsg = initMixMessage(msg, proto)
-
-  let serialized = serializeMixMessage(mixMsg).valueOr:
-    error "Serialization failed", err = error
-    mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
-    return
-  if len(serialized) > dataSize:
-    error "Message size exceeds maximum payload size",
-      size = len(serialized), limit = dataSize
-    mix_messages_error.inc(labelValues = ["Entry", "INVALID_SIZE"])
-    return
-  let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
-
-  let peerId = getPeerIdFromMultiAddr(multiAddr).valueOr:
-    error "Failed to get peer id from multiaddress", err = error
-    mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
-    return
-  mix_messages_recvd.inc(labelValues = ["Entry"])
-
-  let paddedMsg = padMessage(serialized, peerID)
-
-  trace "# Sent: ", sender = multiAddr, message = msg, dest = destMultiAddr
-
-  var
-    multiAddrs: seq[string] = @[]
-    publicKeys: seq[FieldElement] = @[]
-    hop: seq[Hop] = @[]
-    delay: seq[seq[byte]] = @[]
-
-  # Select L mix nodes at random
-  let numMixNodes = mixProto.pubNodeInfo.len
-  var numAvailableNodes = numMixNodes
-  if mixProto.pubNodeInfo.hasKey(destPeerId):
-    info "Destination peer is a mix node", destPeerId = destPeerId
-    numAvailableNodes = numMixNodes - 1
-
-  if numAvailableNodes < L:
-    error "No. of public mix nodes less than path length.",
-      numMixNodes = numAvailableNodes, pathLength = L
-    mix_messages_error.inc(labelValues = ["Entry", "LOW_MIX_POOL"])
-    return
-
+proc makePath(
+    mixProto: MixProtocol, numMixNodes: int, destPeerId: PeerId, paddedMsg: MessageChunk
+): (seq[byte], seq[string], seq[FieldElement], seq[Hop], seq[seq[byte]]) =
   var
     pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
     randPeerId: PeerId
     availableIndices = toSeq(0 ..< numMixNodes)
+    multiAddrs: seq[string] = @[]
+    publicKeys: seq[FieldElement] = @[]
+    hop: seq[Hop] = @[]
+    delay: seq[seq[byte]] = @[]
     i = 0
   while i < L:
     let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
@@ -324,6 +282,53 @@ proc anonymizeLocalProtocolSend*(
     error "Failed to serialize padded message", err = error
     mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
     return
+  return (serializedRes, multiAddrs, publicKeys, hop, delay)
+
+proc anonymizeLocalProtocolSend*(
+    mixProto: MixProtocol,
+    msg: seq[byte],
+    proto: ProtocolType,
+    destMultiAddr: Option[MultiAddress],
+    destPeerId: PeerId,
+) {.async.} =
+  let mixMsg = initMixMessage(msg, proto)
+
+  let serialized = serializeMixMessage(mixMsg).valueOr:
+    error "Serialization failed", err = error
+    mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
+    return
+  if len(serialized) > dataSize:
+    error "Message size exceeds maximum payload size",
+      size = len(serialized), limit = dataSize
+    mix_messages_error.inc(labelValues = ["Entry", "INVALID_SIZE"])
+    return
+  let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
+
+  let peerId = getPeerIdFromMultiAddr(multiAddr).valueOr:
+    error "Failed to get peer id from multiaddress", err = error
+    mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
+    return
+  mix_messages_recvd.inc(labelValues = ["Entry"])
+
+  let paddedMsg = padMessage(serialized, peerID)
+
+  trace "# Sent: ", sender = multiAddr, message = msg, dest = destMultiAddr
+
+  # Select L mix nodes at random
+  let numMixNodes = mixProto.pubNodeInfo.len
+  var numAvailableNodes = numMixNodes
+  if mixProto.pubNodeInfo.hasKey(destPeerId):
+    info "Destination peer is a mix node", destPeerId = destPeerId
+    numAvailableNodes = numMixNodes - 1
+
+  if numAvailableNodes < L:
+    error "No. of public mix nodes less than path length.",
+      numMixNodes = numAvailableNodes, pathLength = L
+    mix_messages_error.inc(labelValues = ["Entry", "LOW_MIX_POOL"])
+    return
+
+  let (serializedRes, multiAddrs, publicKeys, hop, delay) =
+    makePath(mixProto, numMixNodes, destPeerId, paddedMsg)
 
   #Encode destination if beyond exit node
   let destHop: Option[Hop] =
