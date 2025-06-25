@@ -108,15 +108,16 @@ when defined(libp2p_agents_metrics):
   proc setShortAgent*(self: MixEntryConnection, shortAgent: string) =
     discard
 
-proc newConn*(T: typedesc[MixEntryConnection],
+proc newConn*(
+    T: typedesc[MixEntryConnection],
     destMultiAddr: string,
     destPeerId: PeerId,
     proto: ProtocolType,
-    mixproto: MixProtocol): MixEntryConnection =
-
+    mixproto: MixProtocol,
+): MixEntryConnection =
   #let destPeerId = getPeerIdFromMultiAddr(destMultiAddr).get()
 
-  let maddr =  MultiAddress.init(destMultiAddr).get()
+  let maddr = MultiAddress.init(destMultiAddr).get()
 
   var sendDialerFunc = proc(
       msg: seq[byte],
@@ -125,9 +126,7 @@ proc newConn*(T: typedesc[MixEntryConnection],
       destPeerId: PeerId,
   ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
     try:
-      await mixproto.anonymizeLocalProtocolSend(
-        msg, proto, destMultiAddr, destPeerId
-      )
+      await mixproto.anonymizeLocalProtocolSend(msg, proto, destMultiAddr, destPeerId)
     except CatchableError as e:
       error "Error during execution of sendThroughMixnet: ", err = e.msg
       # TODO: handle error

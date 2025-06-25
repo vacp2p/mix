@@ -6,13 +6,13 @@ license = "MIT"
 # Dependencies
 requires "stew >= 0.3.0"
 requires "chronos >= 4.0.3"
-requires "https://github.com/AkshayaMani/nim-libp2p#gossipsub-custom-conn"
+requires "https://github.com/vacp2p/nim-libp2p#master"
 requires "nim >= 2.0.8"
 requires "nimcrypto >= 0.6.0"
 requires "serialization >= 0.2.2"
 
 # Set the source directory
-srcDir = "src"
+skipDirs = @["tests"]
 const TEST_DIRECTORY = "tests"
 
 import strformat
@@ -29,6 +29,7 @@ task test, "Run the test suite":
   runTest("test_fragmentation")
   runTest("test_mix_message")
   runTest("test_mix_node")
+  runTest("test_pow")
   runTest("test_seqno_generator")
   runTest("test_serialization")
   runTest("test_sphinx")
