@@ -150,7 +150,7 @@ proc mixnet_gossipsub_test() {.async.} =
       triggerSelf = true,
       customConnCallbacks = some(
         CustomConnectionCallbacks(
-          customConnCreationCB: mixConn, peerSelectionCB: mixPeerSelect
+          customConnCreationCB: mixConn, customPeerSelectionCB: mixPeerSelect
         )
       ),
     )

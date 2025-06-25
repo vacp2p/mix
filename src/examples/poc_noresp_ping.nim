@@ -1,5 +1,5 @@
 import chronicles, chronos, results, strutils
-import std/[enumerate, sysrand]
+import std/[options, enumerate, sysrand]
 import libp2p/[crypto/secp, multiaddress, builders, protocols/ping, switch]
 import
   ../[entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol],

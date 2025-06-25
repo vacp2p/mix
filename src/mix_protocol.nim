@@ -429,7 +429,8 @@ proc new*(
     pubNodeInfo: pubNodeInfo,
     switch: switch,
     tagManager: initTagManager(),
-    pHandler: sendHandlerFunc,
+    # TODO(destination): This is about dest is/isn't the exit node. Make this less of a hack
+    pHandler: some(sendHandlerFunc),
   )
 
   mixProto.init()
