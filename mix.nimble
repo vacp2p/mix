@@ -12,7 +12,7 @@ requires "nimcrypto >= 0.6.0"
 requires "serialization >= 0.2.2"
 
 # Set the source directory
-srcDir = "src"
+skipDirs = @["tests"]
 const TEST_DIRECTORY = "tests"
 
 import strformat
