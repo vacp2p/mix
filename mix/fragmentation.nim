@@ -1,5 +1,5 @@
-import config, seqno_generator, results, utils
-import libp2p/peerid
+import ./[config, seqno_generator, utils]
+import results, libp2p/peerid
 
 const paddingLengthSize* = 2
 const seqNoSize* = 4
@@ -30,17 +30,13 @@ proc deserializeMessageChunk*(data: openArray[byte]): Result[MessageChunk, strin
   if len(data) != messageSize:
     return err("Data must be exactly " & $messageSize & " bytes")
 
-  let paddingLengthRes = bytesToUInt16(data[0 .. paddingLengthSize - 1])
-  if paddingLengthRes.isErr:
-    return err(paddingLengthRes.error)
-  let paddingLength = paddingLengthRes.get()
+  let paddingLength = bytesToUInt16(data[0 .. paddingLengthSize - 1]).valueOr:
+    return err("Error in byte to padding length conversion: " & error)
 
   let chunk = data[paddingLengthSize .. (paddingLengthSize + dataSize - 1)]
 
-  let seqNoRes = bytesToUInt32(data[paddingLengthSize + dataSize ..^ 1])
-  if seqNoRes.isErr:
-    return err(seqNoRes.error)
-  let seqNo = seqNoRes.get()
+  let seqNo = bytesToUInt32(data[paddingLengthSize + dataSize ..^ 1]).valueOr:
+    return err("Error in bytes to sequence no. conversion: " & error)
   ok(MessageChunk(paddingLength: paddingLength, data: @chunk, seqNo: seqNo))
 
 proc ceilDiv*(a, b: int): int =

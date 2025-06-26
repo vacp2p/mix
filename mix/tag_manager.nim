@@ -1,5 +1,5 @@
 import tables, locks
-import curve25519
+import ./curve25519
 
 type TagManager* = ref object
   lock: Lock

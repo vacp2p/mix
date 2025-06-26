@@ -1,5 +1,5 @@
 import chronicles, results, unittest
-import ../src/[curve25519, tag_manager]
+import ../mix/[curve25519, tag_manager]
 
 suite "tag_manager_tests":
   var tm: TagManager

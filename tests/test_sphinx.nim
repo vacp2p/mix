@@ -1,5 +1,5 @@
 import chronicles, random, results, unittest
-import ../src/[config, curve25519, serialization, sphinx, tag_manager]
+import ../mix/[config, curve25519, serialization, sphinx, tag_manager]
 
 # Helper function to pad/truncate message
 proc padMessage(message: openArray[byte], size: int): seq[byte] =
@@ -9,15 +9,6 @@ proc padMessage(message: openArray[byte], size: int): seq[byte] =
     result = @message
     let paddingLength = size - message.len
     result.add(newSeq[byte](paddingLength)) # Pad with zeros
-
-# Helper function to check if a mix node is the exit in some message path
-proc ifExit(
-    address: Hop, delay: seq[byte], processedPacket: seq[byte], status: ProcessingStatus
-): bool =
-  if (address == Hop()) and (delay == @[]) and (status == Success):
-    return true
-  else:
-    return false
 
 # Helper function to create dummy data
 proc createDummyData(): (
@@ -96,10 +87,6 @@ suite "Sphinx Tests":
         pkt_len = $(processedPacket1.len), expected_len = $packetSize
       fail()
 
-    if ifExit(address1, delay1, processedPacket1, status1):
-      error "Packet processing failed"
-      fail()
-
     let res2 = processSphinxPacket(processedPacket1, privateKeys[1], tm)
     if res2.isErr:
       error "Error in Sphinx processing", err = res2.error
@@ -115,22 +102,14 @@ suite "Sphinx Tests":
         pkt_len = $(processedPacket2.len), expected_len = $packetSize
       fail()
 
-    if ifExit(address2, delay2, processedPacket2, status2):
-      error "Packet processing failed"
-      fail()
-
     let res3 = processSphinxPacket(processedPacket2, privateKeys[2], tm)
     if res3.isErr:
       error "Error in Sphinx processing", err = res3.error
       fail()
     let (address3, delay3, processedPacket3, status3) = res3.get()
 
-    if status3 != Success:
-      error "Processing status should be Success"
-      fail()
-
-    if not ifExit(address3, delay3, processedPacket3, status3):
-      error "Packet processing failed"
+    if status3 != Exit:
+      error "Processing status should be Exit"
       fail()
 
     let processedMessage = initMessage(processedPacket3)
@@ -243,10 +222,6 @@ suite "Sphinx Tests":
           pkt_len = $(processedPacket1.len), expected_len = $packetSize
         fail()
 
-      if ifExit(address1, delay1, processedPacket1, status1):
-        error "Packet processing failed"
-        fail()
-
       let res2 = processSphinxPacket(processedPacket1, privateKeys[1], tm)
       if res2.isErr:
         error "Error in Sphinx processing", err = res2.error
@@ -262,22 +237,14 @@ suite "Sphinx Tests":
           pkt_len = $(processedPacket2.len), expected_len = $packetSize
         fail()
 
-      if ifExit(address2, delay2, processedPacket2, status2):
-        error "Packet processing failed"
-        fail()
-
       let res3 = processSphinxPacket(processedPacket2, privateKeys[2], tm)
       if res3.isErr:
         error "Error in Sphinx processing", err = res3.error
         fail()
       let (address3, delay3, processedPacket3, status3) = res3.get()
 
-      if status3 != Success:
-        error "Processing status should be Success"
-        fail()
-
-      if not ifExit(address3, delay3, processedPacket3, status3):
-        error "Packet processing failed"
+      if status3 != Exit:
+        error "Processing status should be Exit"
         fail()
 
       if processedPacket3 != paddedMessage:
