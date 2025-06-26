@@ -18,7 +18,7 @@ proc createMixEntryConnection*(
       destPeerId: PeerId,
   ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
     try:
-      await srcMix.anonymizeLocalProtocolSend(msg, proto, destMultiAddr, destPeerId)
+      await srcMix.anonymizeLocalProtocolSend(mix_message.MixMessage(message: msg, protocol: proto), destMultiAddr, destPeerId)
     except CatchableError as e:
       error "Error during execution of anonymizeLocalProtocolSend: ", err = e.msg
     return

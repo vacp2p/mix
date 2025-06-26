@@ -11,7 +11,8 @@ type ProtocolType* = enum
   GossipSub11 = GossipSubCodec_11
   GossipSub10 = GossipSubCodec_10
   NoRespPing = NoRespPingCodec
-  OtherProtocol = "other" # Placeholder for other protocols
+  # Placeholder for other protocols
+  OtherProtocol = "other"
 
 type ProtocolHandler* = proc(conn: Connection, proto: ProtocolType): Future[void] {.
   async: (raises: [CancelledError])
@@ -23,6 +24,7 @@ proc fromString*(T: type ProtocolType, proto: string): ProtocolType =
   except ValueError:
     ProtocolType.OtherProtocol
 
+# TODO: methods are always dyn dispatch, procs always static. style guide advises they be used sparingly
 method callHandler*(
     switch: Switch, conn: Connection, proto: ProtocolType
 ): Future[void] {.base, async.} =

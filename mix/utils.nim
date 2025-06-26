@@ -81,14 +81,14 @@ proc multiAddrToBytes*(multiAddr: string): Result[seq[byte], string] =
   except Base58Error:
     return err("Invalid Peer ID")
 
-  if res.len != addrSize:
-    return err("Address must be exactly " & $addrSize & " bytes")
+  if res.len != ADDR_SIZE:
+    return err("Address must be exactly " & $ADDR_SIZE & " bytes")
 
   return ok(res)
 
 proc bytesToMultiAddr*(bytes: openArray[byte]): Result[string, string] =
-  if bytes.len != addrSize:
-    return err("Address must be exactly " & $addrSize & " bytes")
+  if bytes.len != ADDR_SIZE:
+    return err("Address must be exactly " & $ADDR_SIZE & " bytes")
 
   var ipParts: seq[string] = @[]
   for i in 0 .. 3:

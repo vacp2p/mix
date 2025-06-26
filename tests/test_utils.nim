@@ -16,8 +16,8 @@ suite "Utils tests":
         fail()
       let multiAddrBytes = multiAddrBytesRes.get()
 
-      if multiAddrBytes.len != addrSize:
-        error "Incorrect address size", expected = addrSize, actual = multiAddrBytes.len
+      if multiAddrBytes.len != ADDR_SIZE:
+        error "Incorrect address size", expected = ADDR_SIZE, actual = multiAddrBytes.len
         fail()
 
       let multiAddrStringRes = bytesToMultiAddr(multiAddrBytes)
@@ -45,7 +45,7 @@ suite "Utils tests":
       fail()
 
   test "invalid_addr_length":
-    let invalidBytes = newSeq[byte](addrSize - 1)
+    let invalidBytes = newSeq[byte](ADDR_SIZE - 1)
     let res = bytesToMultiAddr(invalidBytes)
     if res.isOk:
       error "Expected error for invalid address length, but conversion succeeded"

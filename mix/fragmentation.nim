@@ -3,7 +3,7 @@ import results, libp2p/peerid
 
 const paddingLengthSize* = 2
 const seqNoSize* = 4
-const dataSize* = messageSize - paddingLengthSize - seqNoSize
+const dataSize* = MSG_SIZE - paddingLengthSize - seqNoSize
 
 type MessageChunk* = object
   paddingLength: uint16
@@ -27,8 +27,8 @@ proc serializeMessageChunk*(msgChunk: MessageChunk): Result[seq[byte], string] =
   return ok(paddingBytes & msgChunk.data & seqNoBytes)
 
 proc deserializeMessageChunk*(data: openArray[byte]): Result[MessageChunk, string] =
-  if len(data) != messageSize:
-    return err("Data must be exactly " & $messageSize & " bytes")
+  if len(data) != MSG_SIZE:
+    return err("Data must be exactly " & $MSG_SIZE & " bytes")
 
   let paddingLength = bytesToUInt16(data[0 .. paddingLengthSize - 1]).valueOr:
     return err("Error in byte to padding length conversion: " & error)

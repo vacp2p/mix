@@ -5,7 +5,7 @@ import ../mix/[config, serialization]
 suite "serialization_tests":
   test "serialize_and_deserialize_header":
     let header = initHeader(
-      newSeq[byte](alphaSize), newSeq[byte](betaSize), newSeq[byte](gammaSize)
+      newSeq[byte](ALPHA_SIZE), newSeq[byte](BETA_SIZE), newSeq[byte](GAMMA_SIZE)
     )
 
     let serializedRes = serializeHeader(header)
@@ -14,13 +14,13 @@ suite "serialization_tests":
       fail()
     let serialized = serializedRes.get()
 
-    if len(serialized) != headerSize:
+    if len(serialized) != HEADER_SIZE:
       error "Serialized header size is incorrect",
-        expected = headerSize, actual = len(serialized)
+        expected = HEADER_SIZE, actual = len(serialized)
       fail()
 
   test "serialize_and_deserialize_message":
-    let message = initMessage(newSeq[byte](messageSize))
+    let message = newMessage(newSeq[byte](MSG_SIZE))
 
     let serializedRes = serializeMessage(message)
     if serializedRes.isErr:
@@ -39,7 +39,7 @@ suite "serialization_tests":
       fail()
 
   test "serialize_and_deserialize_hop":
-    let hop = initHop(newSeq[byte](addrSize))
+    let hop = initHop(newSeq[byte](ADDR_SIZE))
 
     let serializedRes = serializeHop(hop)
     if serializedRes.isErr:
@@ -59,10 +59,10 @@ suite "serialization_tests":
 
   test "serialize_and_deserialize_routing_info":
     let routingInfo = initRoutingInfo(
-      initHop(newSeq[byte](addrSize)),
-      newSeq[byte](delaySize),
-      newSeq[byte](gammaSize),
-      newSeq[byte](((r * (t + 1)) - t) * k),
+      initHop(newSeq[byte](ADDR_SIZE)),
+      newSeq[byte](DELAY_SIZE),
+      newSeq[byte](GAMMA_SIZE),
+      newSeq[byte](((MAX_PATH_LEN * (t + 1)) - t) * k),
     )
 
     let serializedRes = serializeRoutingInfo(routingInfo)
@@ -97,16 +97,16 @@ suite "serialization_tests":
       error "Deserialized gamma does not match the original gamma"
       fail()
 
-    if beta != dBeta[0 .. (((r * (t + 1)) - t) * k) - 1]:
+    if beta != dBeta[0 .. (((MAX_PATH_LEN * (t + 1)) - t) * k) - 1]:
       error "Deserialized beta does not match the original beta"
       fail()
 
   test "serialize_and_deserialize_sphinx_packet":
     let
       header = initHeader(
-        newSeq[byte](alphaSize), newSeq[byte](betaSize), newSeq[byte](gammaSize)
+        newSeq[byte](ALPHA_SIZE), newSeq[byte](BETA_SIZE), newSeq[byte](GAMMA_SIZE)
       )
-      payload = newSeq[byte](payloadSize)
+      payload = newSeq[byte](PAYLOAD_SIZE)
       packet = initSphinxPacket(header, payload)
 
     let serializedRes = serializeSphinxPacket(packet)

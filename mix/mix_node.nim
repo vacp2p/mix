@@ -1,11 +1,11 @@
 import options, os, results, strformat, strutils
-import std/streams
+import std/[streams, paths]
 import libp2p/[crypto/crypto, crypto/curve25519, crypto/secp, multiaddress, peerid]
 import ./[config, curve25519, utils]
 
 const MixNodeInfoSize* =
-  addrSize + (2 * FieldElementSize) + (SkRawPublicKeySize + SkRawPrivateKeySize)
-const MixPubInfoSize* = addrSize + FieldElementSize + SkRawPublicKeySize
+  ADDR_SIZE + (2 * FieldElementSize) + (SkRawPublicKeySize + SkRawPrivateKeySize)
+const MixPubInfoSize* = ADDR_SIZE + FieldElementSize + SkRawPublicKeySize
 
 type MixNodeInfo* = object
   multiAddr: string
@@ -52,34 +52,35 @@ proc serializeMixNodeInfo*(nodeInfo: MixNodeInfo): Result[seq[byte], string] =
     addrBytes & mixPubKeyBytes & mixPrivKeyBytes & libp2pPubKeyBytes & libp2pPrivKeyBytes
   )
 
+# TODO: set up error enums
 proc deserializeMixNodeInfo*(data: openArray[byte]): Result[MixNodeInfo, string] =
   if len(data) != MixNodeInfoSize:
     return
       err("Serialized Mix node info must be exactly " & $MixNodeInfoSize & " bytes")
 
-  let multiAddr = bytesToMultiAddr(data[0 .. addrSize - 1]).valueOr:
+  let multiAddr = bytesToMultiAddr(data[0 .. ADDR_SIZE - 1]).valueOr:
     return err("Error in multiaddress conversion to bytes: " & error)
 
   let mixPubKey = bytesToFieldElement(
-    data[addrSize .. (addrSize + FieldElementSize - 1)]
+    data[ADDR_SIZE .. (ADDR_SIZE + FieldElementSize - 1)]
   ).valueOr:
     return err("Mix public key deserialize error: " & error)
 
   let mixPrivKey = bytesToFieldElement(
-    data[(addrSize + FieldElementSize) .. (addrSize + (2 * FieldElementSize) - 1)]
+    data[(ADDR_SIZE + FieldElementSize) .. (ADDR_SIZE + (2 * FieldElementSize) - 1)]
   ).valueOr:
     return err("Mix private key deserialize error: " & error)
 
   let libp2pPubKey = SkPublicKey.init(
     data[
-      addrSize + (2 * FieldElementSize) ..
-        addrSize + (2 * FieldElementSize) + SkRawPublicKeySize - 1
+      ADDR_SIZE + (2 * FieldElementSize) ..
+        ADDR_SIZE + (2 * FieldElementSize) + SkRawPublicKeySize - 1
     ]
   ).valueOr:
     return err("Failed to initialize libp2p public key")
 
   let libp2pPrivKey = SkPrivateKey.init(
-    data[addrSize + (2 * FieldElementSize) + SkRawPublicKeySize ..^ 1]
+    data[ADDR_SIZE + (2 * FieldElementSize) + SkRawPublicKeySize ..^ 1]
   ).valueOr:
     return err("Failed to initialize libp2p private key")
 
@@ -97,11 +98,11 @@ proc isNodeMultiaddress*(mixNodeInfo: MixNodeInfo, multiAddr: string): bool =
   return mixNodeInfo.multiAddr == multiAddr
 
 proc writeMixNodeInfoToFile*(
-    node: MixNodeInfo, index: int, nodeInfoFolderPath: string = "./nodeInfo"
+    node: MixNodeInfo, index: int, nodeInfoFolderPath: paths.Path = paths.Path("./nodeInfo")
 ): Result[void, string] =
-  if not dirExists(nodeInfoFolderPath):
-    createDir(nodeInfoFolderPath)
-  let filename = nodeInfoFolderPath / fmt"mixNode_{index}"
+  if not dirExists($nodeInfoFolderPath):
+    createDir($nodeInfoFolderPath)
+  let filename = $nodeInfoFolderPath / fmt"mixNode_{index}"
   var file = newFileStream(filename, fmWrite)
   if file == nil:
     return err("Failed to create file stream for " & filename)
@@ -115,10 +116,10 @@ proc writeMixNodeInfoToFile*(
   return ok()
 
 proc readMixNodeInfoFromFile*(
-    index: int, nodeInfoFolderPath: string = "./nodeInfo"
+    index: int, nodeInfoFolderPath: paths.Path = paths.Path("./nodeInfo")
 ): Result[MixNodeInfo, string] =
   try:
-    let filename = nodeInfoFolderPath / fmt"mixNode_{index}"
+    let filename = $nodeInfoFolderPath / fmt"mixNode_{index}"
     if not fileExists(filename):
       return err("File does not exist")
     var file = newFileStream(filename, fmRead)
@@ -143,9 +144,9 @@ proc readMixNodeInfoFromFile*(
   except OSError as e:
     return err("OS error: " & $e.msg)
 
-proc deleteNodeInfoFolder*(nodeInfoFolderPath: string = "./nodeInfo") =
-  if dirExists(nodeInfoFolderPath):
-    removeDir(nodeInfoFolderPath)
+proc deleteNodeInfoFolder*(nodeInfoFolderPath: paths.Path = paths.Path("./nodeInfo")) =
+  if dirExists($nodeInfoFolderPath):
+    removeDir($nodeInfoFolderPath)
 
 type MixPubInfo* = object
   multiAddr: string
@@ -170,30 +171,31 @@ proc serializeMixPubInfo*(nodeInfo: MixPubInfo): Result[seq[byte], string] =
 
   return ok(addrBytes & mixPubKeyBytes & libp2pPubKeyBytes)
 
+# TODO: set up error enums
 proc deserializeMixPubInfo*(data: openArray[byte]): Result[MixPubInfo, string] =
   if len(data) != MixPubInfoSize:
     return
       err("Serialized mix public info must be exactly " & $MixPubInfoSize & " bytes")
 
-  let multiAddr = bytesToMultiAddr(data[0 .. addrSize - 1]).valueOr:
+  let multiAddr = bytesToMultiAddr(data[0 .. ADDR_SIZE - 1]).valueOr:
     return err("Error in bytes to multiaddress conversion: " & error)
 
   let mixPubKey = bytesToFieldElement(
-    data[addrSize .. (addrSize + FieldElementSize - 1)]
+    data[ADDR_SIZE .. (ADDR_SIZE + FieldElementSize - 1)]
   ).valueOr:
     return err("Mix public key deserialize error: " & error)
 
-  let libp2pPubKey = SkPublicKey.init(data[(addrSize + FieldElementSize) ..^ 1]).valueOr:
+  let libp2pPubKey = SkPublicKey.init(data[(ADDR_SIZE + FieldElementSize) ..^ 1]).valueOr:
     return err("Failed to initialize libp2p public key: ")
 
   ok(MixPubInfo(multiAddr: multiAddr, mixPubKey: mixPubKey, libp2pPubKey: libp2pPubKey))
 
 proc writeMixPubInfoToFile*(
-    node: MixPubInfo, index: int, pubInfoFolderPath: string = "./pubInfo"
+    node: MixPubInfo, index: int, pubInfoFolderPath: paths.Path = paths.Path("./pubInfo")
 ): Result[void, string] =
-  if not dirExists(pubInfoFolderPath):
-    createDir(pubInfoFolderPath)
-  let filename = pubInfoFolderPath / fmt"mixNode_{index}"
+  if not dirExists($pubInfoFolderPath):
+    createDir($pubInfoFolderPath)
+  let filename = $pubInfoFolderPath / fmt"mixNode_{index}"
   var file = newFileStream(filename, fmWrite)
   if file == nil:
     return err("Failed to create file stream for " & filename)
@@ -207,10 +209,10 @@ proc writeMixPubInfoToFile*(
   return ok()
 
 proc readMixPubInfoFromFile*(
-    index: int, pubInfoFolderPath: string = "./pubInfo"
+    index: int, pubInfoFolderPath: paths.Path = paths.Path("./pubInfo")
 ): Result[MixPubInfo, string] =
   try:
-    let filename = pubInfoFolderPath / fmt"mixNode_{index}"
+    let filename = $pubInfoFolderPath / fmt"mixNode_{index}"
     if not fileExists(filename):
       return err("File does not exist")
     var file = newFileStream(filename, fmRead)
@@ -235,9 +237,9 @@ proc readMixPubInfoFromFile*(
   except OSError as e:
     return err("OS error: " & $e.msg)
 
-proc deletePubInfoFolder*(pubInfoFolderPath: string = "./pubInfo") =
-  if dirExists(pubInfoFolderPath):
-    removeDir(pubInfoFolderPath)
+proc deletePubInfoFolder*(pubInfoFolderPath: paths.Path = paths.Path("./pubInfo")) =
+  if dirExists($pubInfoFolderPath):
+    removeDir($pubInfoFolderPath)
 
 proc getMixPubInfoByIndex*(index: int): Result[MixPubInfo, string] =
   if index < 0 or index >= mixNodes.len:

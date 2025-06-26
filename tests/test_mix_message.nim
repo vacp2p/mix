@@ -21,14 +21,13 @@ suite "mix_message_tests":
       fail()
     let deserializedMsg = deserializedResult.get()
 
-    let (dMessage, dProtocol) = getMixMessage(deserializedMsg)
-    if message != cast[string](dMessage):
+    if message != cast[string](deserializedMsg.message):
       error "Deserialized message does not match the original",
-        original = message, deserialized = cast[string](dMessage)
+        original = message, deserialized = cast[string](deserializedMsg.message)
       fail()
-    if protocol != dProtocol:
+    if protocol != deserializedMsg.protocol:
       error "Deserialized protocol does not match the original",
-        original = protocol, deserialized = dProtocol
+        original = protocol, deserialized = deserializedMsg.protocol
       fail()
 
   test "serialize_empty_mix_message":
@@ -49,14 +48,13 @@ suite "mix_message_tests":
       fail()
     let dMixMsg: MixMessage = deserializedResult.get()
 
-    let (dMessage, dProtocol) = getMixMessage(dMixMsg)
-    if emptyMessage != cast[string](dMessage):
+    if emptyMessage != cast[string](dMixMsg.message):
       error "Deserialized message is not empty",
-        expected = emptyMessage, actual = cast[string](dMessage)
+        expected = emptyMessage, actual = cast[string](dMixMsg.message)
       fail()
-    if protocol != dProtocol:
+    if protocol != dMixMsg.protocol:
       error "Deserialized protocol does not match the original",
-        original = protocol, deserialized = dProtocol
+        original = protocol, deserialized = dMixMsg.protocol
       fail()
 
   test "serialize_and_deserialize_mix_message_and_destination":
@@ -85,14 +83,13 @@ suite "mix_message_tests":
       fail()
     let dMixMsg = dMixMsgResult.get()
 
-    let (dMessage, dProtocol) = getMixMessage(dMixMsg)
-    if message != cast[string](dMessage):
+    if message != cast[string](dMixMsg.message):
       error "Deserialized message does not match the original",
-        original = message, deserialized = cast[string](dMessage)
+        original = message, deserialized = cast[string](dMixMsg.message)
       fail()
-    if protocol != dProtocol:
+    if protocol != dMixMsg.protocol:
       error "Deserialized protocol does not match the original",
-        original = protocol, deserialized = dProtocol
+        original = protocol, deserialized = dMixMsg.protocol
       fail()
     if destination != dDest:
       error "Deserialized destination does not match the original",
