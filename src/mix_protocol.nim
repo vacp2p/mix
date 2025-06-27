@@ -284,37 +284,7 @@ proc makePath(
     return
   return (serializedRes, multiAddrs, publicKeys, hop, delay)
 
-proc anonymizeLocalProtocolSend*(
-    mixProto: MixProtocol,
-    msg: seq[byte],
-    proto: ProtocolType,
-    destMultiAddr: Option[MultiAddress],
-    destPeerId: PeerId,
-) {.async.} =
-  let mixMsg = initMixMessage(msg, proto)
-
-  let serialized = serializeMixMessage(mixMsg).valueOr:
-    error "Serialization failed", err = error
-    mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
-    return
-  if len(serialized) > dataSize:
-    error "Message size exceeds maximum payload size",
-      size = len(serialized), limit = dataSize
-    mix_messages_error.inc(labelValues = ["Entry", "INVALID_SIZE"])
-    return
-  let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
-
-  let peerId = getPeerIdFromMultiAddr(multiAddr).valueOr:
-    error "Failed to get peer id from multiaddress", err = error
-    mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
-    return
-  mix_messages_recvd.inc(labelValues = ["Entry"])
-
-  let paddedMsg = padMessage(serialized, peerID)
-
-  trace "# Sent: ", sender = multiAddr, message = msg, dest = destMultiAddr
-
-  # Select L mix nodes at random
+proc validNetwork(mixProto: MixProtocol, destPeerId: PeerId): bool =
   let numMixNodes = mixProto.pubNodeInfo.len
   var numAvailableNodes = numMixNodes
   if mixProto.pubNodeInfo.hasKey(destPeerId):
@@ -327,30 +297,33 @@ proc anonymizeLocalProtocolSend*(
     mix_messages_error.inc(labelValues = ["Entry", "LOW_MIX_POOL"])
     return
 
-  let (serializedRes, multiAddrs, publicKeys, hop, delay) =
-    makePath(mixProto, numMixNodes, destPeerId, paddedMsg)
+proc marshalMixMsg(
+    msg: seq[byte], proto: ProtocolType, mixProto: MixProtocol
+): Result[MessageChunk, ()] =
+  let mixMsg = initMixMessage(msg, proto)
 
-  #Encode destination if beyond exit node
-  let destHop: Option[Hop] =
-    if destMultiAddr.isSome():
-      let dest = $destMultiAddr & "/p2p/" & $destPeerId
-      let destAddrBytes = multiAddrToBytes(dest).valueOr:
-        error "Failed to convert multiaddress to bytes", err = error
-        mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
-        return
-      some(initHop(destAddrBytes))
-    else:
-      none(Hop)
-
-  # Wrap in Sphinx packet
-  let sphinxPacket = wrapInSphinxPacket(
-    initMessage(serializedRes), publicKeys, delay, hop, destHop
-  ).valueOr:
-    error "Failed to wrap in sphinx packet", err = error
+  let serialized = serializeMixMessage(mixMsg).valueOr:
+    error "Serialization failed", err = error
     mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
-    return
+    return err(())
+  if len(serialized) > dataSize:
+    error "Message size exceeds maximum payload size",
+      size = len(serialized), limit = dataSize
+    mix_messages_error.inc(labelValues = ["Entry", "INVALID_SIZE"])
+    return err(())
+  let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
 
-  # Send the wrapped message to the first mix node in the selected path
+  let peerId = getPeerIdFromMultiAddr(multiAddr).valueOr:
+    error "Failed to get peer id from multiaddress", err = error
+    mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
+    return err(())
+  mix_messages_recvd.inc(labelValues = ["Entry"])
+
+  return ok(padMessage(serialized, peerID))
+
+proc doSend(
+    mixProto: MixProtocol, multiAddrs: seq[string], sphinxPacket: seq[byte]
+) {.async.} =
   let parts = multiAddrs[0].split("/p2p/")
   if parts.len != 2:
     error "Invalid multiaddress format", parts = parts
@@ -383,6 +356,47 @@ proc anonymizeLocalProtocolSend*(
         await nextHopConn.close()
       except CatchableError as e:
         error "Failed to close outgoing stream: ", err = e.msg
+
+proc anonymizeLocalProtocolSend*(
+    mixProto: MixProtocol,
+    msg: seq[byte],
+    proto: ProtocolType,
+    destMultiAddr: Option[MultiAddress],
+    destPeerId: PeerId,
+) {.async.} =
+  if not validNetwork(mixProto, destPeerId):
+    return
+
+  let paddedMsg = marshalMixMsg(msg, proto, mixProto).valueOr:
+    return
+
+  # trace "# Sent: ", sender = multiAddr, message = msg, dest = destMultiAddr
+
+  let (serializedRes, multiAddrs, publicKeys, hop, delay) =
+    makePath(mixProto, mixProto.pubNodeInfo.len, destPeerId, paddedMsg)
+
+  #Encode destination if beyond exit node
+  let destHop: Option[Hop] =
+    if destMultiAddr.isSome():
+      let dest = $destMultiAddr & "/p2p/" & $destPeerId
+      let destAddrBytes = multiAddrToBytes(dest).valueOr:
+        error "Failed to convert multiaddress to bytes", err = error
+        mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
+        return
+      some(initHop(destAddrBytes))
+    else:
+      none(Hop)
+
+  # Wrap in Sphinx packet
+  let sphinxPacket = wrapInSphinxPacket(
+    initMessage(serializedRes), publicKeys, delay, hop, destHop
+  ).valueOr:
+    error "Failed to wrap in sphinx packet", err = error
+    mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
+    return
+
+  await doSend(mixProto, multiAddrs, sphinxPacket)
+  # Send the wrapped message to the first mix node in the selected path
 
 proc createMixProtocol*(
     mixNodeInfo: MixNodeInfo,
