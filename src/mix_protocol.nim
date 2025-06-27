@@ -299,7 +299,7 @@ proc validNetwork(mixProto: MixProtocol, destPeerId: PeerId): bool =
 
 proc marshalMixMsg(
     msg: seq[byte], proto: ProtocolType, mixProto: MixProtocol
-): Result[MessageChunk, ()] =
+): Result[(seq[byte], PeerId), ()] =
   let mixMsg = initMixMessage(msg, proto)
 
   let serialized = serializeMixMessage(mixMsg).valueOr:
@@ -319,7 +319,7 @@ proc marshalMixMsg(
     return err(())
   mix_messages_recvd.inc(labelValues = ["Entry"])
 
-  return ok(padMessage(serialized, peerID))
+  return ok((serialized, peerID))
 
 proc doSend(
     mixProto: MixProtocol, multiAddrs: seq[string], sphinxPacket: seq[byte]
@@ -367,13 +367,17 @@ proc anonymizeLocalProtocolSend*(
   if not validNetwork(mixProto, destPeerId):
     return
 
-  let paddedMsg = marshalMixMsg(msg, proto, mixProto).valueOr:
+  let (marshalledMsg, marshalPeerId) = marshalMixMsg(msg, proto, mixProto).valueOr:
     return
 
   # trace "# Sent: ", sender = multiAddr, message = msg, dest = destMultiAddr
 
-  let (serializedRes, multiAddrs, publicKeys, hop, delay) =
-    makePath(mixProto, mixProto.pubNodeInfo.len, destPeerId, paddedMsg)
+  let (serializedRes, multiAddrs, publicKeys, hop, delay) = makePath(
+    mixProto,
+    mixProto.pubNodeInfo.len,
+    destPeerId,
+    padMessage(marshalledMsg, marshalPeerId, fragmentation.dataSize),
+  )
 
   #Encode destination if beyond exit node
   let destHop: Option[Hop] =

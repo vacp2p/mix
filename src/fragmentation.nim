@@ -42,12 +42,14 @@ proc deserializeMessageChunk*(data: openArray[byte]): Result[MessageChunk, strin
 proc ceilDiv*(a, b: int): int =
   (a + b - 1) div b
 
-# Function for padding messages smaller than dataSize
-proc padMessage*(messageBytes: seq[byte], peerId: PeerId): MessageChunk =
+# Function for padding messages out to dataSize
+proc padMessage*(
+    messageBytes: seq[byte], peerId: PeerId, targetLen: int
+): MessageChunk =
   var seqNoGen = initSeqNo(peerId)
   seqNoGen.generateSeqNo(messageBytes)
 
-  let paddingLength = uint16(dataSize - len(messageBytes))
+  let paddingLength = uint16(targetLen - len(messageBytes))
 
   let paddedData =
     if paddingLength > 0:
