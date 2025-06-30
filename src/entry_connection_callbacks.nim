@@ -8,14 +8,14 @@ const D* = 4 # No. of peers to forward to
 proc createMixEntryConnection*(
     srcMix: MixProtocol,
     destAddr: Option[MultiAddress],
-    destPeerId: PeerId,
+    destPeerId: Option[PeerId],
     codec: string,
 ): MixEntryConnection {.gcsafe, raises: [].} =
   var sendDialerFunc = proc(
       msg: seq[byte],
       proto: ProtocolType,
       destMultiAddr: Option[MultiAddress],
-      destPeerId: PeerId,
+      destPeerId: Option[PeerId],
   ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
     try:
       await srcMix.anonymizeLocalProtocolSend(msg, proto, destMultiAddr, destPeerId)

@@ -1,17 +1,17 @@
 import hashes, chronos, std/options, stew/byteutils
 import libp2p/stream/connection
-import ./protocol, ./mix_node, ./mix_protocol
+import ./protocol, ./mix_protocol
 
 type MixDialer* = proc(
   msg: seq[byte],
   proto: ProtocolType,
   destMultiAddr: Option[MultiAddress],
-  destPeerId: PeerId,
+  destPeerId: Option[PeerId],
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true).}
 
 type MixEntryConnection* = ref object of Connection
   destMultiAddr: Option[MultiAddress]
-  destPeerId: PeerId
+  destPeerId: Option[PeerId]
   proto: ProtocolType
   mixDialer: MixDialer
 
@@ -88,7 +88,7 @@ func hash*(self: MixEntryConnection): Hash =
 proc new*(
     T: typedesc[MixEntryConnection],
     destMultiAddr: Option[MultiAddress],
-    destPeerId: PeerId,
+    destPeerId: Option[PeerId],
     proto: ProtocolType,
     sendFunc: MixDialer,
 ): MixEntryConnection =
@@ -122,8 +122,8 @@ proc newConn*(
   var sendDialerFunc = proc(
       msg: seq[byte],
       proto: ProtocolType,
-      destMultiAddr: MultiAddress,
-      destPeerId: PeerId,
+      destMultiAddr: Option[MultiAddress],
+      destPeerId: Option[PeerId],
   ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
     try:
       await mixproto.anonymizeLocalProtocolSend(msg, proto, destMultiAddr, destPeerId)

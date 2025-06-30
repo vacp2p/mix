@@ -50,7 +50,8 @@ proc handleSuccess(
     processedPkt: seq[byte],
     status: ProcessingStatus,
 ) {.async: (raises: [CancelledError]).} =
-  trace "# Intermediate: ", multiAddr = multiAddr
+  let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
+  info "# Intermediate: ", multiAddr = multiAddr
   # Add delay
   let delayMillis = (delay[0].int shl 8) or delay[1].int
   await sleepAsync(milliseconds(delayMillis))
@@ -122,7 +123,8 @@ proc handleExit(
     return
 
   let (message, protocol) = getMixMessage(deserializedResult)
-  trace "# Received: ", receiver = multiAddr, message = message
+  let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
+  info "# Received: ", receiver = multiAddr, message = message
   if (nextHop == Hop()) and (delay == @[]):
     let exitConn = MixExitConnection.new(message)
     await mixProto.pHandler.get()(exitConn, protocol)
@@ -232,7 +234,7 @@ proc handleMixNodeConnection(
     discard
 
 proc makePath(
-    mixProto: MixProtocol, numMixNodes: int, destPeerId: PeerId, paddedMsg: MessageChunk
+    mixProto: MixProtocol, numMixNodes: int, destPeerId: Option[PeerId], paddedMsg: MessageChunk
 ): (seq[byte], seq[string], seq[FieldElement], seq[Hop], seq[seq[byte]]) =
   var
     pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
@@ -252,8 +254,9 @@ proc makePath(
     randPeerId = pubNodeInfoKeys[selectedIndex]
     availableIndices.del(randomIndexPosition)
     # Skip the destination peer
-    if randPeerId == destPeerId:
-      continue
+    if destPeerId.isSome():
+      if randPeerId == destPeerId.unsafeGet():
+        continue
 
     info "Selected mix node: ", indexInPath = i, peerId = randPeerId
 
@@ -288,8 +291,9 @@ proc anonymizeLocalProtocolSend*(
     mixProto: MixProtocol,
     msg: seq[byte],
     proto: ProtocolType,
+    # The optional comes from the GS poc, when entry node is subscribed, to not propagate the message from the entry point
     destMultiAddr: Option[MultiAddress],
-    destPeerId: PeerId,
+    destPeerId: Option[PeerId],
 ) {.async.} =
   let mixMsg = initMixMessage(msg, proto)
 
@@ -312,14 +316,16 @@ proc anonymizeLocalProtocolSend*(
 
   let paddedMsg = padMessage(serialized, peerID)
 
-  trace "# Sent: ", sender = multiAddr, message = msg, dest = destMultiAddr
+  info "# Sent: ", sender = multiAddr, message = msg, dest = destMultiAddr
 
   # Select L mix nodes at random
   let numMixNodes = mixProto.pubNodeInfo.len
   var numAvailableNodes = numMixNodes
-  if mixProto.pubNodeInfo.hasKey(destPeerId):
-    info "Destination peer is a mix node", destPeerId = destPeerId
-    numAvailableNodes = numMixNodes - 1
+
+  if destPeerId.isSome():
+    if mixProto.pubNodeInfo.hasKey(destPeerId.unsafeGet()):
+      info "Destination peer is a mix node", destPeerId = destPeerId
+      numAvailableNodes = numMixNodes - 1
 
   if numAvailableNodes < L:
     error "No. of public mix nodes less than path length.",
@@ -331,11 +337,13 @@ proc anonymizeLocalProtocolSend*(
     makePath(mixProto, numMixNodes, destPeerId, paddedMsg)
 
   #Encode destination if beyond exit node
+  if destMultiAddr.isSome() xor destPeerId.isSome():
+    error "destination pair broken", destAddr=destMultiAddr, destId=destPeerId
   let destHop: Option[Hop] =
     if destMultiAddr.isSome():
-      let dest = $destMultiAddr & "/p2p/" & $destPeerId
+      let dest = $destMultiAddr.unsafeGet() & "/p2p/" & $destPeerId.unsafeGet()
       let destAddrBytes = multiAddrToBytes(dest).valueOr:
-        error "Failed to convert multiaddress to bytes", err = error
+        error "Failed to convert dest multiaddress to bytes", err = error, dest=dest
         mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
         return
       some(initHop(destAddrBytes))
@@ -367,7 +375,7 @@ proc anonymizeLocalProtocolSend*(
     mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
     return
 
-  trace "# Sending to: ", multiaddr = multiAddrs[0]
+  info "# Sending to: ", multiaddr = multiAddrs[0]
 
   var nextHopConn: Connection
   try:
