@@ -6,13 +6,15 @@ type Header* = object
   Beta: seq[byte]
   Gamma: seq[byte]
 
-proc initHeader*(alpha: seq[byte], beta: seq[byte], gamma: seq[byte]): Header =
+proc initHeader*(
+    alpha: seq[byte], beta: seq[byte], gamma: seq[byte]
+): Header {.raises: [].} =
   return Header(Alpha: alpha, Beta: beta, Gamma: gamma)
 
-proc getHeader*(header: Header): (seq[byte], seq[byte], seq[byte]) =
+proc getHeader*(header: Header): (seq[byte], seq[byte], seq[byte]) {.raises: [].} =
   (header.Alpha, header.Beta, header.Gamma)
 
-proc serializeHeader*(header: Header): Result[seq[byte], string] =
+proc serializeHeader*(header: Header): Result[seq[byte], string] {.raises: [].} =
   if len(header.Alpha) != alphaSize:
     return err("Alpha must be exactly " & $alphaSize & " bytes")
   if len(header.Beta) != betaSize:
@@ -24,20 +26,22 @@ proc serializeHeader*(header: Header): Result[seq[byte], string] =
 type Message* = object
   Content: seq[byte]
 
-proc initMessage*(content: seq[byte]): Message =
+proc initMessage*(content: seq[byte]): Message {.raises: [].} =
   return Message(Content: content)
 
-proc getMessage*(message: Message): seq[byte] =
+proc getMessage*(message: Message): seq[byte] {.raises: [].} =
   return message.Content
 
-proc serializeMessage*(message: Message): Result[seq[byte], string] =
+proc serializeMessage*(message: Message): Result[seq[byte], string] {.raises: [].} =
   if len(message.Content) != messageSize:
     return err("Message must be exactly " & $(messageSize) & " bytes")
   var res = newSeq[byte](k) # Prepend k bytes of zero padding
   res.add(message.Content)
   return ok(res)
 
-proc deserializeMessage*(serializedMessage: openArray[byte]): Result[Message, string] =
+proc deserializeMessage*(
+    serializedMessage: openArray[byte]
+): Result[Message, string] {.raises: [].} =
   if len(serializedMessage) != payloadSize:
     return err("Serialized message must be exactly " & $payloadSize & " bytes")
   let content = serializedMessage[k ..^ 1]
@@ -46,18 +50,18 @@ proc deserializeMessage*(serializedMessage: openArray[byte]): Result[Message, st
 type Hop* = object
   MultiAddress: seq[byte]
 
-proc initHop*(multiAddress: seq[byte]): Hop =
+proc initHop*(multiAddress: seq[byte]): Hop {.raises: [].} =
   return Hop(MultiAddress: multiAddress)
 
-proc getHop*(hop: Hop): seq[byte] =
+proc getHop*(hop: Hop): seq[byte] {.raises: [].} =
   return hop.MultiAddress
 
-proc serializeHop*(hop: Hop): Result[seq[byte], string] =
+proc serializeHop*(hop: Hop): Result[seq[byte], string] {.raises: [].} =
   if len(hop.MultiAddress) != addrSize:
     return err("MultiAddress must be exactly " & $addrSize & " bytes")
   return ok(hop.MultiAddress)
 
-proc deserializeHop*(data: openArray[byte]): Result[Hop, string] =
+proc deserializeHop*(data: openArray[byte]): Result[Hop, string] {.raises: [].} =
   if len(data) != addrSize:
     return err("MultiAddress must be exactly " & $addrSize & " bytes")
   return ok(Hop(MultiAddress: @data))
@@ -70,13 +74,17 @@ type RoutingInfo* = object
 
 proc initRoutingInfo*(
     address: Hop, delay: seq[byte], gamma: seq[byte], beta: seq[byte]
-): RoutingInfo =
+): RoutingInfo {.raises: [].} =
   return RoutingInfo(Addr: address, Delay: delay, Gamma: gamma, Beta: beta)
 
-proc getRoutingInfo*(info: RoutingInfo): (Hop, seq[byte], seq[byte], seq[byte]) =
+proc getRoutingInfo*(
+    info: RoutingInfo
+): (Hop, seq[byte], seq[byte], seq[byte]) {.raises: [].} =
   (info.Addr, info.Delay, info.Gamma, info.Beta)
 
-proc serializeRoutingInfo*(info: RoutingInfo): Result[seq[byte], string] =
+proc serializeRoutingInfo*(
+    info: RoutingInfo
+): Result[seq[byte], string] {.raises: [].} =
   if len(info.Delay) != delaySize:
     return err("Delay must be exactly " & $delaySize & " bytes")
   if len(info.Gamma) != gammaSize:
@@ -89,7 +97,9 @@ proc serializeRoutingInfo*(info: RoutingInfo): Result[seq[byte], string] =
 
   return ok(addrBytes & info.Delay & info.Gamma & info.Beta)
 
-proc deserializeRoutingInfo*(data: openArray[byte]): Result[RoutingInfo, string] =
+proc deserializeRoutingInfo*(
+    data: openArray[byte]
+): Result[RoutingInfo, string] {.raises: [].} =
   if len(data) != betaSize + ((t + 1) * k):
     return err("Data must be exactly " & $(betaSize + ((t + 1) * k)) & " bytes")
 
@@ -110,19 +120,25 @@ type SphinxPacket* = object
   Hdr: Header
   Payload: seq[byte]
 
-proc initSphinxPacket*(header: Header, payload: seq[byte]): SphinxPacket =
+proc initSphinxPacket*(
+    header: Header, payload: seq[byte]
+): SphinxPacket {.raises: [].} =
   return SphinxPacket(Hdr: header, Payload: payload)
 
-proc getSphinxPacket*(packet: SphinxPacket): (Header, seq[byte]) =
+proc getSphinxPacket*(packet: SphinxPacket): (Header, seq[byte]) {.raises: [].} =
   (packet.Hdr, packet.Payload)
 
-proc serializeSphinxPacket*(packet: SphinxPacket): Result[seq[byte], string] =
+proc serializeSphinxPacket*(
+    packet: SphinxPacket
+): Result[seq[byte], string] {.raises: [].} =
   let headerBytes = serializeHeader(packet.Hdr).valueOr:
     return err("Serialize sphinx packet header error: " & error)
 
   return ok(headerBytes & packet.Payload)
 
-proc deserializeSphinxPacket*(data: openArray[byte]): Result[SphinxPacket, string] =
+proc deserializeSphinxPacket*(
+    data: openArray[byte]
+): Result[SphinxPacket, string] {.raises: [].} =
   if len(data) != packetSize:
     return err("Sphinx packet size must be exactly " & $packetSize & " bytes")
 

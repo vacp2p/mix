@@ -72,12 +72,12 @@ method writeLp*(
 method shortLog*(self: MixEntryConnection): string {.base, raises: [].} =
   "[MixEntryConnection] Destination: " & $self.destMultiAddr & "/p2p/" & $self.destPeerId
 
-method initStream*(self: MixEntryConnection) =
+method initStream*(self: MixEntryConnection) {.raises: [].} =
   discard
 
 method closeImpl*(
     self: MixEntryConnection
-): Future[void] {.async: (raises: [], raw: true).} =
+): Future[void] {.async: (raises: [CancelledError], raw: true).} =
   let fut = newFuture[void]()
   fut.complete()
   return fut
@@ -91,7 +91,7 @@ proc new*(
     destPeerId: Option[PeerId],
     proto: ProtocolType,
     sendFunc: MixDialer,
-): MixEntryConnection =
+): MixEntryConnection {.raises: [].} =
   let instance = T(
     destMultiAddr: destMultiAddr,
     destPeerId: destPeerId,
@@ -114,7 +114,7 @@ proc newConn*(
     destPeerId: PeerId,
     proto: ProtocolType,
     mixproto: MixProtocol,
-): MixEntryConnection =
+): MixEntryConnection {.raises: [].} =
   #let destPeerId = getPeerIdFromMultiAddr(destMultiAddr).get()
 
   let maddr = MultiAddress.init(destMultiAddr).get()

@@ -21,7 +21,7 @@ proc initMixNodeInfo*(
     mixPubKey, mixPrivKey: FieldElement,
     libp2pPubKey: SkPublicKey,
     libp2pPrivKey: SkPrivateKey,
-): MixNodeInfo =
+): MixNodeInfo {.raises: [].} =
   MixNodeInfo(
     multiAddr: multiAddr,
     mixPubKey: mixPubKey,
@@ -32,13 +32,15 @@ proc initMixNodeInfo*(
 
 proc getMixNodeInfo*(
     info: MixNodeInfo
-): (string, FieldElement, FieldElement, SkPublicKey, SkPrivateKey) =
+): (string, FieldElement, FieldElement, SkPublicKey, SkPrivateKey) {.raises: [].} =
   (
     info.multiAddr, info.mixPubKey, info.mixPrivKey, info.libp2pPubKey,
     info.libp2pPrivKey,
   )
 
-proc serializeMixNodeInfo*(nodeInfo: MixNodeInfo): Result[seq[byte], string] =
+proc serializeMixNodeInfo*(
+    nodeInfo: MixNodeInfo
+): Result[seq[byte], string] {.raises: [].} =
   let addrBytes = multiAddrToBytes(nodeInfo.multiAddr).valueOr:
     return err("Error in multiaddress conversion to bytes: " & error)
 
@@ -52,7 +54,9 @@ proc serializeMixNodeInfo*(nodeInfo: MixNodeInfo): Result[seq[byte], string] =
     addrBytes & mixPubKeyBytes & mixPrivKeyBytes & libp2pPubKeyBytes & libp2pPrivKeyBytes
   )
 
-proc deserializeMixNodeInfo*(data: openArray[byte]): Result[MixNodeInfo, string] =
+proc deserializeMixNodeInfo*(
+    data: openArray[byte]
+): Result[MixNodeInfo, string] {.raises: [].} =
   if len(data) != MixNodeInfoSize:
     return
       err("Serialized Mix node info must be exactly " & $MixNodeInfoSize & " bytes")
@@ -93,12 +97,15 @@ proc deserializeMixNodeInfo*(data: openArray[byte]): Result[MixNodeInfo, string]
     )
   )
 
-proc isNodeMultiaddress*(mixNodeInfo: MixNodeInfo, multiAddr: string): bool =
+proc isNodeMultiaddress*(
+    mixNodeInfo: MixNodeInfo, multiAddr: string
+): bool {.raises: [].} =
   return mixNodeInfo.multiAddr == multiAddr
 
+# TODO: empty the raise list
 proc writeMixNodeInfoToFile*(
     node: MixNodeInfo, index: int, nodeInfoFolderPath: string = "./nodeInfo"
-): Result[void, string] =
+): Result[void, string] {.raises: [IOError, OSError].} =
   if not dirExists(nodeInfoFolderPath):
     createDir(nodeInfoFolderPath)
   let filename = nodeInfoFolderPath / fmt"mixNode_{index}"
@@ -116,7 +123,7 @@ proc writeMixNodeInfoToFile*(
 
 proc readMixNodeInfoFromFile*(
     index: int, nodeInfoFolderPath: string = "./nodeInfo"
-): Result[MixNodeInfo, string] =
+): Result[MixNodeInfo, string] {.raises: [].} =
   try:
     let filename = nodeInfoFolderPath / fmt"mixNode_{index}"
     if not fileExists(filename):
@@ -143,7 +150,10 @@ proc readMixNodeInfoFromFile*(
   except OSError as e:
     return err("OS error: " & $e.msg)
 
-proc deleteNodeInfoFolder*(nodeInfoFolderPath: string = "./nodeInfo") =
+# TODO: empty the raise list
+proc deleteNodeInfoFolder*(
+    nodeInfoFolderPath: string = "./nodeInfo"
+) {.raises: [OSError].} =
   if dirExists(nodeInfoFolderPath):
     removeDir(nodeInfoFolderPath)
 
@@ -154,13 +164,17 @@ type MixPubInfo* = object
 
 proc initMixPubInfo*(
     multiAddr: string, mixPubKey: FieldElement, libp2pPubKey: SkPublicKey
-): MixPubInfo =
+): MixPubInfo {.raises: [].} =
   MixPubInfo(multiAddr: multiAddr, mixPubKey: mixPubKey, libp2pPubKey: libp2pPubKey)
 
-proc getMixPubInfo*(info: MixPubInfo): (string, FieldElement, SkPublicKey) =
+proc getMixPubInfo*(
+    info: MixPubInfo
+): (string, FieldElement, SkPublicKey) {.raises: [].} =
   (info.multiAddr, info.mixPubKey, info.libp2pPubKey)
 
-proc serializeMixPubInfo*(nodeInfo: MixPubInfo): Result[seq[byte], string] =
+proc serializeMixPubInfo*(
+    nodeInfo: MixPubInfo
+): Result[seq[byte], string] {.raises: [].} =
   let addrBytes = multiAddrToBytes(nodeInfo.multiAddr).valueOr:
     return err("Error in multiaddress conversion to bytes: " & error)
 
@@ -170,7 +184,9 @@ proc serializeMixPubInfo*(nodeInfo: MixPubInfo): Result[seq[byte], string] =
 
   return ok(addrBytes & mixPubKeyBytes & libp2pPubKeyBytes)
 
-proc deserializeMixPubInfo*(data: openArray[byte]): Result[MixPubInfo, string] =
+proc deserializeMixPubInfo*(
+    data: openArray[byte]
+): Result[MixPubInfo, string] {.raises: [].} =
   if len(data) != MixPubInfoSize:
     return
       err("Serialized mix public info must be exactly " & $MixPubInfoSize & " bytes")
@@ -190,7 +206,7 @@ proc deserializeMixPubInfo*(data: openArray[byte]): Result[MixPubInfo, string] =
 
 proc writeMixPubInfoToFile*(
     node: MixPubInfo, index: int, pubInfoFolderPath: string = "./pubInfo"
-): Result[void, string] =
+): Result[void, string] {.raises: [OSError, IOError].} =
   if not dirExists(pubInfoFolderPath):
     createDir(pubInfoFolderPath)
   let filename = pubInfoFolderPath / fmt"mixNode_{index}"
@@ -208,7 +224,7 @@ proc writeMixPubInfoToFile*(
 
 proc readMixPubInfoFromFile*(
     index: int, pubInfoFolderPath: string = "./pubInfo"
-): Result[MixPubInfo, string] =
+): Result[MixPubInfo, string] {.raises: [].} =
   try:
     let filename = pubInfoFolderPath / fmt"mixNode_{index}"
     if not fileExists(filename):
@@ -235,11 +251,13 @@ proc readMixPubInfoFromFile*(
   except OSError as e:
     return err("OS error: " & $e.msg)
 
-proc deletePubInfoFolder*(pubInfoFolderPath: string = "./pubInfo") =
+proc deletePubInfoFolder*(
+    pubInfoFolderPath: string = "./pubInfo"
+) {.raises: [OSError].} =
   if dirExists(pubInfoFolderPath):
     removeDir(pubInfoFolderPath)
 
-proc getMixPubInfoByIndex*(index: int): Result[MixPubInfo, string] =
+proc getMixPubInfoByIndex*(index: int): Result[MixPubInfo, string] {.raises: [].} =
   if index < 0 or index >= mixNodes.len:
     return err("Index must be between 0 and " & $(mixNodes.len))
   ok(
@@ -252,7 +270,7 @@ proc getMixPubInfoByIndex*(index: int): Result[MixPubInfo, string] =
 
 proc generateMixNodes(
     count: int, basePort: int = 4242
-): Result[seq[MixNodeInfo], string] =
+): Result[seq[MixNodeInfo], string] {.raises: [].} =
   var nodes = newSeq[MixNodeInfo](count)
   for i in 0 ..< count:
     let keyPairResult = generateKeyPair()
@@ -279,17 +297,19 @@ proc generateMixNodes(
 
   ok(nodes)
 
-proc initializeMixNodes*(count: int, basePort: int = 4242): Result[void, string] =
+proc initializeMixNodes*(
+    count: int, basePort: int = 4242
+): Result[void, string] {.raises: [].} =
   mixNodes = generateMixNodes(count, basePort).valueOr:
     return err("Mix node initialization error: " & error)
 
-proc getPeerIdFromMultiAddr*(multiAddr: string): Result[PeerId, string] =
+proc getPeerIdFromMultiAddr*(multiAddr: string): Result[PeerId, string] {.raises: [].} =
   let parts = multiAddr.split("/")
   if parts.len != 7:
     return err("Invalid multiaddress format")
   ok(PeerId.init(parts[6]).get())
 
-proc findMixNodeByPeerId*(peerId: PeerId): Result[MixNodeInfo, string] =
+proc findMixNodeByPeerId*(peerId: PeerId): Result[MixNodeInfo, string] {.raises: [].} =
   for node in mixNodes:
     let peerIdRes = getPeerIdFromMultiAddr(node.multiAddr).valueOr:
       return err("Failed to get peer id from multiAddress")
@@ -297,12 +317,14 @@ proc findMixNodeByPeerId*(peerId: PeerId): Result[MixNodeInfo, string] =
       return ok(node)
   return err("No node with peer id: " & $peerId)
 
-proc getMixNodeByIndex*(index: int): Result[MixNodeInfo, string] =
+proc getMixNodeByIndex*(index: int): Result[MixNodeInfo, string] {.raises: [].} =
   if index < 0 or index >= mixNodes.len:
     return err("Index must be between 0 and " & $(mixNodes.len))
   ok(mixNodes[index])
 
-proc initMixMultiAddrByIndex*(index: int, multiAddr: string): Result[void, string] =
+proc initMixMultiAddrByIndex*(
+    index: int, multiAddr: string
+): Result[void, string] {.raises: [].} =
   if index < 0 or index >= mixNodes.len:
     return err("Index must be between 0 and " & $(mixNodes.len))
   mixNodes[index].multiAddr = multiAddr

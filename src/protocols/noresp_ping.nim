@@ -32,7 +32,7 @@ proc new*(
     T: typedesc[NoRespPing],
     handler: NoRespPingHandler = nil,
     rng: ref HmacDrbgContext = newRng(),
-): T {.public.} =
+): T {.public, raises: [].} =
   let noRespPing = NoRespPing(noRespPingHandler: handler, rng: rng)
   noRespPing.init()
   noRespPing
@@ -52,7 +52,9 @@ method init*(p: NoRespPing) =
   p.handler = handle
   p.codec = NoRespPingCodec
 
-proc noRespPing*(p: NoRespPing, conn: Connection): Future[seq[byte]] {.async, public.} =
+proc noRespPing*(
+    p: NoRespPing, conn: Connection
+): Future[seq[byte]] {.async: (raises: [CancelledError, LPStreamError]).} =
   trace "initiating ping"
   var randomBuf: array[NoRespPingSize, byte]
   hmacDrbgGenerate(p.rng[], randomBuf)

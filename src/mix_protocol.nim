@@ -21,14 +21,14 @@ type MixProtocol* = ref object of LPProtocol
 
 proc loadMixNodeInfo*(
     index: int, nodeFolderInfoPath: string = "./nodeInfo"
-): Result[MixNodeInfo, string] =
+): Result[MixNodeInfo, string] {.raises: [].} =
   let readNode = readMixNodeInfoFromFile(index, nodeFolderInfoPath).valueOr:
     return err("Failed to load node info from file: " & error)
   ok(readNode)
 
 proc loadAllButIndexMixPubInfo*(
     index, numNodes: int, pubInfoFolderPath: string = "./pubInfo"
-): Result[Table[PeerId, MixPubInfo], string] =
+): Result[Table[PeerId, MixPubInfo], string] {.raises: [].} =
   var pubInfoTable = initTable[PeerId, MixPubInfo]()
   for i in 0 ..< numNodes:
     if i != index:
@@ -183,7 +183,7 @@ proc handleExit(
   mix_messages_forwarded.inc(labelValues = ["Exit"])
 
 # ToDo: Change to a more secure random number generator for production.
-proc cryptoRandomInt(max: int): Result[int, string] =
+proc cryptoRandomInt(max: int): Result[int, string] {.raises: [].} =
   if max == 0:
     return err("Max cannot be zero.")
   var bytes: array[8, byte]
@@ -234,8 +234,11 @@ proc handleMixNodeConnection(
     discard
 
 proc makePath(
-    mixProto: MixProtocol, numMixNodes: int, destPeerId: Option[PeerId], paddedMsg: MessageChunk
-): (seq[byte], seq[string], seq[FieldElement], seq[Hop], seq[seq[byte]]) =
+    mixProto: MixProtocol,
+    numMixNodes: int,
+    destPeerId: Option[PeerId],
+    paddedMsg: MessageChunk,
+): (seq[byte], seq[string], seq[FieldElement], seq[Hop], seq[seq[byte]]) {.raises: [].} =
   var
     pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
     randPeerId: PeerId
@@ -294,7 +297,7 @@ proc anonymizeLocalProtocolSend*(
     # The optional comes from the GS poc, when entry node is subscribed, to not propagate the message from the entry point
     destMultiAddr: Option[MultiAddress],
     destPeerId: Option[PeerId],
-) {.async.} =
+) {.async, raises: [].} =
   let mixMsg = initMixMessage(msg, proto)
 
   let serialized = serializeMixMessage(mixMsg).valueOr:
@@ -338,12 +341,12 @@ proc anonymizeLocalProtocolSend*(
 
   #Encode destination if beyond exit node
   if destMultiAddr.isSome() xor destPeerId.isSome():
-    error "destination pair broken", destAddr=destMultiAddr, destId=destPeerId
+    error "destination pair broken", destAddr = destMultiAddr, destId = destPeerId
   let destHop: Option[Hop] =
     if destMultiAddr.isSome():
       let dest = $destMultiAddr.unsafeGet() & "/p2p/" & $destPeerId.unsafeGet()
       let destAddrBytes = multiAddrToBytes(dest).valueOr:
-        error "Failed to convert dest multiaddress to bytes", err = error, dest=dest
+        error "Failed to convert dest multiaddress to bytes", err = error, dest = dest
         mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
         return
       some(initHop(destAddrBytes))
@@ -398,7 +401,7 @@ proc createMixProtocol*(
     switch: Switch,
     tagManager: TagManager,
     handler: Option[ProtocolHandler],
-): Result[MixProtocol, string] =
+): Result[MixProtocol, string] {.raises: [].} =
   let mixProto = new MixProtocol
   mixProto.mixNodeInfo = mixNodeInfo
   mixProto.pubNodeInfo = pubNodeInfo
@@ -414,7 +417,7 @@ proc new*(
     index, numNodes: int,
     switch: Switch,
     nodeFolderInfoPath: string = ".",
-): Result[T, string] =
+): Result[T, string] {.raises: [].} =
   let mixNodeInfo = loadMixNodeInfo(index, nodeFolderInfoPath / fmt"nodeInfo").valueOr:
     return err("Failed to load mix node info for index " & $index & " - err: " & error)
 
@@ -449,7 +452,7 @@ proc initialize*(
     localMixNodeInfo: MixNodeInfo,
     switch: Switch,
     mixNodeTable: Table[PeerId, MixPubInfo],
-) =
+) {.raises: [].} =
   #if mixNodeTable.len == 0:
   # TODO:This is temporary check for testing, needs to be removed later
   # probably protocol can be initiated without any mix nodes itself,

@@ -17,7 +17,7 @@ type ProtocolHandler* = proc(conn: Connection, proto: ProtocolType): Future[void
   async: (raises: [CancelledError])
 .}
 
-proc fromString*(T: type ProtocolType, proto: string): ProtocolType =
+proc fromString*(T: type ProtocolType, proto: string): ProtocolType {.raises: [].} =
   try:
     parseEnum[ProtocolType](proto)
   except ValueError:

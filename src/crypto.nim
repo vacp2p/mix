@@ -2,7 +2,9 @@ import endians, nimcrypto, results
 
 # This function processes 'data' using AES in CTR mode.
 # For CTR mode, the same function handles both encryption and decryption.
-proc aes_ctr*(key, iv, data: openArray[byte]): Result[seq[byte], string] =
+proc aes_ctr*(
+    key, iv, data: openArray[byte]
+): Result[seq[byte], string] {.raises: [].} =
   if key.len != 16:
     return err("Key must be 16 bytes for AES-128")
   if iv.len != 16:
@@ -19,7 +21,7 @@ proc aes_ctr*(key, iv, data: openArray[byte]): Result[seq[byte], string] =
   return ok(output)
 
 # This function advances the counter in the AES-CTR IV by a specified number of blocks.
-proc advance_ctr*(iv: var openArray[byte], blocks: int) =
+proc advance_ctr*(iv: var openArray[byte], blocks: int) {.raises: [].} =
   var counter: uint64
   bigEndian64(addr counter, addr iv[8])
   counter += uint64(blocks)
@@ -29,7 +31,7 @@ proc advance_ctr*(iv: var openArray[byte], blocks: int) =
 # For CTR mode, the same function handles both encryption and decryption.
 proc aes_ctr_start_index*(
     key, iv, data: openArray[byte], startIndex: int
-): Result[seq[byte], string] =
+): Result[seq[byte], string] {.raises: [].} =
   if key.len != 16:
     return err("Key must be 16 bytes for AES-128")
   if iv.len != 16:
@@ -46,15 +48,15 @@ proc aes_ctr_start_index*(
   return aes_ctr(key, advIV, data)
 
 # This function hashes 'data' using SHA-256.
-proc sha256_hash*(data: openArray[byte]): array[32, byte] =
+proc sha256_hash*(data: openArray[byte]): array[32, byte] {.raises: [].} =
   return sha256.digest(data).data
 
 # This function returns the hash of 'key' truncated to 16 bytes.
-proc kdf*(key: openArray[byte]): seq[byte] =
+proc kdf*(key: openArray[byte]): seq[byte] {.raises: [].} =
   let hash = sha256_hash(key)
   return hash[0 .. 15]
 
 # This function computes a HMAC for 'data' using given 'key'.
-proc hmac*(key, data: openArray[byte]): seq[byte] =
+proc hmac*(key, data: openArray[byte]): seq[byte] {.raises: [].} =
   let hmac = sha256.hmac(key, data).data
   return hmac[0 .. 15]

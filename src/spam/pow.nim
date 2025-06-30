@@ -9,7 +9,9 @@ const
   powSize* = nonceSize + timestampSize # PoW Size
 
 # Helper function to convert integer to sequence of bytes
-proc intToBytes*(value: int64, byteSize: int): Result[seq[byte], string] =
+proc intToBytes*(
+    value: int64, byteSize: int
+): Result[seq[byte], string] {.raises: [].} =
   # Ensure byteSize is within the acceptable range
   if byteSize < 1 or byteSize > 8:
     return err("Byte size must be between 1 and 8 inclusive")
@@ -31,7 +33,7 @@ proc intToBytes*(value: int64, byteSize: int): Result[seq[byte], string] =
   return ok(res)
 
 # Function to check if the computed hash meets the difficulty level
-proc isValidHash*(hash: array[32, byte]): bool =
+proc isValidHash*(hash: array[32, byte]): bool {.raises: [].} =
   var zeroBits = 0
   for byte in hash:
     for i in countdown(7, 0):
@@ -44,7 +46,7 @@ proc isValidHash*(hash: array[32, byte]): bool =
   return false
 
 # Function to find a valid nonce that produces a hash with at least 'difficultyLevel' leading zeros. Attaches PoW to the input.
-proc attachPow*(message: seq[byte]): Result[seq[byte], string] =
+proc attachPow*(message: seq[byte]): Result[seq[byte], string] {.raises: [].} =
   var
     nonce = 0
     hash: array[32, byte]
@@ -70,7 +72,7 @@ proc attachPow*(message: seq[byte]): Result[seq[byte], string] =
     nonce.inc() # Increment nonce if hash does not meet criteria
 
 # Function to verify the Proof of Work (PoW)
-proc verifyPow*(inputData: openArray[byte]): Result[bool, string] =
+proc verifyPow*(inputData: openArray[byte]): Result[bool, string] {.raises: [].} =
   # Ensure inputData is at least as long as timestamp + nonceBytes
   if inputData.len < (timestampSize + nonceSize):
     return err("Input data must be at least as long as the timestamp + nonce size")

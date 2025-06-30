@@ -4,15 +4,15 @@ import ./config
 
 const addrBytesSize* = 46
 
-proc bytesToUInt16*(data: openArray[byte]): Result[uint16, string] =
+proc bytesToUInt16*(data: openArray[byte]): Result[uint16, string] {.raises: [].} =
   if len(data) != 2:
     return err("Data must be exactly 2 bytes long to convert to uint16")
   return ok(uint16(data[0]) shl 8 or uint16(data[1]))
 
-proc uint16ToBytes*(value: uint16): seq[byte] =
+proc uint16ToBytes*(value: uint16): seq[byte] {.raises: [].} =
   return @[byte(value shr 8), byte(value and 0xFF)]
 
-proc bytesToUInt32*(data: openArray[byte]): Result[uint32, string] =
+proc bytesToUInt32*(data: openArray[byte]): Result[uint32, string] {.raises: [].} =
   if len(data) != 4:
     return err("Data must be exactly 4 bytes long to convert to uint32")
   return ok(
@@ -20,7 +20,7 @@ proc bytesToUInt32*(data: openArray[byte]): Result[uint32, string] =
       uint32(data[3])
   )
 
-proc uint32ToBytes*(value: uint32): seq[byte] =
+proc uint32ToBytes*(value: uint32): seq[byte] {.raises: [].} =
   return
     @[
       byte(value shr 24),
@@ -29,7 +29,7 @@ proc uint32ToBytes*(value: uint32): seq[byte] =
       byte(value and 0xFF),
     ]
 
-proc multiAddrToBytes*(multiAddr: string): Result[seq[byte], string] =
+proc multiAddrToBytes*(multiAddr: string): Result[seq[byte], string] {.raises: [].} =
   var
     parts = multiAddr.split('/')
     res: seq[byte] = @[]
@@ -86,7 +86,7 @@ proc multiAddrToBytes*(multiAddr: string): Result[seq[byte], string] =
 
   return ok(res)
 
-proc bytesToMultiAddr*(bytes: openArray[byte]): Result[string, string] =
+proc bytesToMultiAddr*(bytes: openArray[byte]): Result[string, string] {.raises: [].} =
   if bytes.len != addrSize:
     return err("Address must be exactly " & $addrSize & " bytes")
 

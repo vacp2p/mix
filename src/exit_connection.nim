@@ -126,12 +126,12 @@ method writeLp*(
 method shortLog*(self: MixExitConnection): string {.base, raises: [].} =
   discard
 
-method initStream*(self: MixExitConnection) =
+method initStream*(self: MixExitConnection) {.raises: [].} =
   discard
 
 method closeImpl*(
     self: MixExitConnection
-): Future[void] {.async: (raises: [], raw: true).} =
+): Future[void] {.async: (raises: [CancelledError], raw: true).} =
   let fut = newFuture[void]()
   fut.complete()
   return fut
@@ -139,7 +139,9 @@ method closeImpl*(
 func hash*(self: MixExitConnection): Hash =
   discard
 
-proc new*(T: typedesc[MixExitConnection], message: seq[byte]): MixExitConnection =
+proc new*(
+    T: typedesc[MixExitConnection], message: seq[byte]
+): MixExitConnection {.raises: [].} =
   let instance = T(message: message)
 
   when defined(libp2p_agents_metrics):

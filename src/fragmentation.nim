@@ -12,13 +12,17 @@ type MessageChunk* = object
 
 proc initMessageChunk*(
     paddingLength: uint16, data: seq[byte], seqNo: uint32
-): MessageChunk =
+): MessageChunk {.raises: [].} =
   MessageChunk(paddingLength: paddingLength, data: data, seqNo: seqNo)
 
-proc getMessageChunk*(msgChunk: MessageChunk): (uint16, seq[byte], uint32) =
+proc getMessageChunk*(
+    msgChunk: MessageChunk
+): (uint16, seq[byte], uint32) {.raises: [].} =
   (msgChunk.paddingLength, msgChunk.data, msgChunk.seqNo)
 
-proc serializeMessageChunk*(msgChunk: MessageChunk): Result[seq[byte], string] =
+proc serializeMessageChunk*(
+    msgChunk: MessageChunk
+): Result[seq[byte], string] {.raises: [].} =
   let
     paddingBytes = uint16ToBytes(msgChunk.paddingLength)
     seqNoBytes = uint32ToBytes(msgChunk.seqNo)
@@ -26,7 +30,9 @@ proc serializeMessageChunk*(msgChunk: MessageChunk): Result[seq[byte], string] =
     return err("Padded data must be exactly " & $dataSize & " bytes")
   return ok(paddingBytes & msgChunk.data & seqNoBytes)
 
-proc deserializeMessageChunk*(data: openArray[byte]): Result[MessageChunk, string] =
+proc deserializeMessageChunk*(
+    data: openArray[byte]
+): Result[MessageChunk, string] {.raises: [].} =
   if len(data) != messageSize:
     return err("Data must be exactly " & $messageSize & " bytes")
 
@@ -39,11 +45,11 @@ proc deserializeMessageChunk*(data: openArray[byte]): Result[MessageChunk, strin
     return err("Error in bytes to sequence no. conversion: " & error)
   ok(MessageChunk(paddingLength: paddingLength, data: @chunk, seqNo: seqNo))
 
-proc ceilDiv*(a, b: int): int =
+proc ceilDiv*(a, b: int): int {.raises: [].} =
   (a + b - 1) div b
 
 # Function for padding messages smaller than dataSize
-proc padMessage*(messageBytes: seq[byte], peerId: PeerId): MessageChunk =
+proc padMessage*(messageBytes: seq[byte], peerId: PeerId): MessageChunk {.raises: [].} =
   var seqNoGen = initSeqNo(peerId)
   seqNoGen.generateSeqNo(messageBytes)
 
@@ -60,14 +66,16 @@ proc padMessage*(messageBytes: seq[byte], peerId: PeerId): MessageChunk =
     paddingLength: paddingLength, data: paddedData, seqNo: seqNoGen.getSeqNo()
   )
 
-proc unpadMessage*(msgChunk: MessageChunk): Result[seq[byte], string] =
+proc unpadMessage*(msgChunk: MessageChunk): Result[seq[byte], string] {.raises: [].} =
   let msgLength = len(msgChunk.data) - int(msgChunk.paddingLength)
   if msgLength < 0:
     return err("Invalid padding length")
 
   ok(msgChunk.data[msgChunk.paddingLength ..^ 1])
 
-proc padAndChunkMessage*(messageBytes: seq[byte], peerId: PeerId): seq[MessageChunk] =
+proc padAndChunkMessage*(
+    messageBytes: seq[byte], peerId: PeerId
+): seq[MessageChunk] {.raises: [].} =
   var seqNoGen = initSeqNo(peerId)
   seqNoGen.generateSeqNo(messageBytes)
 

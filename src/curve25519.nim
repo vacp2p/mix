@@ -7,24 +7,28 @@ const FieldElementSize* = Curve25519KeySize
 type FieldElement* = Curve25519Key
 
 # Convert bytes to FieldElement
-proc bytesToFieldElement*(bytes: openArray[byte]): Result[FieldElement, string] =
+proc bytesToFieldElement*(
+    bytes: openArray[byte]
+): Result[FieldElement, string] {.raises: [].} =
   if bytes.len != FieldElementSize:
     return err("Field element size must be 32 bytes")
   ok(intoCurve25519Key(bytes))
 
 # Convert FieldElement to bytes
-proc fieldElementToBytes*(fe: FieldElement): seq[byte] =
+proc fieldElementToBytes*(fe: FieldElement): seq[byte] {.raises: [].} =
   fe.getBytes()
 
 # Generate a random FieldElement
-proc generateRandomFieldElement*(): Result[FieldElement, string] =
+proc generateRandomFieldElement*(): Result[FieldElement, string] {.raises: [].} =
   let rng = HmacDrbgContext.new()
   if rng.isNil:
     return err("Failed to creat HmacDrbgContext with system randomness")
   ok(Curve25519Key.random(rng[]))
 
 # Generate a key pair (private key and public key are both FieldElements)
-proc generateKeyPair*(): Result[tuple[privateKey, publicKey: FieldElement], string] =
+proc generateKeyPair*(): Result[tuple[privateKey, publicKey: FieldElement], string] {.
+    raises: []
+.} =
   let privateKey = generateRandomFieldElement().valueOr:
     return err("Error in private key generation: " & error)
 
@@ -34,7 +38,7 @@ proc generateKeyPair*(): Result[tuple[privateKey, publicKey: FieldElement], stri
 # Multiply a given Curve25519 point with a set of scalars
 proc multiplyPointWithScalars*(
     point: FieldElement, scalars: openArray[FieldElement]
-): FieldElement =
+): FieldElement {.raises: [].} =
   var res = point
   for scalar in scalars:
     Curve25519.mul(res, scalar)
@@ -43,7 +47,7 @@ proc multiplyPointWithScalars*(
 # Multiply the Curve25519 base point with a set of scalars
 proc multiplyBasePointWithScalars*(
     scalars: openArray[FieldElement]
-): Result[FieldElement, string] =
+): Result[FieldElement, string] {.raises: [].} =
   if scalars.len <= 0:
     return err("Atleast one scalar must be provided")
   var res: FieldElement = public(scalars[0]) # Use the predefined base point
@@ -52,5 +56,5 @@ proc multiplyBasePointWithScalars*(
   ok(res)
 
 # Compare two FieldElements
-proc compareFieldElements*(a, b: FieldElement): bool =
+proc compareFieldElements*(a, b: FieldElement): bool {.raises: [].} =
   a == b

@@ -5,13 +5,17 @@ type MixMessage* = object
   message: seq[byte]
   protocol: ProtocolType
 
-proc initMixMessage*(message: openArray[byte], protocol: ProtocolType): MixMessage =
+proc initMixMessage*(
+    message: openArray[byte], protocol: ProtocolType
+): MixMessage {.raises: [].} =
   return MixMessage(message: @message, protocol: protocol)
 
-proc getMixMessage*(mixMsg: MixMessage): (seq[byte], ProtocolType) =
+proc getMixMessage*(mixMsg: MixMessage): (seq[byte], ProtocolType) {.raises: [].} =
   return (mixMsg.message, mixMsg.protocol)
 
-proc serializeMixMessage*(mixMsg: MixMessage): Result[seq[byte], string] =
+proc serializeMixMessage*(
+    mixMsg: MixMessage
+): Result[seq[byte], string] {.raises: [].} =
   try:
     let
       msgBytes = mixMsg.message
@@ -21,7 +25,9 @@ proc serializeMixMessage*(mixMsg: MixMessage): Result[seq[byte], string] =
     error "Failed to serialize MixMessage", err = e.msg
     return err("Serialization failed: " & e.msg)
 
-proc deserializeMixMessage*(data: openArray[byte]): Result[MixMessage, string] =
+proc deserializeMixMessage*(
+    data: openArray[byte]
+): Result[MixMessage, string] {.raises: [].} =
   try:
     let message = data[0 ..^ (protocolTypeSize + 1)]
 
@@ -37,7 +43,7 @@ proc deserializeMixMessage*(data: openArray[byte]): Result[MixMessage, string] =
 
 proc serializeMixMessageAndDestination*(
     mixMsg: MixMessage, dest: string
-): Result[seq[byte], string] =
+): Result[seq[byte], string] {.raises: [].} =
   try:
     let
       msgBytes = mixMsg.message
@@ -57,7 +63,7 @@ proc serializeMixMessageAndDestination*(
 
 proc deserializeMixMessageAndDestination*(
     data: openArray[byte]
-): Result[(seq[byte], string), string] =
+): Result[(seq[byte], string), string] {.raises: [].} =
   try:
     let mixMsg = data[0 ..^ (addrSize + 1)]
 

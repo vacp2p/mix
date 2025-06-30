@@ -16,7 +16,7 @@ type ProcessingStatus* = enum
 
 proc computeAlpha(
     publicKeys: openArray[FieldElement]
-): Result[(seq[byte], seq[seq[byte]]), string] =
+): Result[(seq[byte], seq[seq[byte]]), string] {.raises: [].} =
   if publicKeys.len == 0:
     return err("No public keys provided")
 
@@ -62,12 +62,12 @@ proc computeAlpha(
   return ok((alpha_0, s))
 
 # Helper function to derive key material
-proc deriveKeyMaterial(keyName: string, s: seq[byte]): seq[byte] =
+proc deriveKeyMaterial(keyName: string, s: seq[byte]): seq[byte] {.raises: [].} =
   let keyNameBytes = @(keyName.toOpenArrayByte(0, keyName.high))
   return keyNameBytes & s
 
 # Function to compute filler strings
-proc computeFillerStrings(s: seq[seq[byte]]): Result[seq[byte], string] =
+proc computeFillerStrings(s: seq[seq[byte]]): Result[seq[byte], string] {.raises: [].} =
   var filler: seq[byte] = @[] # Start with an empty filler string
 
   for i in 1 ..< s.len:
@@ -115,7 +115,7 @@ proc generateRandomDelay(): seq[byte] =
 # Function to compute betas, gammas, and deltas
 proc computeBetaGammaDelta(
     s: seq[seq[byte]], hop: openArray[Hop], msg: Message, delay: openArray[seq[byte]]
-): Result[(seq[byte], seq[byte], seq[byte]), string] =
+): Result[(seq[byte], seq[byte], seq[byte]), string] {.raises: [].} =
   let sLen = s.len
   var
     beta: seq[byte]
@@ -181,7 +181,7 @@ proc wrapInSphinxPacket*(
     delay: seq[seq[byte]],
     hop: openArray[Hop],
     destAddr: Option[Hop],
-): Result[seq[byte], string] =
+): Result[seq[byte], string] {.raises: [].} =
   # Compute alphas and shared secrets
   let res1 = computeAlpha(publicKeys)
   if res1.isErr:
@@ -204,7 +204,7 @@ proc wrapInSphinxPacket*(
 
 proc processSphinxPacket*(
     serSphinxPacket: seq[byte], privateKey: FieldElement, tm: var TagManager
-): Result[(Hop, seq[byte], seq[byte], ProcessingStatus), string] =
+): Result[(Hop, seq[byte], seq[byte], ProcessingStatus), string] {.raises: [].} =
   # Deserialize the Sphinx packet
   let deserializeRes = deserializeSphinxPacket(serSphinxPacket).valueOr:
     return err("Sphinx packet deserialization error: " & error)
