@@ -3,21 +3,18 @@ in nu shell run as so (requires alacritty):
 rm -rf infos log-*; ^bash -c 'for i in {0..4}; do alacritty -e bash -c "./main $i 5 20 50 1 4 | tee >(grep INF > log-$i.txt) | grep INF; echo Done. Press enter to close...; read" & done
 ^rm previos files                      ^5 nodes     ^make a terminal    ^run                    ^ output info logs to file     ^display info in terminal
 ]#
-import chronos, chronicles, hashes, math, sequtils, strutils, tables, os
-import nimcrypto/sysrand
+import chronos, chronicles, hashes, math, strutils, tables
 import metrics, metrics/chronos_httpserver
 import stew/[byteutils, endians2]
 import
   std/[
-    enumerate, options, strformat, sysrand, os, sequtils, dirs, parseutils, random,
-    posix, algorithm,
+    options, strformat, os, random,
+    posix, 
   ]
 import node
-import json
 import
   src/[
-    entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol,
-    utils,
+    entry_connection_callbacks, mix_node, mix_protocol, 
   ]
 import
   libp2p,
@@ -25,7 +22,6 @@ import
     crypto/secp,
     multiaddress,
     builders,
-    muxers/yamux/yamux,
     protocols/pubsub/gossipsub,
     protocols/pubsub/pubsubpeer,
     protocols/pubsub/rpc/messages,
@@ -124,11 +120,6 @@ proc startMetricsServer(
   # info "Metrics HTTP server started", serverIp = $serverIp, serverPort = $serverPort
   ok(metricsServerRes.value)
 
-const uidLen = 32
-
-func byteToHex(b: byte): string =
-  b.toHex(2)
-
 proc main() {.async.} =
   let args = commandLineParams()
   echo "args: {id} {count} {rate} {size} {pub_count} {conn to}"
@@ -136,7 +127,7 @@ proc main() {.async.} =
 
   let 
     myId = parseInt(args[0])
-    hostname = fmt "node-{myId}"
+  #   hostname = fmt "node-{myId}"
   # info "Hostname", host = hostname
     # -e NODES="$N" \
     # -e MSGRATE=10 \
@@ -332,7 +323,7 @@ proc main() {.async.} =
       if pub_res <= 0:
         error "publish fail", res = pub_res
         doAssert(pub_res > 0)
-      await sleepAsync(msg_rate)
+      await sleepAsync(msg_rate.milliseconds())
   await sleepAsync(5.seconds())
   info "Done", node=myId
 

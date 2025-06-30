@@ -59,7 +59,7 @@ method writeLp*(
     value = value shr 7
   vbytes.add(byte(value))
 
-  var buf = newSeqUninitialized[byte](msg.len() + vbytes.len)
+  var buf = newSeqUninit[byte](msg.len() + vbytes.len)
   buf[0 ..< vbytes.len] = vbytes.toOpenArray(0, vbytes.len - 1)
   buf[vbytes.len ..< buf.len] = msg
   self.mixDialer(@buf, self.proto, self.destMultiAddr, self.destPeerId)
@@ -69,7 +69,7 @@ method writeLp*(
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
   self.writeLp(msg.toOpenArrayByte(0, msg.high))
 
-method shortLog*(self: MixEntryConnection): string {.raises: [].} =
+method shortLog*(self: MixEntryConnection): string {.base, raises: [].} =
   "[MixEntryConnection] Destination: " & $self.destMultiAddr & "/p2p/" & $self.destPeerId
 
 method initStream*(self: MixEntryConnection) =
