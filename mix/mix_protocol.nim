@@ -197,13 +197,21 @@ proc anonymizeLocalProtocolSend*(
     pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
     randPeerId: PeerId
     availableIndices = toSeq(0 ..< numMixNodes)
+
+  let index = pubNodeInfoKeys.find(destPeerId)
+  if index != -1:
+    availableIndices.del(index)
+
   for i in 0 ..< L:
-    let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
-      error "Failed to generate random number", err = error
-      return
-    let selectedIndex = availableIndices[randomIndexPosition]
-    randPeerId = pubNodeInfoKeys[selectedIndex]
-    availableIndices.del(randomIndexPosition)
+    if i == L - 1:
+      randPeerId = destPeerId
+    else:
+      let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
+        error "Failed to generate random number", err = error
+        return
+      let selectedIndex = availableIndices[randomIndexPosition]
+      randPeerId = pubNodeInfoKeys[selectedIndex]
+      availableIndices.del(randomIndexPosition)
 
     # Extract multiaddress, mix public key, and hop
     let (multiAddr, mixPubKey, _) =
