@@ -13,7 +13,7 @@ import
   ]
 import node
 import
-  src/[
+  mix/[
     entry_connection_callbacks, mix_node, mix_protocol, 
   ]
 import

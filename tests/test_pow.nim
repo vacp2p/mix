@@ -1,6 +1,6 @@
 import chronicles, results, os, unittest
 import std/[random, times]
-import ../src/spam/pow, ../src/crypto
+import ../mix/spam/pow, ../mix/crypto
 
 # Helper function to generates a 32-byte array with the specified number of leading zero bits.
 proc createDummyHash(leadingBits: int): array[32, byte] =
