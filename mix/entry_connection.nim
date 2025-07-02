@@ -133,8 +133,8 @@ proc newConn*(
     return
 
   let instance = T(
-    destMultiAddr: maddr,
-    destPeerId: destPeerId,
+    destMultiAddr: some(maddr),
+    destPeerId: some(destPeerId),
     proto: proto,
     mixDialer: sendDialerFunc,
   )
