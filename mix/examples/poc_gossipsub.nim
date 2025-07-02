@@ -7,6 +7,7 @@ import
     crypto/secp,
     multiaddress,
     builders,
+    muxers/yamux/yamux,
     protocols/pubsub/gossipsub,
     protocols/pubsub/pubsubpeer,
     protocols/pubsub/rpc/messages,
@@ -16,15 +17,12 @@ import
 type Node = tuple[switch: Switch, gossip: GossipSub, mix: MixProtocol, id: int]
 
 proc createSwitch(libp2pPrivKey: SkPrivateKey, multiAddr: MultiAddress): Switch =
-  let
-    inTimeout: Duration = 5.minutes
-    outTimeout: Duration = 5.minutes
   result = SwitchBuilder
     .new()
     .withPrivateKey(PrivateKey(scheme: Secp256k1, skkey: libp2pPrivKey))
     .withAddress(multiAddr)
     .withRng(crypto.newRng())
-    .withMplex(inTimeout, outTimeout)
+    .withYamux()
     .withTcpTransport()
     .withNoise()
     .build()
@@ -107,8 +105,11 @@ proc oneNode(node: Node) {.async.} =
   for msgNum in 0 ..< 5:
     await sleepAsync(500.milliseconds)
     let msg = fmt"Hello from Node {node.id}, Message No: {msgNum + 1}"
-    discard
-      await node.gossip.publish("message", cast[seq[byte]](msg), useCustomConn = true)
+    discard await node.gossip.publish(
+      "message",
+      cast[seq[byte]](msg),
+      publishParams = some(PublishParams(skipMCache: true, useCustomConn: true)),
+    )
 
   await sleepAsync(1000.milliseconds)
   await node.switch.stop()
