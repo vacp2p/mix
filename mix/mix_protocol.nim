@@ -262,6 +262,9 @@ proc anonymizeLocalProtocolSend*(
   let index = pubNodeInfoKeys.find(destPeerId)
   if index != -1:
     availableIndices.del(index)
+  else:
+    error "Destination does not support Mix"
+    return
 
   for i in 0 ..< L:
     if i == L - 1:
