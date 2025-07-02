@@ -1,7 +1,9 @@
 import chronicles, chronos, results, strutils
 import std/[enumerate, sysrand]
 import libp2p
-import libp2p/[crypto/secp, multiaddress, builders, protocols/ping, switch]
+import
+  libp2p/
+    [crypto/secp, multiaddress, builders, muxers/yamux/yamux, protocols/ping, switch]
 import
   ../[entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol],
   ../protocols/noresp_ping
@@ -15,15 +17,12 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   return ok(int(value mod uint64(max)))
 
 proc createSwitch(libp2pPrivKey: SkPrivateKey, multiAddr: MultiAddress): Switch =
-  let
-    inTimeout: Duration = 5.minutes
-    outTimeout: Duration = 5.minutes
   result = SwitchBuilder
     .new()
     .withPrivateKey(PrivateKey(scheme: Secp256k1, skkey: libp2pPrivKey))
     .withAddress(multiAddr)
     .withRng(crypto.newRng())
-    .withMplex(inTimeout, outTimeout)
+    .withYamux()
     .withTcpTransport()
     .withNoise()
     .build()
