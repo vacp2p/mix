@@ -1,5 +1,5 @@
 import chronicles, results, unittest
-import ../src/[config, serialization]
+import ../mix/[config, serialization]
 
 # Define test cases
 suite "serialization_tests":
