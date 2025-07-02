@@ -307,6 +307,7 @@ proc main() {.async.} =
   # info "Publishing turn", id = myId
 
   let count = 2
+  let param = some(PublishParams(useCustomConn: true, skipMCache: true))
   for msg in 3 ..< 4: #client.param(int, "message_count"):
     if msg mod publisherCount == myId:
       # info "Sending message", time = times.getTime()
@@ -319,7 +320,7 @@ proc main() {.async.} =
 
       info "Publishing", msgId = msgId, timestamp = timestampNs
 
-      let pub_res = await gossipSub.publish("test", payload, useCustomConn = true)
+      let pub_res = await gossipSub.publish("test", payload, param)
       if pub_res <= 0:
         error "publish fail", res = pub_res
         doAssert(pub_res > 0)
