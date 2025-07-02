@@ -129,7 +129,6 @@ proc newConn*(
       await mixproto.anonymizeLocalProtocolSend(msg, proto, destMultiAddr, destPeerId)
     except CatchableError as e:
       error "Error during execution of sendThroughMixnet: ", err = e.msg
-      # TODO: handle error
     return
 
   let instance = T(

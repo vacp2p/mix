@@ -25,7 +25,6 @@ proc generateSeqNo*(seqNo: var SeqNo, messageBytes: seq[byte]) {.raises: [].} =
 
 proc incSeqNo*(seqNo: var SeqNo) {.raises: [].} =
   seqNo.counter = (seqNo.counter + 1) mod high(uint32)
-    # ToDo: Manage sequence no. overflow in a way that it does not affect re-assembly
 
 proc getSeqNo*(seqNo: SeqNo): uint32 {.raises: [].} =
   return seqNo.counter

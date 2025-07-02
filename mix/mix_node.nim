@@ -102,7 +102,6 @@ proc isNodeMultiaddress*(
 ): bool {.raises: [].} =
   return mixNodeInfo.multiAddr == multiAddr
 
-# TODO: empty the raise list
 proc writeMixNodeInfoToFile*(
     node: MixNodeInfo, index: int, nodeInfoFolderPath: string = "./nodeInfo"
 ): Result[void, string] {.raises: [IOError, OSError].} =
@@ -150,7 +149,6 @@ proc readMixNodeInfoFromFile*(
   except OSError as e:
     return err("OS error: " & $e.msg)
 
-# TODO: empty the raise list
 proc deleteNodeInfoFolder*(
     nodeInfoFolderPath: string = "./nodeInfo"
 ) {.raises: [OSError].} =

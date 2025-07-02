@@ -48,7 +48,6 @@ proc computeAlpha(
       alpha = multiplyPointWithScalars(alpha, [blinders[i]])
 
     secret = multiplyPointWithScalars(publicKeys[i], blinders)
-      # ToDo: Optimize point multiplication by multiplying scalars first
 
     let blinder = bytesToFieldElement(
       sha256_hash(fieldElementToBytes(alpha) & fieldElementToBytes(secret))
@@ -89,28 +88,6 @@ proc computeFillerStrings(s: seq[seq[byte]]): Result[seq[byte], string] {.raises
     filler = fillerRes.get()
 
   return ok(filler)
-
-#[
-# ToDo: Replace with better implementation for production
-# Helper function to generate a random 16-bit delay
-proc generateRandomDelay(): seq[byte] =
-  # Generate 2 random bytes
-  var randBytes: array[2, byte]
-  discard randomBytes(randBytes)
-  
-  # Convert bytes to a float between 0 and 1
-  let randomValue = (uint16(randBytes[0]) shl 8 or uint16(randBytes[1])).float / 65535.0
-  
-  # Compute the delay using capped exponential distribution
-  let delay = -ln(randomValue) / lambda
-  let cappedDelay = min(int(delay), 65535)
-
-  # Convert delay to seq[byte]
-  var delayBytes: array[2, byte]
-  delayBytes[0] = byte(cappedDelay and 0xFF)
-  delayBytes[1] = byte((cappedDelay shr 8) and 0xFF)
-  return toseq(delayBytes)
-]#
 
 # Function to compute betas, gammas, and deltas
 proc computeBetaGammaDelta(

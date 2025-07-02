@@ -182,7 +182,6 @@ proc handleExit(
       mix_messages_error.inc(labelValues = ["Exit", "DAIL_FAILED"])
   mix_messages_forwarded.inc(labelValues = ["Exit"])
 
-# ToDo: Change to a more secure random number generator for production.
 proc cryptoRandomInt(max: int): Result[int, string] {.raises: [].} =
   if max == 0:
     return err("Max cannot be zero.")
@@ -272,7 +271,6 @@ proc makePath(
     let multiAddrBytes = multiAddrToBytes(multiAddr).valueOr:
       error "Failed to convert multiaddress to bytes", err = error
       mix_messages_error.inc(labelValues = ["Entry", "INVALID_MIX_INFO"])
-      #TODO: should we skip and pick a different node here??
       return
 
     hop.add(initHop(multiAddrBytes))

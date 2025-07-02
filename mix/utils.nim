@@ -36,8 +36,6 @@ proc multiAddrToBytes*(multiAddr: string): Result[seq[byte], string] {.raises: [
 
   if parts.len != 7:
     return err("Invalid multiaddress format")
-
-  # IP address (4 bytes) ToDo: Add support for ipv6. Supporting ipv4 only for testing purposes
   let ipParts = parts[2].split('.')
   if ipParts.len != 4:
     return err("Invalid IP address format")
@@ -93,7 +91,6 @@ proc bytesToMultiAddr*(bytes: openArray[byte]): Result[string, string] {.raises:
   var ipParts: seq[string] = @[]
   for i in 0 .. 3:
     ipParts.add($bytes[i])
-      # ToDo: Add support for ipv6. Supporting ipv4 only for testing purposes
 
   let protocol = if bytes[4] == 0: "tcp" else: "quic"
     # ToDo: TLS or QUIC (Using TCP for testing purposes)
