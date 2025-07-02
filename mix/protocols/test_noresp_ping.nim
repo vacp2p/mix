@@ -1,16 +1,15 @@
 import chronicles, chronos, std/sysrand
-import libp2p/[crypto/secp, multiaddress, builders, transports/tcptransport]
+import
+  libp2p/
+    [crypto/secp, multiaddress, builders, muxers/yamux/yamux, transports/tcptransport]
 import ./noresp_ping
 
 proc createSwitch(multiAddr: MultiAddress): Switch =
-  let
-    inTimeout: Duration = 5.minutes
-    outTimeout: Duration = 5.minutes
   result = SwitchBuilder
     .new()
     .withAddress(multiAddr)
     .withRng(crypto.newRng())
-    .withMplex(inTimeout, outTimeout)
+    .withYamux()
     .withTcpTransport()
     .withNoise()
     .build()
