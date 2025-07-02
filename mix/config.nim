@@ -9,6 +9,10 @@ const
   headerSize* = alphaSize + betaSize + gammaSize # Total header size
   delaySize* = 2 # Delay size
   addrSize* = (t * k) - delaySize # Address size
-  messageSize* = 2413 - headerSize - k # Size of the message itself
+  # Large message size chosen for ease of development. 
+  # Better understanding of what the optimum default size (if a default is required), and how to
+  # have an ergonomic and dependable means of configuration, will be a key item before being 
+  # ready for general release.
+  messageSize* = 5000 - headerSize - k # Size of the message itself
   payloadSize* = messageSize + k # Total payload size
   packetSize* = headerSize + payloadSize # Total packet size
