@@ -77,7 +77,7 @@ method initStream*(self: MixEntryConnection) {.raises: [].} =
 
 method closeImpl*(
     self: MixEntryConnection
-): Future[void] {.async: (raises: [CancelledError], raw: true).} =
+): Future[void] {.async: (raises: [], raw: true).} =
   let fut = newFuture[void]()
   fut.complete()
   return fut
