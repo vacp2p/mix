@@ -25,10 +25,8 @@ proc generateRandomFieldElement*(): Result[FieldElement, string] =
 
 # Generate a key pair (private key and public key are both FieldElements)
 proc generateKeyPair*(): Result[tuple[privateKey, publicKey: FieldElement], string] =
-  let privateKeyRes = generateRandomFieldElement()
-  if privateKeyRes.isErr:
-    return err(privateKeyRes.error)
-  let privateKey = privateKeyRes.get()
+  let privateKey = generateRandomFieldElement().valueOr:
+    return err("Error in private key generation: " & error)
 
   let publicKey = public(privateKey)
   ok((privateKey, publicKey))
