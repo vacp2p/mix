@@ -43,7 +43,7 @@ proc loadAllButIndexMixPubInfo*(
       pubInfoTable[peerId] = pubInfo
   return ok(pubInfoTable)
 
-proc handleSuccess(
+proc handleIntermediate(
     mixProto: MixProtocol,
     nextHop: Hop,
     delay: seq[byte],
@@ -223,8 +223,8 @@ proc handleMixNodeConnection(
   case status
   of Exit:
     await handleExit(mixProto, nextHop, delay, processedPkt, status)
-  of Success:
-    await handleSuccess(mixProto, nextHop, delay, processedPkt, status)
+  of Intermediate:
+    await handleIntermediate(mixProto, nextHop, delay, processedPkt, status)
   of Duplicate:
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "DUPLICATE"])
     discard

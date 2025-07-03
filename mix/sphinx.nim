@@ -4,16 +4,14 @@ import ./[config, crypto, curve25519, serialization, tag_manager]
 
 # Define possible outcomes of processing a Sphinx packet
 type ProcessingStatus* = enum
-  Exit # Packet processed successfully at exit
-  Success # Packet processed successfully
-  Duplicate # Packet was discarded due to duplicate tag
+  Exit
+  Intermediate
+  # Packet was discarded due to duplicate tag
+  Duplicate
+  # Packet was discarded due to MAC verification failure
   InvalidMAC
-    # Packet was discarded due to MAC verification failure
 
-    # const lambda* = 500 # Parameter for exp distribution for generating random delay
-
-    # Function to compute alphas, shared secrets, and blinders
-
+# Function to compute alphas, shared secrets, and blinders
 proc computeAlpha(
     publicKeys: openArray[FieldElement]
 ): Result[(seq[byte], seq[seq[byte]]), string] {.raises: [].} =
@@ -268,4 +266,4 @@ proc processSphinxPacket*(
     let serializeRes = serializeSphinxPacket(sphinxPkt).valueOr:
       return err("Sphinx packet serialization error: " & error)
 
-    return ok((address, delay, serializeRes, Success))
+    return ok((address, delay, serializeRes, Intermediate))
