@@ -110,7 +110,7 @@ proc mixnetSimulation() {.async.} =
   let conn = createMixEntryConnection(
     mixProto[senderIndex],
     some(nodes[receiverIndex].peerInfo.addrs[0]),
-    nodes[receiverIndex].peerInfo.peerId,
+    some(nodes[receiverIndex].peerInfo.peerId),
     NoRespPingCodec,
   )
 
