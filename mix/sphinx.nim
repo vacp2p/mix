@@ -1,11 +1,11 @@
 import results, sequtils
-import std/math
+import std/math, std/options
 import ./[config, crypto, curve25519, serialization, tag_manager]
 
 # Define possible outcomes of processing a Sphinx packet
 type ProcessingStatus* = enum
   Exit # Packet processed successfully at exit
-  Success # Packet processed successfully
+  Intermediate # Packet processed successfully at intermediate node
   Duplicate # Packet was discarded due to duplicate tag
   InvalidMAC
     # Packet was discarded due to MAC verification failure
@@ -114,7 +114,11 @@ proc generateRandomDelay(): seq[byte] =
 
 # Function to compute betas, gammas, and deltas
 proc computeBetaGammaDelta(
-    s: seq[seq[byte]], hop: openArray[Hop], msg: Message, delay: openArray[seq[byte]]
+    s: seq[seq[byte]],
+    hop: openArray[Hop],
+    msg: Message,
+    delay: openArray[seq[byte]],
+    destHop: Option[Hop],
 ): Result[(seq[byte], seq[byte], seq[byte]), string] =
   let sLen = s.len
   var
@@ -138,11 +142,17 @@ proc computeBetaGammaDelta(
 
     # Compute Beta and Gamma
     if i == sLen - 1:
-      let
-        paddingLength = (((t + 1) * (r - L)) + t + 2) * k
-        zeroPadding = newSeq[byte](paddingLength)
+      var padding: seq[byte]
+      if destHop.isSome:
+        let destBytes = serializeHop(destHop.get()).valueOr:
+          return err("Error in destination address serialization: " & error)
+        let paddingLength = (((t + 1) * (r - L)) + 2) * k
+        padding = destBytes & delay[i] & newSeq[byte](paddingLength)
+      else:
+        let paddingLength = (((t + 1) * (r - L)) + t + 2) * k
+        padding = newSeq[byte](paddingLength)
 
-      let aesRes = aes_ctr(beta_aes_key, beta_iv, zeroPadding).valueOr:
+      let aesRes = aes_ctr(beta_aes_key, beta_iv, padding).valueOr:
         return err("Error in aes: " & error)
       beta = aesRes & filler
 
@@ -178,8 +188,9 @@ proc computeBetaGammaDelta(
 proc wrapInSphinxPacket*(
     msg: Message,
     publicKeys: openArray[FieldElement],
-    delay: seq[seq[byte]],
+    delay: openArray[seq[byte]],
     hop: openArray[Hop],
+    destHop: Option[Hop],
 ): Result[seq[byte], string] =
   # Compute alphas and shared secrets
   let res1 = computeAlpha(publicKeys)
@@ -188,7 +199,7 @@ proc wrapInSphinxPacket*(
   let (alpha_0, s) = res1.get()
 
   # Compute betas, gammas, and deltas
-  let res2 = computeBetaGammaDelta(s, hop, msg, delay)
+  let res2 = computeBetaGammaDelta(s, hop, msg, delay, destHop)
   if res2.isErr:
     return err("Error in beta, gamma, and delta generation: " & res2.error)
   let (beta_0, gamma_0, delta_0) = res2.get()
@@ -202,7 +213,7 @@ proc wrapInSphinxPacket*(
   return ok(serializeRes)
 
 proc processSphinxPacket*(
-    serSphinxPacket: seq[byte], privateKey: FieldElement, tm: var TagManager
+    serSphinxPacket: seq[byte], privateKey: FieldElement, tm: var TagManager, isDestEmbedded: bool
 ): Result[(Hop, seq[byte], seq[byte], ProcessingStatus), string] =
   # Deserialize the Sphinx packet
   let deserializeRes = deserializeSphinxPacket(serSphinxPacket).valueOr:
@@ -257,15 +268,27 @@ proc processSphinxPacket*(
     return err("Error in aes: " & error)
 
   # Check if B has the required prefix for the original message
-  paddingLength = (((t + 1) * (r - L)) + t + 2) * k
+  paddingLength = if isDestEmbedded:
+      (((t + 1) * (r - L)) + 2) * k
+    else:
+      (((t + 1) * (r - L)) + t + 2) * k
+
   zeroPadding = newSeq[byte](paddingLength)
 
-  if B[0 .. paddingLength - 1] == zeroPadding:
+  let bOffset =  if isDestEmbedded: (t * k) else: 0
+
+  if B[bOffset .. bOffset + paddingLength - 1] == zeroPadding:
     let deserializeRes = deserializeMessage(delta_prime).valueOr:
       return err("Message deserialization error: " & error)
     let msg = getMessage(deserializeRes)
 
-    return ok((Hop(), @[], msg[0 .. messageSize - 1], Exit))
+    if isDestEmbedded:
+      let hop = deserializeHop(B[0 .. addrSize - 1]).valueOr:
+        return err(error)
+      return ok((hop, B[addrSize .. ((t * k) - 1)], msg[0 .. messageSize - 1], Exit))
+    else:
+      return ok((Hop(), @[], msg[0 .. messageSize - 1], Exit))
+
   else:
     # Extract routing information from B
     let deserializeRes = deserializeRoutingInfo(B).valueOr:
@@ -290,4 +313,4 @@ proc processSphinxPacket*(
     let serializeRes = serializeSphinxPacket(sphinxPkt).valueOr:
       return err("Sphinx packet serialization error: " & error)
 
-    return ok((address, delay, serializeRes, Success))
+    return ok((address, delay, serializeRes, Intermediate))

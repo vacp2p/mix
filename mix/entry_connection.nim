@@ -1,6 +1,7 @@
-import hashes, chronos, std/options, stew/byteutils
+import hashes, chronos, stew/byteutils
 import libp2p/stream/connection
-import ./protocol
+import std/options
+import ./protocol, ./mix_node, ./mix_protocol
 
 type MixDialer* = proc(
   msg: seq[byte],
@@ -49,19 +50,25 @@ proc write*(
 method writeLp*(
     self: MixEntryConnection, msg: openArray[byte]
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
-  let length = msg.len().uint64
-  var
-    vbytes: seq[byte] = @[]
-    value = length
+  var buf: seq[byte]
 
-  while value >= 128:
-    vbytes.add(byte((value and 127) or 128))
-    value = value shr 7
-  vbytes.add(byte(value))
+  if shouldFwd(self.proto):
+    buf = @msg
+  else:
+    let length = msg.len().uint64
+    var
+      vbytes: seq[byte] = @[]
+      value = length
 
-  var buf = newSeqUninitialized[byte](msg.len() + vbytes.len)
-  buf[0 ..< vbytes.len] = vbytes.toOpenArray(0, vbytes.len - 1)
-  buf[vbytes.len ..< buf.len] = msg
+    while value >= 128:
+      vbytes.add(byte((value and 127) or 128))
+      value = value shr 7
+    vbytes.add(byte(value))
+
+    buf = newSeqUninitialized[byte](msg.len() + vbytes.len)
+    buf[0 ..< vbytes.len] = vbytes.toOpenArray(0, vbytes.len - 1)
+    buf[vbytes.len ..< buf.len] = msg
+
   self.mixDialer(@buf, self.proto, self.destMultiAddr, self.destPeerId)
 
 method writeLp*(

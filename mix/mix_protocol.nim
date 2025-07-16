@@ -1,9 +1,9 @@
 import chronicles, chronos, sequtils, strutils, os
-import std/[strformat, sysrand]
+import std/[strformat, sysrand], serialization, metrics
 import
   ./[
     config, curve25519, exit_connection, fragmentation, mix_message, mix_node, protocol,
-    serialization, sphinx, tag_manager, utils,
+    sphinx, serialization, tag_manager, utils, mix_metrics,
   ]
 import libp2p
 import
@@ -53,7 +53,7 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   return ok(int(value mod uint64(max)))
 
 proc handleMixNodeConnection(
-    mixProto: MixProtocol, conn: Connection
+    mixProto: MixProtocol, conn: Connection, proto: string
 ) {.async: (raises: [CancelledError]).} =
   var receivedBytes: seq[byte]
   try:
@@ -68,64 +68,76 @@ proc handleMixNodeConnection(
         error "Failed to close incoming stream: ", err = e.msg
 
   if receivedBytes.len == 0:
+    mix_messages_error.inc(labelValues = ["Intermediate/Exit", "NO_DATA"])
     return # No data, end of stream
 
   # Process the packet
   let (multiAddr, _, mixPrivKey, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
 
-  let processedPktRes =
-    processSphinxPacket(receivedBytes, mixPrivKey, mixProto.tagManager)
+  let processedPktRes = processSphinxPacket(
+    receivedBytes,
+    mixPrivKey,
+    mixProto.tagManager,
+    not ProtocolType.fromString(proto).shouldFwd,
+  )
   if processedPktRes.isErr:
     error "Failed to process Sphinx packet", err = processedPktRes.error
+    mix_messages_error.inc(labelValues = ["Intermediate/Exit", "INVALID_SPHINX"])
     return
   let (nextHop, delay, processedPkt, status) = processedPktRes.get()
 
   case status
   of Exit:
-    if (nextHop != Hop()) or (delay != @[]):
-      error "Next hop and delay must be empty"
-      return
-
+    mix_messages_recvd.inc(labelValues = ["Exit"])
     # This is the exit node, forward to destination
     let msgChunk = deserializeMessageChunk(processedPkt).valueOr:
       error "Deserialization failed", err = error
+      mix_messages_error.inc(labelValues = ["Exit", "INVALID_SPHINX"])
       return
 
     let unpaddedMsg = unpadMessage(msgChunk).valueOr:
       error "Unpadding message failed", err = error
+      mix_messages_error.inc(labelValues = ["Exit", "INVALID_SPHINX"])
       return
 
     let deserializedResult = deserializeMixMessage(unpaddedMsg).valueOr:
       error "Deserialization failed", err = error
+      mix_messages_error.inc(labelValues = ["Exit", "INVALID_SPHINX"])
       return
 
-    let
-      (message, protocol) = getMixMessage(deserializedResult)
-      exitConn = MixExitConnection.new(message)
-    trace "# Received: ", receiver = multiAddr, message = message
-    await mixProto.pHandler(exitConn, protocol)
+    let (message, protocol) = getMixMessage(deserializedResult)
+    trace "Exit node - Received mix message: ", receiver = multiAddr, message = message
 
-    if exitConn != nil:
-      try:
-        await exitConn.close()
-      except CatchableError as e:
-        error "Failed to close exit connection: ", err = e.msg
-  of Success:
-    trace "# Intermediate: ", multiAddr = multiAddr
+    if shouldFwd(protocol):
+      let exitConn = MixExitConnection.new(message)
+      trace "Received: ", receiver = multiAddr, message = message
+      await mixProto.pHandler(exitConn, protocol)
+      if exitConn != nil:
+        try:
+          await exitConn.close()
+        except CatchableError as e:
+          error "Failed to close exit connection: ", err = e.msg
+        return
+    elif nextHop != Hop() or delay != @[]:
+      error "Next hop and delay must be empty"
+      return
+
     # Add delay
     let delayMillis = (delay[0].int shl 8) or delay[1].int
     await sleepAsync(milliseconds(delayMillis))
 
-    # Forward to next hop
-    let nextHopBytes = getHop(nextHop)
+    # Forward to destination
+    let destBytes = getHop(nextHop)
 
-    let fullAddrStr = bytesToMultiAddr(nextHopBytes).valueOr:
+    let fullAddrStr = bytesToMultiAddr(destBytes).valueOr:
       error "Failed to convert bytes to multiaddress", err = error
+      mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
       return
 
     let parts = fullAddrStr.split("/p2p/")
     if parts.len != 2:
       error "Invalid multiaddress format", parts = parts
+      mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
       return
 
     let
@@ -135,16 +147,65 @@ proc handleMixNodeConnection(
     # Create MultiAddress and PeerId
     let locationAddr = MultiAddress.init(locationAddrStr).valueOr:
       error "Failed to parse location multiaddress: ", err = error
+      mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
       return
 
     let peerId = PeerId.init(peerIdStr).valueOr:
       error "Failed to initialize PeerId", err = error
+      mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
+      return
+
+    var destConn: Connection
+    try:
+      destConn = await mixProto.switch.dial(peerId, @[locationAddr], $protocol)
+      await destConn.writeLp(message)
+      #TODO: When response is implemented, we can read the response here
+      await destConn.close()
+    except CatchableError as e:
+      error "Failed to dial next hop: ", err = e.msg
+      mix_messages_error.inc(labelValues = ["Exit", "DAIL_FAILED"])
+    mix_messages_forwarded.inc(labelValues = ["Exit"])
+  of Intermediate:
+    trace "# Intermediate: ", multiAddr = multiAddr
+    # Add delay
+    let delayMillis = (delay[0].int shl 8) or delay[1].int
+    mix_messages_recvd.inc(labelValues = ["Intermediate"])
+    await sleepAsync(milliseconds(delayMillis))
+
+    # Forward to next hop
+    let nextHopBytes = getHop(nextHop)
+
+    let fullAddrStr = bytesToMultiAddr(nextHopBytes).valueOr:
+      error "Failed to convert bytes to multiaddress", err = error
+      mix_messages_error.inc(labelValues = ["Intermediate", "INVALID_NEXTHOP"])
+      return
+
+    let parts = fullAddrStr.split("/p2p/")
+    if parts.len != 2:
+      error "Invalid multiaddress format", parts = parts
+      mix_messages_error.inc(labelValues = ["Intermediate", "INVALID_NEXTHOP"])
+      return
+
+    let
+      locationAddrStr = parts[0]
+      peerIdStr = parts[1]
+
+    # Create MultiAddress and PeerId
+    let locationAddr = MultiAddress.init(locationAddrStr).valueOr:
+      error "Failed to parse location multiaddress: ", err = error
+      mix_messages_error.inc(labelValues = ["Intermediate", "INVALID_NEXTHOP"])
+      return
+
+    let peerId = PeerId.init(peerIdStr).valueOr:
+      error "Failed to initialize PeerId", err = error
+      mix_messages_error.inc(labelValues = ["Intermediate", "INVALID_NEXTHOP"])
       return
 
     var nextHopConn: Connection
     try:
       nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
       await nextHopConn.writeLp(processedPkt)
+      mix_messages_forwarded.inc(labelValues = ["Intermediate"])
     except CatchableError as e:
       error "Failed to dial next hop: ", err = e.msg
     finally:
@@ -153,9 +214,12 @@ proc handleMixNodeConnection(
           await nextHopConn.close()
         except CatchableError as e:
           error "Failed to close outgoing stream: ", err = e.msg
+      mix_messages_error.inc(labelValues = ["Intermediate", "DAIL_FAILED"])
   of Duplicate:
+    mix_messages_error.inc(labelValues = ["Intermediate/Exit", "DUPLICATE"])
     discard
   of InvalidMAC:
+    mix_messages_error.inc(labelValues = ["Intermediate/Exit", "INVALID_MAC"])
     discard
 
 proc anonymizeLocalProtocolSend*(
@@ -169,17 +233,25 @@ proc anonymizeLocalProtocolSend*(
 
   let serialized = serializeMixMessage(mixMsg).valueOr:
     error "Serialization failed", err = error
+    mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
+    return
+
+  if len(serialized) > dataSize:
+    error "Message size exceeds maximum payload size",
+      size = len(serialized), limit = dataSize
+    mix_messages_error.inc(labelValues = ["Entry", "INVALID_SIZE"])
     return
 
   let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
 
   let peerId = getPeerIdFromMultiAddr(multiAddr).valueOr:
     error "Failed to get peer id from multiaddress", err = error
+    mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
     return
 
-  let paddedMsg = padMessage(serialized, peerID)
+  mix_messages_recvd.inc(labelValues = ["Entry"])
 
-  trace "# Sent: ", sender = multiAddr, message = msg, dest = destMultiAddr
+  let paddedMsg = padMessage(serialized, peerID)
 
   var
     multiAddrs: seq[string] = @[]
@@ -189,8 +261,16 @@ proc anonymizeLocalProtocolSend*(
 
   # Select L mix nodes at random
   let numMixNodes = mixProto.pubNodeInfo.len
-  if numMixNodes < L:
-    error "No. of public mix nodes less than path length."
+  var numAvailableNodes = numMixNodes
+
+  if mixProto.pubNodeInfo.hasKey(destPeerId):
+    info "Destination peer is a mix node", destPeerId = destPeerId
+    numAvailableNodes = numMixNodes - 1
+
+  if numAvailableNodes < L:
+    error "No. of public mix nodes less than path length.",
+      numMixNodes = numAvailableNodes, pathLength = L
+    mix_messages_error.inc(labelValues = ["Entry", "LOW_MIX_POOL"])
     return
 
   var
@@ -205,16 +285,24 @@ proc anonymizeLocalProtocolSend*(
     error "Destination does not support Mix"
     return
 
-  for i in 0 ..< L:
-    if i == L - 1:
+  var i = 0
+  while i < L:
+    if shouldFwd(proto) and i == L - 1:
       randPeerId = destPeerId
     else:
       let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
-        error "Failed to generate random number", err = error
+        error "Failed to genanrate random number", err = error
+        mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
         return
       let selectedIndex = availableIndices[randomIndexPosition]
       randPeerId = pubNodeInfoKeys[selectedIndex]
       availableIndices.del(randomIndexPosition)
+
+    # Skip the destination peer
+    if not shouldFwd(proto) and randPeerId == destPeerId:
+      continue
+
+    info "Selected mix node: ", indexInPath = i, peerId = randPeerId
 
     # Extract multiaddress, mix public key, and hop
     let (multiAddr, mixPubKey, _) =
@@ -224,6 +312,8 @@ proc anonymizeLocalProtocolSend*(
 
     let multiAddrBytes = multiAddrToBytes(multiAddr).valueOr:
       error "Failed to convert multiaddress to bytes", err = error
+      mix_messages_error.inc(labelValues = ["Entry", "INVALID_MIX_INFO"])
+      #TODO: should we skip and pick a different node here??
       return
 
     hop.add(initHop(multiAddrBytes))
@@ -231,43 +321,59 @@ proc anonymizeLocalProtocolSend*(
     # Compute delay
     let delayMilliSec = cryptoRandomInt(3).valueOr:
       error "Failed to generate random number", err = error
+      mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
       return
     delay.add(uint16ToBytes(uint16(delayMilliSec)))
-
+    i = i + 1
   let serializedRes = serializeMessageChunk(paddedMsg).valueOr:
     error "Failed to serialize padded message", err = error
+    mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
     return
+
+  var destHop = none(Hop)
+  if not shouldFwd(proto):
+    #Encode destination
+    let dest = $destMultiAddr & "/p2p/" & $destPeerId
+    let destAddrBytes = multiAddrToBytes(dest).valueOr:
+      error "Failed to convert multiaddress to bytes", err = error
+      mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
+      return
+    destHop = some(initHop(destAddrBytes))
 
   # Wrap in Sphinx packet
   let sphinxPacket = wrapInSphinxPacket(
-    initMessage(serializedRes), publicKeys, delay, hop
+    initMessage(serializedRes), publicKeys, delay, hop, destHop
   ).valueOr:
     error "Failed to wrap in sphinx packet", err = error
+    mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
     return
 
   # Send the wrapped message to the first mix node in the selected path
   let parts = multiAddrs[0].split("/p2p/")
   if parts.len != 2:
     error "Invalid multiaddress format", parts = parts
+    mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
     return
 
   let firstMixAddr = MultiAddress.init(parts[0]).valueOr:
     error "Failed to initialize MultiAddress", err = error
+    mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
     return
 
   let firstMixPeerId = PeerId.init(parts[1]).valueOr:
     error "Failed to initialize PeerId", err = error
+    mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
     return
-
-  trace "# Sending to: ", multiaddr = multiAddrs[0]
 
   var nextHopConn: Connection
   try:
     nextHopConn =
       await mixProto.switch.dial(firstMixPeerId, @[firstMixAddr], @[MixProtocolID])
     await nextHopConn.writeLp(sphinxPacket)
+    mix_messages_forwarded.inc(labelValues = ["Entry"])
   except CatchableError as e:
     error "Failed to send message to next hop: ", err = e.msg
+    mix_messages_error.inc(labelValues = ["Entry", "SEND_FAILED"])
   finally:
     if nextHopConn != nil:
       try:
@@ -326,9 +432,39 @@ proc new*(
   mixProto.init()
   return ok(mixProto)
 
+# TODO: is this needed
+proc initialize*(
+    mixProtocol: MixProtocol,
+    localMixNodeInfo: MixNodeInfo,
+    switch: Switch,
+    mixNodeTable: Table[PeerId, MixPubInfo],
+) =
+  #if mixNodeTable.len == 0:
+  # TODO:This is temporary check for testing, needs to be removed later
+  # probably protocol can be initiated without any mix nodes itself,
+  # and can be later supplied with nodes as they are discovered.
+  #return err("No mix nodes passed for the protocol initialization.")
+
+  mixProtocol.mixNodeInfo = localMixNodeInfo
+  mixProtocol.switch = switch
+  mixProtocol.pubNodeInfo = mixNodeTable
+  mixProtocol.tagManager = initTagManager()
+
+  mixProtocol.init()
+
 method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
   proc handle(conn: Connection, proto: string) {.async: (raises: [CancelledError]).} =
-    await mixProtocol.handleMixNodeConnection(conn)
+    await mixProtocol.handleMixNodeConnection(conn, proto)
 
   mixProtocol.codecs = @[MixProtocolID]
   mixProtocol.handler = handle
+
+# TODO: is this needed
+method setNodePool*(
+    mixProtocol: MixProtocol, mixNodeTable: Table[PeerId, MixPubInfo]
+) {.base, gcsafe, raises: [].} =
+  mixProtocol.pubNodeInfo = mixNodeTable
+
+# TODO: is this needed
+method getNodePoolSize*(mixProtocol: MixProtocol): int {.base, gcsafe, raises: [].} =
+  mixProtocol.pubNodeInfo.len

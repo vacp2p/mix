@@ -9,6 +9,6 @@ const
   headerSize* = alphaSize + betaSize + gammaSize # Total header size
   delaySize* = 2 # Delay size
   addrSize* = (t * k) - delaySize # Address size
-  messageSize* = 2413 - headerSize - k # Size of the message itself
+  messageSize* = 4400 - headerSize - k # Size of the message itself
   payloadSize* = messageSize + k # Total payload size
   packetSize* = headerSize + payloadSize # Total packet size
