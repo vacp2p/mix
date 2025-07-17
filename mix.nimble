@@ -23,13 +23,4 @@ proc runTest(filename: string, shouldRemoveTestBinary: bool = true) =
     rmFile fmt"{TEST_DIRECTORY}/{filename.toExe()}"
 
 task test, "Run the test suite":
-  runTest("test_crypto")
-  runTest("test_curve25519")
-  runTest("test_fragmentation")
-  runTest("test_mix_message")
-  runTest("test_mix_node")
-  runTest("test_seqno_generator")
-  runTest("test_serialization")
-  runTest("test_sphinx")
-  runTest("test_tag_manager")
-  runTest("test_utils")
+  runTest("tests")
