@@ -1,4 +1,4 @@
-import options, os, results, strformat, strutils
+import os, results, strformat, strutils
 import std/streams
 import libp2p/[crypto/crypto, crypto/curve25519, crypto/secp, multiaddress, peerid]
 import ./[config, curve25519, utils]

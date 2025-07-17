@@ -1,4 +1,4 @@
-import chronicles, options, os, strformat, results, strutils, unittest
+import chronicles, os, strformat, results, strutils, unittest
 import libp2p/[crypto/crypto, crypto/secp, multiaddress, peerid]
 import ../mix/[curve25519, mix_node]
 

@@ -1,5 +1,5 @@
 import results, sequtils
-import std/math, std/options
+import std/math
 import ./[config, crypto, curve25519, serialization, tag_manager]
 
 # Define possible outcomes of processing a Sphinx packet
@@ -118,7 +118,7 @@ proc computeBetaGammaDelta(
     hop: openArray[Hop],
     msg: Message,
     delay: openArray[seq[byte]],
-    destHop: Option[Hop],
+    destHop: Opt[Hop],
 ): Result[(seq[byte], seq[byte], seq[byte]), string] =
   let sLen = s.len
   var
@@ -190,7 +190,7 @@ proc wrapInSphinxPacket*(
     publicKeys: openArray[FieldElement],
     delay: openArray[seq[byte]],
     hop: openArray[Hop],
-    destHop: Option[Hop],
+    destHop: Opt[Hop],
 ): Result[seq[byte], string] =
   # Compute alphas and shared secrets
   let res1 = computeAlpha(publicKeys)
