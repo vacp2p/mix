@@ -49,24 +49,19 @@ proc write*(
 method writeLp*(
     self: MixEntryConnection, msg: openArray[byte]
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
-  var buf: seq[byte]
+  let length = msg.len().uint64
+  var
+    vbytes: seq[byte] = @[]
+    value = length
 
-  if not destIsExit(self.proto):
-    buf = @msg
-  else:
-    let length = msg.len().uint64
-    var
-      vbytes: seq[byte] = @[]
-      value = length
+  while value >= 128:
+    vbytes.add(byte((value and 127) or 128))
+    value = value shr 7
+  vbytes.add(byte(value))
 
-    while value >= 128:
-      vbytes.add(byte((value and 127) or 128))
-      value = value shr 7
-    vbytes.add(byte(value))
-
-    buf = newSeqUninitialized[byte](msg.len() + vbytes.len)
-    buf[0 ..< vbytes.len] = vbytes.toOpenArray(0, vbytes.len - 1)
-    buf[vbytes.len ..< buf.len] = msg
+  var buf = newSeqUninitialized[byte](msg.len() + vbytes.len)
+  buf[0 ..< vbytes.len] = vbytes.toOpenArray(0, vbytes.len - 1)
+  buf[vbytes.len ..< buf.len] = msg
 
   self.mixDialer(@buf, self.proto, self.destMultiAddr, self.destPeerId)
 

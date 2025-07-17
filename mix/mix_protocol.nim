@@ -330,7 +330,7 @@ proc anonymizeLocalProtocolSend*(
     mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
     return
 
-  var destHop = none(Hop)
+  var destHop = Opt.none(Hop)
   if not destIsExit(proto):
     #Encode destination
     let dest = $destMultiAddr & "/p2p/" & $destPeerId

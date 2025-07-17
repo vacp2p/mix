@@ -1,5 +1,4 @@
-import bearssl/rand, chronos, chronicles, resi
-ts
+import bearssl/rand, chronos, chronicles, results
 import std/[sequtils, sets]
 import libp2p/[multiaddress, protocols/pubsub/pubsubpeer, switch]
 import ./[entry_connection, mix_protocol, protocol]

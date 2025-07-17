@@ -108,7 +108,7 @@ proc oneNode(node: Node, rcvdCnt: ptr Atomic[int]) {.async.} =
     discard await node.gossip.publish(
       "message",
       cast[seq[byte]](msg),
-      publishParams = Opt.some(PublishParams(skipMCache: true, useCustomConn: true)),
+      publishParams = some(PublishParams(skipMCache: true, useCustomConn: true)),
     )
 
   await sleepAsync(1000.milliseconds)
@@ -128,10 +128,15 @@ proc mixnet_gossipsub_test(): Future[int] {.async: (raises: [Exception]).} =
       return
 
     let mixConn = proc(
-        destAddr: Opt[MultiAddress], destPeerId: PeerId, codec: string
+        destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
     ): Connection {.gcsafe, raises: [].} =
       try:
-        return mixProto.createMixEntryConnection(destAddr, destPeerId, codec)
+        let destOpt =
+          if destAddr.isSome:
+            Opt.some(destAddr.unsafeGet())
+          else:
+            Opt.none(MultiAddress)
+        return mixProto.createMixEntryConnection(destOpt, destPeerId, codec)
       except CatchableError as e:
         error "Error during execution of MixEntryConnection callback: ", err = e.msg
         return nil
@@ -151,7 +156,7 @@ proc mixnet_gossipsub_test(): Future[int] {.async: (raises: [Exception]).} =
     let gossip = GossipSub.init(
       switch = switch[i],
       triggerSelf = true,
-      customConnCallbacks = Opt.some(
+      customConnCallbacks = some(
         CustomConnectionCallbacks(
           customConnCreationCB: mixConn, customPeerSelectionCB: mixPeerSelect
         )
