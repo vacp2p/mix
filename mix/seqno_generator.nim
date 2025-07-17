@@ -16,7 +16,7 @@ proc generateSeqNo*(seqNo: var SeqNo, messageBytes: seq[byte]) =
   let
     currentTime = getTime().toUnix() * 1000
     currentTimeBytes = newSeq[byte](8)
-  bigEndian64(addr currentTimeBytes[0], unsafeAddr currentTime)
+  bigEndian64(unsafeAddr currentTimeBytes[0], unsafeAddr currentTime)
   let messageHash = sha256_hash(messageBytes & currentTimeBytes)
   var cnt: uint32
   for i in 0 .. 3:

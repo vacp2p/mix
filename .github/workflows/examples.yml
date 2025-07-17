@@ -1,4 +1,4 @@
-name: CI
+name: Examples
 on:
   push:
     branches:
@@ -7,9 +7,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  examples:
     uses: status-im/nimbus-common-workflow/.github/workflows/common.yml@main
     with:
       test-command: |
-        env NIMLANG=c nimble test
-        env NIMLANG=cpp nimble test
+       nimble c ./mix/examples/poc_gossipsub.nim
+       nimble c ./mix/examples/poc_gossipsub_repeated_runs.nim
+       nimble c ./mix/examples/poc_noresp_ping.nim

@@ -111,7 +111,7 @@ proc writeMixNodeInfoToFile*(
   let serializedData = serializeMixNodeInfo(node).valueOr:
     return err("Failed to serialize mix node info: " & error)
 
-  file.writeData(addr serializedData[0], serializedData.len)
+  file.writeData(unsafeAddr serializedData[0], serializedData.len)
   return ok()
 
 proc readMixNodeInfoFromFile*(
@@ -203,7 +203,7 @@ proc writeMixPubInfoToFile*(
   let serializedData = serializeMixPubInfo(node).valueOr:
     return err("Failed to serialize mix pub info: " & error)
 
-  file.writeData(addr serializedData[0], serializedData.len)
+  file.writeData(unsafeAddr serializedData[0], serializedData.len)
   return ok()
 
 proc readMixPubInfoFromFile*(
