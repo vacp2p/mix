@@ -6,14 +6,31 @@ import ./protocols/noresp_ping
 const protocolTypeSize* = 2
 
 type ProtocolType* = enum
-  Ping = PingCodec
-  GossipSub12 = GossipSubCodec_12
-  GossipSub11 = GossipSubCodec_11
-  GossipSub10 = GossipSubCodec_10
-  NoRespPing = NoRespPingCodec
-  WakuLightPushProtocol = "/vac/waku/lightpush/3.0.0"
-    #TODO: fix this hardcoding, for now doing it as importing codecs from waku causses various build errors.
-  OtherProtocol = "other" # Placeholder for other protocols
+  Ping
+  GossipSub12
+  GossipSub11
+  GossipSub10
+  NoRespPing
+  WakuLightPushProtocol
+  OtherProtocol
+
+proc `$`*(proto: ProtocolType): string =
+  case proto
+  of Ping:
+    PingCodec
+  of GossipSub12:
+    GossipSubCodec_12
+  of GossipSub11:
+    GossipSubCodec_11
+  of GossipSub10:
+    GossipSubCodec_10
+  of NoRespPing:
+    NoRespPingCodec
+  of WakuLightPushProtocol:
+    "/vac/waku/lightpush/3.0.0"
+      #TODO: fix this hardcoding, for now doing it as importing codecs from waku causses various build errors.
+  else:
+    "other" # Placeholder for other protocols
 
 type ProtocolHandler* = proc(conn: Connection, proto: ProtocolType): Future[void] {.
   async: (raises: [CancelledError])

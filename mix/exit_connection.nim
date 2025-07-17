@@ -123,8 +123,8 @@ method writeLp*(
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError]), public.} =
   raise newException(LPStreamError, "writeLp not implemented for MixExitConnection")
 
-method shortLog*(self: MixExitConnection): string {.raises: [].} =
-  discard
+func shortLog*(self: MixExitConnection): string {.raises: [].} =
+  "MixExitConnection"
 
 method initStream*(self: MixExitConnection) =
   discard

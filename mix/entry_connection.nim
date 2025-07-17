@@ -76,7 +76,7 @@ method writeLp*(
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
   self.writeLp(msg.toOpenArrayByte(0, msg.high))
 
-method shortLog*(self: MixEntryConnection): string {.raises: [].} =
+proc shortLog*(self: MixEntryConnection): string {.raises: [].} =
   "[MixEntryConnection] Destination: " & $self.destMultiAddr & "/p2p/" & $self.destPeerId
 
 method initStream*(self: MixEntryConnection) =

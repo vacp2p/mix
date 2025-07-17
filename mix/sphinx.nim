@@ -213,7 +213,10 @@ proc wrapInSphinxPacket*(
   return ok(serializeRes)
 
 proc processSphinxPacket*(
-    serSphinxPacket: seq[byte], privateKey: FieldElement, tm: var TagManager, isDestEmbedded: bool
+    serSphinxPacket: seq[byte],
+    privateKey: FieldElement,
+    tm: var TagManager,
+    isDestEmbedded: bool,
 ): Result[(Hop, seq[byte], seq[byte], ProcessingStatus), string] =
   # Deserialize the Sphinx packet
   let deserializeRes = deserializeSphinxPacket(serSphinxPacket).valueOr:
@@ -268,14 +271,19 @@ proc processSphinxPacket*(
     return err("Error in aes: " & error)
 
   # Check if B has the required prefix for the original message
-  paddingLength = if isDestEmbedded:
+  paddingLength =
+    if isDestEmbedded:
       (((t + 1) * (r - L)) + 2) * k
     else:
       (((t + 1) * (r - L)) + t + 2) * k
 
   zeroPadding = newSeq[byte](paddingLength)
 
-  let bOffset =  if isDestEmbedded: (t * k) else: 0
+  let bOffset =
+    if isDestEmbedded:
+      (t * k)
+    else:
+      0
 
   if B[bOffset .. bOffset + paddingLength - 1] == zeroPadding:
     let deserializeRes = deserializeMessage(delta_prime).valueOr:
@@ -288,7 +296,6 @@ proc processSphinxPacket*(
       return ok((hop, B[addrSize .. ((t * k) - 1)], msg[0 .. messageSize - 1], Exit))
     else:
       return ok((Hop(), @[], msg[0 .. messageSize - 1], Exit))
-
   else:
     # Extract routing information from B
     let deserializeRes = deserializeRoutingInfo(B).valueOr:
