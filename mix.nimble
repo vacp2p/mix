@@ -7,7 +7,7 @@ license = "MIT"
 requires "stew >= 0.3.0"
 requires "chronos >= 4.0.3"
 requires "libp2p >= 1.11.0"
-requires "nim >= 2.0.8"
+requires "nim >= 1.6.0"
 requires "nimcrypto >= 0.6.0"
 requires "serialization >= 0.2.2"
 
