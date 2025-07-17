@@ -93,12 +93,10 @@ proc oneNode(node: Node) {.async.} =
   )
 
   if node.id == 0:
-    node.gossip.subscribe(
-      "message",
-      proc(topic: string, data: seq[byte]) {.async.} =
-        info "Message received", nodeId = node.id, msg = cast[string](data)
-      ,
-    )
+    let handler = proc(topic: string, data: seq[byte]) {.async.} =
+      info "Message received", nodeId = node.id, msg = cast[string](data)
+
+    node.gossip.subscribe("message", handler)
   else:
     node.gossip.subscribe("message", nil)
 
@@ -114,7 +112,7 @@ proc oneNode(node: Node) {.async.} =
   await sleepAsync(1000.milliseconds)
   await node.switch.stop()
 
-proc mixnet_gossipsub_test() {.async.} =
+proc mixnet_gossipsub_test() {.async: (raises: [Exception]).} =
   let
     numberOfNodes = 5
     switch = setUpNodes(numberOfNodes)

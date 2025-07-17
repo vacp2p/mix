@@ -71,7 +71,7 @@ proc setUpNodes(numNodes: int): seq[Switch] =
 
     return nodes
 
-proc mixnetSimulation() {.async.} =
+proc mixnetSimulation() {.async: (raises: [Exception]).} =
   let
     numberOfNodes = 10
     nodes = setUpNodes(numberOfNodes)

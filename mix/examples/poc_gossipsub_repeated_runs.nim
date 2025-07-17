@@ -114,7 +114,7 @@ proc oneNode(node: Node, rcvdCnt: ptr Atomic[int]) {.async.} =
   await sleepAsync(1000.milliseconds)
   await node.switch.stop()
 
-proc mixnet_gossipsub_test(): Future[int] {.async.} =
+proc mixnet_gossipsub_test(): Future[int] {.async: (raises: [Exception]).} =
   let
     numberOfNodes = 5
     switch = setUpNodes(numberOfNodes)
@@ -177,7 +177,7 @@ proc mixnet_gossipsub_test(): Future[int] {.async.} =
 
 import std/[tables, algorithm, math, strformat]
 
-proc main() {.async.} =
+proc main() {.async: (raises: [Exception]).} =
   var results: seq[int] = @[]
   let n = 25
 
