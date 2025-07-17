@@ -52,7 +52,7 @@ method writeLp*(
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
   var buf: seq[byte]
 
-  if shouldFwd(self.proto):
+  if not destIsExit(self.proto):
     buf = @msg
   else:
     let length = msg.len().uint64

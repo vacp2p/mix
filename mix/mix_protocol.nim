@@ -78,7 +78,7 @@ proc handleMixNodeConnection(
     receivedBytes,
     mixPrivKey,
     mixProto.tagManager,
-    not ProtocolType.fromString(proto).shouldFwd,
+    not ProtocolType.fromString(proto).destIsExit,
   )
   if processedPktRes.isErr:
     error "Failed to process Sphinx packet", err = processedPktRes.error
@@ -108,7 +108,7 @@ proc handleMixNodeConnection(
     let (message, protocol) = getMixMessage(deserializedResult)
     trace "Exit node - Received mix message: ", receiver = multiAddr, message = message
 
-    if shouldFwd(protocol):
+    if destIsExit(protocol):
       let exitConn = MixExitConnection.new(message)
       trace "Received: ", receiver = multiAddr, message = message
       await mixProto.pHandler(exitConn, protocol)
@@ -287,7 +287,7 @@ proc anonymizeLocalProtocolSend*(
 
   var i = 0
   while i < L:
-    if shouldFwd(proto) and i == L - 1:
+    if destIsExit(proto) and i == L - 1:
       randPeerId = destPeerId
     else:
       let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
@@ -299,7 +299,7 @@ proc anonymizeLocalProtocolSend*(
       availableIndices.del(randomIndexPosition)
 
     # Skip the destination peer
-    if not shouldFwd(proto) and randPeerId == destPeerId:
+    if not destIsExit(proto) and randPeerId == destPeerId:
       continue
 
     info "Selected mix node: ", indexInPath = i, peerId = randPeerId
@@ -331,7 +331,7 @@ proc anonymizeLocalProtocolSend*(
     return
 
   var destHop = none(Hop)
-  if not shouldFwd(proto):
+  if not destIsExit(proto):
     #Encode destination
     let dest = $destMultiAddr & "/p2p/" & $destPeerId
     let destAddrBytes = multiAddrToBytes(dest).valueOr:

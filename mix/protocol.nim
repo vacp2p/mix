@@ -26,8 +26,8 @@ proc fromString*(T: type ProtocolType, proto: string): ProtocolType =
     ProtocolType.OtherProtocol
 
 # TODO: this is temporary while I attempt to extract protocol specific logic from mix
-func shouldFwd*(proto: ProtocolType): bool =
-  return proto == GossipSub12 or proto == GossipSub11 or proto == GossipSub10
+func destIsExit*(proto: ProtocolType): bool =
+  return not(proto == GossipSub12 or proto == GossipSub11 or proto == GossipSub10)
 
 method callHandler*(
     switch: Switch, conn: Connection, proto: ProtocolType
