@@ -196,8 +196,9 @@ suite "Sphinx Tests":
         message[i] = byte(rand(256))
       let paddedMessage = padMessage(message, messageSize)
 
-      let packetRes =
-        wrapInSphinxPacket(initMessage(paddedMessage), publicKeys, delay, hops, Opt.none(Hop))
+      let packetRes = wrapInSphinxPacket(
+        initMessage(paddedMessage), publicKeys, delay, hops, Opt.none(Hop)
+      )
       if packetRes.isErr:
         error "Sphinx wrap error", err = packetRes.error
       let packet = packetRes.get()
