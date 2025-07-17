@@ -1,4 +1,4 @@
-import chronicles, random, results, unittest, options
+import chronicles, random, results, unittest
 import ../mix/[config, curve25519, serialization, sphinx, tag_manager]
 
 # Helper function to pad/truncate message
@@ -62,7 +62,7 @@ suite "Sphinx Tests":
   test "sphinx_wrap_and_process":
     let (message, privateKeys, publicKeys, delay, hops) = createDummyData()
 
-    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops, none(Hop))
+    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops, Opt.none(Hop))
     if packetRes.isErr:
       error "Sphinx wrap error", err = packetRes.error
     let packet = packetRes.get()
@@ -120,7 +120,7 @@ suite "Sphinx Tests":
   test "sphinx_wrap_empty_public_keys":
     let (message, _, _, delay, _) = createDummyData()
 
-    let packetRes = wrapInSphinxPacket(message, @[], delay, @[], none(Hop))
+    let packetRes = wrapInSphinxPacket(message, @[], delay, @[], Opt.none(Hop))
     if packetRes.isOk:
       error "Expected Sphinx wrap error when public keys are empty, but got success"
       fail()
@@ -128,7 +128,7 @@ suite "Sphinx Tests":
   test "sphinx_process_invalid_mac":
     let (message, privateKeys, publicKeys, delay, hops) = createDummyData()
 
-    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops, none(Hop))
+    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops, Opt.none(Hop))
     if packetRes.isErr:
       error "Sphinx wrap error", err = packetRes.error
     let packet = packetRes.get()
@@ -155,7 +155,7 @@ suite "Sphinx Tests":
   test "sphinx_process_duplicate_tag":
     let (message, privateKeys, publicKeys, delay, hops) = createDummyData()
 
-    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops, none(Hop))
+    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops, Opt.none(Hop))
     if packetRes.isErr:
       error "Sphinx wrap error", err = packetRes.error
     let packet = packetRes.get()
@@ -197,7 +197,7 @@ suite "Sphinx Tests":
       let paddedMessage = padMessage(message, messageSize)
 
       let packetRes = wrapInSphinxPacket(
-        initMessage(paddedMessage), publicKeys, delay, hops, none(Hop)
+        initMessage(paddedMessage), publicKeys, delay, hops, Opt.none(Hop)
       )
       if packetRes.isErr:
         error "Sphinx wrap error", err = packetRes.error

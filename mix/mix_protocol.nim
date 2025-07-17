@@ -1,4 +1,4 @@
-import chronicles, chronos, sequtils, strutils, os
+import chronicles, chronos, sequtils, strutils, os, results
 import std/[strformat, sysrand], serialization, metrics
 import
   ./[
@@ -226,7 +226,7 @@ proc anonymizeLocalProtocolSend*(
     mixProto: MixProtocol,
     msg: seq[byte],
     proto: ProtocolType,
-    destMultiAddr: Option[MultiAddress],
+    destMultiAddr: Opt[MultiAddress],
     destPeerId: PeerId,
 ) {.async.} =
   let mixMsg = initMixMessage(msg, proto)
@@ -338,7 +338,7 @@ proc anonymizeLocalProtocolSend*(
       error "Failed to convert multiaddress to bytes", err = error
       mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
       return
-    destHop = some(initHop(destAddrBytes))
+    destHop = Opt.some(initHop(destAddrBytes))
 
   # Wrap in Sphinx packet
   let sphinxPacket = wrapInSphinxPacket(

@@ -1,5 +1,5 @@
-import chronicles, sequtils, strutils, chronos
-import std/[enumerate, options, strformat, sysrand]
+import chronicles, sequtils, strutils, chronos, results
+import std/[enumerate, strformat, sysrand]
 import
   ../[entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol]
 import
@@ -106,7 +106,7 @@ proc oneNode(node: Node) {.async.} =
     discard await node.gossip.publish(
       "message",
       cast[seq[byte]](msg),
-      publishParams = some(PublishParams(skipMCache: true, useCustomConn: true)),
+      publishParams = Opt.some(PublishParams(skipMCache: true, useCustomConn: true)),
     )
 
   await sleepAsync(1000.milliseconds)
@@ -124,7 +124,7 @@ proc mixnet_gossipsub_test() {.async: (raises: [Exception]).} =
       return
 
     let mixConn = proc(
-        destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
+        destAddr: Opt[MultiAddress], destPeerId: PeerId, codec: string
     ): Connection {.gcsafe, raises: [].} =
       try:
         return mixProto.createMixEntryConnection(destAddr, destPeerId, codec)
@@ -147,7 +147,7 @@ proc mixnet_gossipsub_test() {.async: (raises: [Exception]).} =
     let gossip = GossipSub.init(
       switch = switch[i],
       triggerSelf = true,
-      customConnCallbacks = some(
+      customConnCallbacks = Opt.some(
         CustomConnectionCallbacks(
           customConnCreationCB: mixConn, customPeerSelectionCB: mixPeerSelect
         )

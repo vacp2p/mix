@@ -1,20 +1,18 @@
-import bearssl/rand, chronos, chronicles
-import std/[options, sequtils, sets]
+import bearssl/rand, chronos, chronicles, resi
+ts
+import std/[sequtils, sets]
 import libp2p/[multiaddress, protocols/pubsub/pubsubpeer, switch]
 import ./[entry_connection, mix_protocol, protocol]
 
 const D* = 4 # No. of peers to forward to
 
 proc createMixEntryConnection*(
-    srcMix: MixProtocol,
-    destAddr: Option[MultiAddress],
-    destPeerId: PeerId,
-    codec: string,
+    srcMix: MixProtocol, destAddr: Opt[MultiAddress], destPeerId: PeerId, codec: string
 ): MixEntryConnection {.gcsafe, raises: [].} =
   var sendDialerFunc = proc(
       msg: seq[byte],
       proto: ProtocolType,
-      destMultiAddr: Option[MultiAddress],
+      destMultiAddr: Opt[MultiAddress],
       destPeerId: PeerId,
   ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
     try:

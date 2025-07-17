@@ -1,17 +1,16 @@
-import hashes, chronos, stew/byteutils
+import hashes, chronos, stew/byteutils, results
 import libp2p/stream/connection
-import std/options
 import ./protocol, ./mix_node, ./mix_protocol
 
 type MixDialer* = proc(
   msg: seq[byte],
   proto: ProtocolType,
-  destMultiAddr: Option[MultiAddress],
+  destMultiAddr: Opt[MultiAddress],
   destPeerId: PeerId,
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true).}
 
 type MixEntryConnection* = ref object of Connection
-  destMultiAddr: Option[MultiAddress]
+  destMultiAddr: Opt[MultiAddress]
   destPeerId: PeerId
   proto: ProtocolType
   mixDialer: MixDialer
@@ -94,7 +93,7 @@ func hash*(self: MixEntryConnection): Hash =
 
 proc new*(
     T: typedesc[MixEntryConnection],
-    destMultiAddr: Option[MultiAddress],
+    destMultiAddr: Opt[MultiAddress],
     destPeerId: PeerId,
     proto: ProtocolType,
     sendFunc: MixDialer,
