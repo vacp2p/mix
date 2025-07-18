@@ -1,9 +1,7 @@
 import chronicles, chronos, results, strutils
 import std/[enumerate, sysrand]
 import libp2p
-import
-  libp2p/
-    [crypto/secp, multiaddress, builders, muxers/yamux/yamux, protocols/ping, switch]
+import libp2p/[crypto/secp]
 import ./protocols/noresp_ping
 
 import ../mix

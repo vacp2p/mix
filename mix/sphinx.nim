@@ -1,5 +1,4 @@
 import results, sequtils
-import std/math
 import ./[config, crypto, curve25519, serialization, tag_manager]
 
 # Define possible outcomes of processing a Sphinx packet
@@ -181,7 +180,7 @@ proc computeBetaGammaDelta(
         return err("Error in aes: " & deltaRes.error)
       delta = deltaRes.get()
 
-    gamma = toseq(hmac(mac_key, beta))
+    gamma = toSeq(hmac(mac_key, beta))
 
   return ok((beta, gamma, delta))
 
@@ -241,7 +240,7 @@ proc processSphinxPacket*(
   # Compute MAC
   let mac_key = kdf(deriveKeyMaterial("mac_key", sBytes))
 
-  if not (toseq(hmac(mac_key, beta)) == gamma):
+  if not (toSeq(hmac(mac_key, beta)) == gamma):
     # If MAC not verified
     return ok((Hop(), @[], @[], InvalidMAC))
 

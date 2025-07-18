@@ -1,3 +1,5 @@
+{.used.}
+
 import chronicles, nimcrypto, results, unittest
 import ../mix/crypto
 

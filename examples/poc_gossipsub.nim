@@ -1,16 +1,13 @@
 import chronicles, sequtils, strutils, chronos, results
-import std/[enumerate, strformat, sysrand]
+import std/[enumerate, strformat]
 import ../mix
+import libp2p
 import
   libp2p/[
     crypto/secp,
-    multiaddress,
-    builders,
-    muxers/yamux/yamux,
     protocols/pubsub/gossipsub,
     protocols/pubsub/pubsubpeer,
     protocols/pubsub/rpc/messages,
-    transports/tcptransport,
   ]
 
 type Node = tuple[switch: Switch, gossip: GossipSub, mix: MixProtocol, id: int]

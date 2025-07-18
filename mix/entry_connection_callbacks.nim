@@ -1,6 +1,6 @@
 # TODO: this file should likely become mix.nim in the root of the project
 
-import bearssl/rand, chronos, chronicles, results
+import chronos, chronicles, results
 import std/[sequtils, sets]
 import libp2p/[multiaddress, protocols/pubsub/pubsubpeer, switch]
 import ./[entry_connection, mix_protocol, protocol]

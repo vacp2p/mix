@@ -1,3 +1,5 @@
+{.used.}
+
 import chronicles, results, unittest
 import ../mix/[curve25519, tag_manager]
 

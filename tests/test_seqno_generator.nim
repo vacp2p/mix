@@ -1,3 +1,5 @@
+{.used.}
+
 import chronicles, sets, unittest
 import std/[os, times]
 import libp2p/peerid
