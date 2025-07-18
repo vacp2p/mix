@@ -1,7 +1,6 @@
 import chronicles, math, sequtils, strutils, sugar, chronos, results
 import std/[atomics, enumerate, strformat, sysrand]
-import
-  ../[entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol]
+import ../mix
 import
   libp2p/[
     crypto/secp,

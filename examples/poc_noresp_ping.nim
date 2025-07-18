@@ -4,9 +4,9 @@ import libp2p
 import
   libp2p/
     [crypto/secp, multiaddress, builders, muxers/yamux/yamux, protocols/ping, switch]
-import
-  ../[entry_connection, entry_connection_callbacks, mix_node, mix_protocol, protocol],
-  ../protocols/noresp_ping
+import ./protocols/noresp_ping
+
+import ../mix
 
 proc cryptoRandomInt(max: int): Result[int, string] =
   if max == 0:
