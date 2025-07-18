@@ -228,6 +228,7 @@ proc anonymizeLocalProtocolSend*(
     proto: ProtocolType,
     destMultiAddr: Opt[MultiAddress],
     destPeerId: PeerId,
+    exitNodeIsDestination: bool,
 ) {.async.} =
   let mixMsg = initMixMessage(msg, proto)
 
@@ -287,7 +288,7 @@ proc anonymizeLocalProtocolSend*(
 
   var i = 0
   while i < L:
-    if destIsExit(proto) and i == L - 1:
+    if exitNodeIsDestination and i == L - 1:
       randPeerId = destPeerId
     else:
       let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
@@ -299,7 +300,7 @@ proc anonymizeLocalProtocolSend*(
       availableIndices.del(randomIndexPosition)
 
     # Skip the destination peer
-    if not destIsExit(proto) and randPeerId == destPeerId:
+    if not exitNodeIsDestination and randPeerId == destPeerId:
       continue
 
     info "Selected mix node: ", indexInPath = i, peerId = randPeerId
@@ -331,7 +332,7 @@ proc anonymizeLocalProtocolSend*(
     return
 
   var destHop = Opt.none(Hop)
-  if not destIsExit(proto):
+  if not exitNodeIsDestination:
     #Encode destination
     let dest = $destMultiAddr & "/p2p/" & $destPeerId
     let destAddrBytes = multiAddrToBytes(dest).valueOr:

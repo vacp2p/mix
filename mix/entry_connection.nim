@@ -86,18 +86,23 @@ method closeImpl*(
 func hash*(self: MixEntryConnection): Hash =
   hash($self.destMultiAddr & "/p2p/" & $self.destPeerId)
 
+when defined(libp2p_agents_metrics):
+  proc setShortAgent*(self: MixEntryConnection, shortAgent: string) =
+    discard
+
 proc new*(
     T: typedesc[MixEntryConnection],
+    srcMix: MixProtocol,
     destMultiAddr: Opt[MultiAddress],
     destPeerId: PeerId,
-    proto: ProtocolType,
-    sendFunc: MixDialer,
-): MixEntryConnection =
+    mixDialer: MixDialer,
+    codec: string,
+): T =
   let instance = T(
     destMultiAddr: destMultiAddr,
     destPeerId: destPeerId,
-    proto: proto,
-    mixDialer: sendFunc,
+    proto: ProtocolType.fromString(codec),
+    mixDialer: mixDialer,
   )
 
   when defined(libp2p_agents_metrics):
@@ -105,6 +110,26 @@ proc new*(
 
   instance
 
-when defined(libp2p_agents_metrics):
-  proc setShortAgent*(self: MixEntryConnection, shortAgent: string) =
-    discard
+proc new*(
+    T: typedesc[MixEntryConnection],
+    srcMix: MixProtocol,
+    destMultiAddr: Opt[MultiAddress],
+    destPeerId: PeerId,
+    codec: string,
+    exitNodeIsDestination: bool = false,
+): T {.raises: [].} =
+  var sendDialerFunc = proc(
+      msg: seq[byte],
+      proto: ProtocolType,
+      destMultiAddr: Opt[MultiAddress],
+      destPeerId: PeerId,
+  ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
+    try:
+      await srcMix.anonymizeLocalProtocolSend(
+        msg, proto, destMultiAddr, destPeerId, exitNodeIsDestination
+      )
+    except CatchableError as e:
+      error "Error during execution of anonymizeLocalProtocolSend: ", err = e.msg
+    return
+
+  T.new(srcMix, destMultiAddr, destPeerId, sendDialerFunc, codec)
