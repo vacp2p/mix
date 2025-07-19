@@ -1,5 +1,5 @@
 import chronicles, chronos, sequtils, strutils, os, results
-import std/[strformat, sysrand], serialization, metrics
+import std/[strformat, sysrand], metrics
 import
   ./[
     config, curve25519, exit_connection, fragmentation, mix_message, mix_node, protocol,
@@ -53,7 +53,7 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   return ok(int(value mod uint64(max)))
 
 proc handleMixNodeConnection(
-    mixProto: MixProtocol, conn: Connection, proto: string
+    mixProto: MixProtocol, conn: Connection, codec: string
 ) {.async: (raises: [CancelledError]).} =
   var receivedBytes: seq[byte]
   try:
@@ -75,10 +75,7 @@ proc handleMixNodeConnection(
   let (multiAddr, _, mixPrivKey, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
 
   let processedPktRes = processSphinxPacket(
-    receivedBytes,
-    mixPrivKey,
-    mixProto.tagManager,
-    not ProtocolType.fromString(proto).destIsExit,
+    receivedBytes, mixPrivKey, mixProto.tagManager, not codec.destIsExit
   )
   if processedPktRes.isErr:
     error "Failed to process Sphinx packet", err = processedPktRes.error
@@ -100,18 +97,18 @@ proc handleMixNodeConnection(
       mix_messages_error.inc(labelValues = ["Exit", "INVALID_SPHINX"])
       return
 
-    let deserializedResult = deserializeMixMessage(unpaddedMsg).valueOr:
+    let deserialized = MixMessage.deserialize(unpaddedMsg).valueOr:
       error "Deserialization failed", err = error
       mix_messages_error.inc(labelValues = ["Exit", "INVALID_SPHINX"])
       return
 
-    let (message, protocol) = getMixMessage(deserializedResult)
-    trace "Exit node - Received mix message: ", receiver = multiAddr, message = message
+    trace "Exit node - Received mix message: ",
+      receiver = multiAddr, message = deserialized.message
 
-    if destIsExit(protocol):
-      let exitConn = MixExitConnection.new(message)
+    if destIsExit(deserialized.codec):
+      let exitConn = MixExitConnection.new(deserialized.message)
       trace "Received: ", receiver = multiAddr, message = message
-      await mixProto.pHandler(exitConn, protocol)
+      await mixProto.pHandler(exitConn, deserialized.codec)
       if exitConn != nil:
         try:
           await exitConn.close()
@@ -157,8 +154,8 @@ proc handleMixNodeConnection(
 
     var destConn: Connection
     try:
-      destConn = await mixProto.switch.dial(peerId, @[locationAddr], $protocol)
-      await destConn.writeLp(message)
+      destConn = await mixProto.switch.dial(peerId, @[locationAddr], deserialized.codec)
+      await destConn.writeLp(deserialized.message)
       #TODO: When response is implemented, we can read the response here
       await destConn.close()
     except CatchableError as e:
@@ -222,17 +219,23 @@ proc handleMixNodeConnection(
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "INVALID_MAC"])
     discard
 
+proc getMaxMessageSizeForCodec*(codec: string): Result[int, string] =
+  let serializedMsg = ?MixMessage.new(@[], codec).serialize()
+  if serializedMsg.len > dataSize:
+    return err("cannot encode messages for this codec")
+  return ok(dataSize - serializedMsg.len)
+
 proc anonymizeLocalProtocolSend*(
     mixProto: MixProtocol,
     msg: seq[byte],
-    proto: ProtocolType,
+    codec: string,
     destMultiAddr: Opt[MultiAddress],
     destPeerId: PeerId,
     exitNodeIsDestination: bool,
 ) {.async.} =
-  let mixMsg = initMixMessage(msg, proto)
+  let mixMsg = MixMessage.new(msg, codec)
 
-  let serialized = serializeMixMessage(mixMsg).valueOr:
+  let serialized = mixMsg.serialize().valueOr:
     error "Serialization failed", err = error
     mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
     return
@@ -414,10 +417,10 @@ proc new*(
     return err("Failed to load mix pub info for index " & $index & " - err: " & error)
 
   var sendHandlerFunc = proc(
-      conn: Connection, proto: ProtocolType
+      conn: Connection, codec: string
   ): Future[void] {.async: (raises: [CancelledError]).} =
     try:
-      await callHandler(switch, conn, proto)
+      await callHandler(switch, conn, codec)
     except CatchableError as e:
       error "Error during execution of MixProtocol handler: ", err = e.msg
     return
