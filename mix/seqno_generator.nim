@@ -5,8 +5,8 @@ import ./crypto
 type SeqNo* = object
   counter: uint32
 
-proc initSeqNo*(peerId: PeerId): SeqNo =
-  var seqNo: SeqNo
+proc init*(T: typedesc[SeqNo], peerId: PeerId): T =
+  var seqNo = T()
   let peerIdHash = sha256_hash(peerId.data)
   for i in 0 .. 3:
     seqNo.counter = seqNo.counter or (uint32(peerIdHash[i]) shl (8 * (3 - i)))

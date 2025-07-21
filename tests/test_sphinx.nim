@@ -42,12 +42,12 @@ proc createDummyData(): (
 
     hops =
       @[
-        initHop(newSeq[byte](addrSize)),
-        initHop(newSeq[byte](addrSize)),
-        initHop(newSeq[byte](addrSize)),
+        Hop.init(newSeq[byte](addrSize)),
+        Hop.init(newSeq[byte](addrSize)),
+        Hop.init(newSeq[byte](addrSize)),
       ]
 
-    message = initMessage(newSeq[byte](messageSize))
+    message = Message.init(newSeq[byte](messageSize))
 
   return (message, privateKeys, publicKeys, delay, hops)
 
@@ -56,7 +56,7 @@ suite "Sphinx Tests":
   var tm: TagManager
 
   setup:
-    tm = initTagManager()
+    tm = TagManager.new()
 
   teardown:
     clearTags(tm)
@@ -114,7 +114,7 @@ suite "Sphinx Tests":
       error "Processing status should be Exit"
       fail()
 
-    let processedMessage = initMessage(processedPacket3)
+    let processedMessage = Message.init(processedPacket3)
     if processedMessage != message:
       error "Packet processing failed"
       fail()
@@ -199,7 +199,7 @@ suite "Sphinx Tests":
       let paddedMessage = padMessage(message, messageSize)
 
       let packetRes = wrapInSphinxPacket(
-        initMessage(paddedMessage), publicKeys, delay, hops, Opt.none(Hop)
+        Message.init(paddedMessage), publicKeys, delay, hops, Opt.none(Hop)
       )
       if packetRes.isErr:
         error "Sphinx wrap error", err = packetRes.error

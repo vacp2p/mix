@@ -10,7 +10,7 @@ suite "mix_message_tests":
     let
       message = "Hello World!"
       codec = "/test/codec/1.0.0"
-      mixMsg = MixMessage.new(message.toBytes(), codec)
+      mixMsg = MixMessage.init(message.toBytes(), codec)
 
     let serializedResult = mixMsg.serialize()
     if serializedResult.isErr:
@@ -40,7 +40,7 @@ suite "mix_message_tests":
     let
       emptyMessage = ""
       codec = "/test/codec/1.0.0"
-      mixMsg = MixMessage.new(emptyMessage.toBytes(), codec)
+      mixMsg = MixMessage.init(emptyMessage.toBytes(), codec)
 
     let serializedResult = mixMsg.serialize()
     if serializedResult.isErr:
@@ -69,7 +69,7 @@ suite "mix_message_tests":
       codec = "/test/codec/1.0.0"
       destination =
         "/ip4/0.0.0.0/tcp/4242/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
-      mixMsg = MixMessage.new(message.toBytes(), codec)
+      mixMsg = MixMessage.init(message.toBytes(), codec)
 
     let serializedResult = mixMsg.serializeWithDestination(destination)
     if serializedResult.isErr:

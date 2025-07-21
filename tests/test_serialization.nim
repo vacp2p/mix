@@ -6,11 +6,11 @@ import ../mix/[config, serialization]
 # Define test cases
 suite "serialization_tests":
   test "serialize_and_deserialize_header":
-    let header = initHeader(
+    let header = Header.init(
       newSeq[byte](alphaSize), newSeq[byte](betaSize), newSeq[byte](gammaSize)
     )
 
-    let serializedRes = serializeHeader(header)
+    let serializedRes = header.serialize()
     if serializedRes.isErr:
       error "Failed to serialize header", err = serializedRes.error
       fail()
@@ -22,34 +22,34 @@ suite "serialization_tests":
       fail()
 
   test "serialize_and_deserialize_message":
-    let message = initMessage(newSeq[byte](messageSize))
+    let message = Message.init(newSeq[byte](messageSize))
 
-    let serializedRes = serializeMessage(message)
+    let serializedRes = message.serialize()
     if serializedRes.isErr:
       error "Failed to serialize message", err = serializedRes.error
       fail()
     let serialized = serializedRes.get()
 
-    let deserializedRes = deserializeMessage(serialized)
+    let deserializedRes = Message.deserialize(serialized)
     if deserializedRes.isErr:
       error "Failed to deserialize message", err = deserializedRes.error
       fail()
     let deserialized = deserializedRes.get()
 
-    if getMessage(message) != getMessage(deserialized):
+    if getContent(message) != getContent(deserialized):
       error "Deserialized message does not match the original message"
       fail()
 
   test "serialize_and_deserialize_hop":
-    let hop = initHop(newSeq[byte](addrSize))
+    let hop = Hop.init(newSeq[byte](addrSize))
 
-    let serializedRes = serializeHop(hop)
+    let serializedRes = hop.serialize()
     if serializedRes.isErr:
       error "Failed to serialize hop", err = serializedRes.error
       fail()
     let serialized = serializedRes.get()
 
-    let deserializedRes = deserializeHop(serialized)
+    let deserializedRes = Hop.deserialize(serialized)
     if deserializedRes.isErr:
       error "Failed to deserialize hop", err = deserializedRes.error
       fail()
@@ -60,14 +60,14 @@ suite "serialization_tests":
       fail()
 
   test "serialize_and_deserialize_routing_info":
-    let routingInfo = initRoutingInfo(
-      initHop(newSeq[byte](addrSize)),
+    let routingInfo = RoutingInfo.init(
+      Hop.init(newSeq[byte](addrSize)),
       newSeq[byte](delaySize),
       newSeq[byte](gammaSize),
       newSeq[byte](((r * (t + 1)) - t) * k),
     )
 
-    let serializedRes = serializeRoutingInfo(routingInfo)
+    let serializedRes = routingInfo.serialize()
     if serializedRes.isErr:
       error "Failed to serialize routing info", err = serializedRes.error
       fail()
@@ -77,7 +77,7 @@ suite "serialization_tests":
       suffixLength = (t + 1) * k
       suffix = newSeq[byte](suffixLength)
 
-    let deserializedRes = deserializeRoutingInfo(serialized & suffix)
+    let deserializedRes = RoutingInfo.deserialize(serialized & suffix)
     if deserializedRes.isErr:
       error "Failed to deserialize routing info", err = deserializedRes.error
       fail()
@@ -105,19 +105,19 @@ suite "serialization_tests":
 
   test "serialize_and_deserialize_sphinx_packet":
     let
-      header = initHeader(
+      header = Header.init(
         newSeq[byte](alphaSize), newSeq[byte](betaSize), newSeq[byte](gammaSize)
       )
       payload = newSeq[byte](payloadSize)
-      packet = initSphinxPacket(header, payload)
+      packet = SphinxPacket.init(header, payload)
 
-    let serializedRes = serializeSphinxPacket(packet)
+    let serializedRes = packet.serialize()
     if serializedRes.isErr:
       error "Failed to serialize sphinx packet", err = serializedRes.error
       fail()
     let serialized = serializedRes.get()
 
-    let deserializedRes = deserializeSphinxPacket(serialized)
+    let deserializedRes = SphinxPacket.deserialize(serialized)
     if deserializedRes.isErr:
       error "Failed to deserialize sphinx packet", err = deserializedRes.error
       fail()

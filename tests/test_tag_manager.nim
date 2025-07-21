@@ -7,7 +7,7 @@ suite "tag_manager_tests":
   var tm: TagManager
 
   setup:
-    tm = initTagManager()
+    tm = TagManager.new()
 
   teardown:
     clearTags(tm)

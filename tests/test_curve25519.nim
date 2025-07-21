@@ -41,7 +41,7 @@ suite "curve25519_tests":
       fail()
     let derivedPublicKey = derivedPublicKeyResult.get()
 
-    if not compareFieldElements(publicKey, derivedPublicKey):
+    if publicKey != derivedPublicKey:
       error "Public keydoes not match derived key",
         publickey = publicKey, derivedkey = derivedPublicKey
       fail()
@@ -69,6 +69,6 @@ suite "curve25519_tests":
       intermediate = public(x2)
       res2 = multiplyPointWithScalars(intermediate, @[x1])
 
-    if not compareFieldElements(res1, res2):
+    if res1 != res2:
       error "Field element operations must be commutative", res1 = res1, res2 = res2
       fail()

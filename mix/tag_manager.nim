@@ -5,8 +5,8 @@ type TagManager* = ref object
   lock: Lock
   seenTags: Table[FieldElement, bool]
 
-proc initTagManager*(): TagManager =
-  let tm = new(TagManager)
+proc new*(T: typedesc[TagManager]): T =
+  let tm = T()
   tm.seenTags = initTable[FieldElement, bool]()
   initLock(tm.lock)
   return tm

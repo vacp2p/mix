@@ -139,7 +139,7 @@ method closeImpl*(
 func hash*(self: MixExitConnection): Hash =
   discard
 
-proc new*(T: typedesc[MixExitConnection], message: seq[byte]): MixExitConnection =
+proc new*(T: typedesc[MixExitConnection], message: seq[byte]): T =
   let instance = T(message: message)
 
   when defined(libp2p_agents_metrics):

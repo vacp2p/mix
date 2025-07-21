@@ -50,7 +50,3 @@ proc multiplyBasePointWithScalars*(
   for i in 1 ..< scalars.len:
     Curve25519.mul(res, scalars[i]) # Multiply with each scalar
   ok(res)
-
-# Compare two FieldElements
-proc compareFieldElements*(a, b: FieldElement): bool =
-  a == b

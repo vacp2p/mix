@@ -7,7 +7,7 @@ type MixMessage* = object
   message*: seq[byte]
   codec*: string
 
-proc new*(T: typedesc[MixMessage], message: openArray[byte], codec: string): T =
+proc init*(T: typedesc[MixMessage], message: openArray[byte], codec: string): T =
   return T(message: @message, codec: codec)
 
 proc serialize*(mixMsg: MixMessage): Result[seq[byte], string] =

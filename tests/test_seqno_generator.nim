@@ -10,7 +10,7 @@ suite "Sequence Number Generator":
     let
       peerId =
         PeerId.init("16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC").get()
-      seqNo = initSeqNo(peerId)
+      seqNo = SeqNo.init(peerId)
     if seqNo.counter == 0:
       error "Sequence number initialization failed", counter = seqNo.counter
       fail()
@@ -21,7 +21,7 @@ suite "Sequence Number Generator":
         PeerId.init("16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC").get()
       msg1 = @[byte 1, 2, 3]
       msg2 = @[byte 4, 5, 6]
-    var seqNo = initSeqNo(peerId)
+    var seqNo = SeqNo.init(peerId)
 
     generateSeqNo(seqNo, msg1)
     let seqNo1 = seqNo.counter
@@ -39,7 +39,7 @@ suite "Sequence Number Generator":
       peerId =
         PeerId.init("16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC").get()
       msg = @[byte 1, 2, 3]
-    var seqNo = initSeqNo(peerId)
+    var seqNo = SeqNo.init(peerId)
 
     generateSeqNo(seqNo, msg)
     let seqNo1 = seqNo.counter
@@ -61,8 +61,8 @@ suite "Sequence Number Generator":
         PeerId.init("16Uiu2HAm6WNzw8AssyPscYYi8x1bY5wXyQrGTShRH75bh5dPCjBQ").get()
 
     var
-      seqNo1 = initSeqNo(peerId1)
-      seqNo2 = initSeqNo(peerId2)
+      seqNo1 = SeqNo.init(peerId1)
+      seqNo2 = SeqNo.init(peerId2)
 
     if seqNo1.counter == seqNo2.counter:
       error "Sequence numbers for different peer IDs should be different",
@@ -72,7 +72,7 @@ suite "Sequence Number Generator":
   test "increment_seq_no":
     let peerId =
       PeerId.init("16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC").get()
-    var seqNo: SeqNo = initSeqNo(peerId)
+    var seqNo: SeqNo = SeqNo.init(peerId)
     let initialCounter = seqNo.counter
 
     incSeqNo(seqNo)
@@ -85,7 +85,7 @@ suite "Sequence Number Generator":
   test "seq_no_wraps_around_at_max_value":
     let peerId =
       PeerId.init("16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC").get()
-    var seqNo = initSeqNo(peerId)
+    var seqNo = SeqNo.init(peerId)
     seqNo.counter = high(uint32) - 1
     if seqNo.counter != high(uint32) - 1:
       error "Sequence number must be max value",
@@ -101,7 +101,7 @@ suite "Sequence Number Generator":
     let peerId =
       PeerId.init("16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC").get()
     var
-      seqNo = initSeqNo(peerId)
+      seqNo = SeqNo.init(peerId)
       seenValues = initHashSet[uint32]()
 
     for i in 0 ..< 10000:
