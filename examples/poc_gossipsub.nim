@@ -128,7 +128,7 @@ proc mixnet_gossipsub_test() {.async: (raises: [Exception]).} =
             Opt.some(destAddr.unsafeGet())
           else:
             Opt.none(MultiAddress)
-        return mixProto.toConnection(destOpt, destPeerId, codec)
+        return mixProto.toConnection(destPeerId, destOpt, codec)
       except CatchableError as e:
         error "Error during execution of MixEntryConnection callback: ", err = e.msg
         return nil

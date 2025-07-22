@@ -9,12 +9,11 @@ const D* = 4 # No. of peers to forward to
 
 proc toConnection*(
     srcMix: MixProtocol,
-    destAddr: Opt[MultiAddress],
     destPeerId: PeerId,
+    destForwardToAddr: Opt[MultiAddress],
     codec: string,
-    exitNodeIsDestination: bool = false,
 ): Connection {.gcsafe, raises: [].} =
-  MixEntryConnection.new(srcMix, destAddr, destPeerId, codec, exitNodeIsDestination)
+  MixEntryConnection.new(srcMix, destPeerId, destForwardToAddr, codec)
 
 proc mixPeerSelection*(
     allPeers: HashSet[PubSubPeer],
