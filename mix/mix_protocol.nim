@@ -87,14 +87,12 @@ proc handleMixNodeConnection(
   # Process the packet
   let (multiAddr, _, mixPrivKey, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
 
-  let processedPktRes = processSphinxPacket(
-    receivedBytes, mixPrivKey, mixProto.tagManager, not codec.destIsExit
-  )
-  if processedPktRes.isErr:
-    error "Failed to process Sphinx packet", err = processedPktRes.error
+  let (nextHop, delay, processedPkt, status) = processSphinxPacket(
+    receivedBytes, mixPrivKey, mixProto.tagManager
+  ).valueOr:
+    error "Failed to process Sphinx packet", err = error
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "INVALID_SPHINX"])
     return
-  let (nextHop, delay, processedPkt, status) = processedPktRes.get()
 
   case status
   of Exit:
@@ -337,15 +335,17 @@ proc anonymizeLocalProtocolSend*(
     mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
     return
 
-  var destHop = Opt.none(Hop)
-  if not exitNodeIsDestination:
-    #Encode destination
-    let dest = $destMultiAddr & "/p2p/" & $destPeerId
-    let destAddrBytes = multiAddrToBytes(dest).valueOr:
-      error "Failed to convert multiaddress to bytes", err = error
-      mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
-      return
-    destHop = Opt.some(Hop.init(destAddrBytes))
+  let destHop =
+    if not exitNodeIsDestination:
+      #Encode destination
+      let dest = $destMultiAddr & "/p2p/" & $destPeerId
+      let destAddrBytes = multiAddrToBytes(dest).valueOr:
+        error "Failed to convert multiaddress to bytes", err = error
+        mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
+        return
+      Hop.init(destAddrBytes)
+    else:
+      Hop()
 
   # Wrap in Sphinx packet
   let sphinxPacket = wrapInSphinxPacket(

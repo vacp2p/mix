@@ -64,7 +64,7 @@ suite "Sphinx Tests":
   test "sphinx_wrap_and_process":
     let (message, privateKeys, publicKeys, delay, hops) = createDummyData()
 
-    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops, Opt.none(Hop))
+    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops, Hop())
     if packetRes.isErr:
       error "Sphinx wrap error", err = packetRes.error
     let packet = packetRes.get()
@@ -74,7 +74,7 @@ suite "Sphinx Tests":
         pkt_len = $(packet.len), expected_len = $packetSize
       fail()
 
-    let res1 = processSphinxPacket(packet, privateKeys[0], tm, false)
+    let res1 = processSphinxPacket(packet, privateKeys[0], tm)
     if res1.isErr:
       error "Error in Sphinx processing", err = res1.error
       fail()
@@ -89,7 +89,7 @@ suite "Sphinx Tests":
         pkt_len = $(processedPacket1.len), expected_len = $packetSize
       fail()
 
-    let res2 = processSphinxPacket(processedPacket1, privateKeys[1], tm, false)
+    let res2 = processSphinxPacket(processedPacket1, privateKeys[1], tm)
     if res2.isErr:
       error "Error in Sphinx processing", err = res2.error
       fail()
@@ -104,7 +104,7 @@ suite "Sphinx Tests":
         pkt_len = $(processedPacket2.len), expected_len = $packetSize
       fail()
 
-    let res3 = processSphinxPacket(processedPacket2, privateKeys[2], tm, false)
+    let res3 = processSphinxPacket(processedPacket2, privateKeys[2], tm)
     if res3.isErr:
       error "Error in Sphinx processing", err = res3.error
       fail()
@@ -122,7 +122,7 @@ suite "Sphinx Tests":
   test "sphinx_wrap_empty_public_keys":
     let (message, _, _, delay, _) = createDummyData()
 
-    let packetRes = wrapInSphinxPacket(message, @[], delay, @[], Opt.none(Hop))
+    let packetRes = wrapInSphinxPacket(message, @[], delay, @[], Hop())
     if packetRes.isOk:
       error "Expected Sphinx wrap error when public keys are empty, but got success"
       fail()
@@ -130,7 +130,7 @@ suite "Sphinx Tests":
   test "sphinx_process_invalid_mac":
     let (message, privateKeys, publicKeys, delay, hops) = createDummyData()
 
-    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops, Opt.none(Hop))
+    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops, Hop())
     if packetRes.isErr:
       error "Sphinx wrap error", err = packetRes.error
     let packet = packetRes.get()
@@ -144,7 +144,7 @@ suite "Sphinx Tests":
     var tamperedPacket = packet
     tamperedPacket[0] = packet[0] xor 0x01
 
-    let res = processSphinxPacket(tamperedPacket, privateKeys[0], tm, false)
+    let res = processSphinxPacket(tamperedPacket, privateKeys[0], tm)
     if res.isErr:
       error "Error in Sphinx processing", err = res.error
       fail()
@@ -157,7 +157,7 @@ suite "Sphinx Tests":
   test "sphinx_process_duplicate_tag":
     let (message, privateKeys, publicKeys, delay, hops) = createDummyData()
 
-    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops, Opt.none(Hop))
+    let packetRes = wrapInSphinxPacket(message, publicKeys, delay, hops, Hop())
     if packetRes.isErr:
       error "Sphinx wrap error", err = packetRes.error
     let packet = packetRes.get()
@@ -168,7 +168,7 @@ suite "Sphinx Tests":
       fail()
 
     # Process the packet twice to test duplicate tag handling
-    let res1 = processSphinxPacket(packet, privateKeys[0], tm, false)
+    let res1 = processSphinxPacket(packet, privateKeys[0], tm)
     if res1.isErr:
       error "Error in Sphinx processing", err = res1.error
       fail()
@@ -178,7 +178,7 @@ suite "Sphinx Tests":
       error "Processing status should be Intermediate"
       fail()
 
-    let res2 = processSphinxPacket(packet, privateKeys[0], tm, false)
+    let res2 = processSphinxPacket(packet, privateKeys[0], tm)
     if res2.isErr:
       error "Error in Sphinx processing", err = res2.error
       fail()
@@ -198,9 +198,8 @@ suite "Sphinx Tests":
         message[i] = byte(rand(256))
       let paddedMessage = padMessage(message, messageSize)
 
-      let packetRes = wrapInSphinxPacket(
-        Message.init(paddedMessage), publicKeys, delay, hops, Opt.none(Hop)
-      )
+      let packetRes =
+        wrapInSphinxPacket(Message.init(paddedMessage), publicKeys, delay, hops, Hop())
       if packetRes.isErr:
         error "Sphinx wrap error", err = packetRes.error
       let packet = packetRes.get()
@@ -210,7 +209,7 @@ suite "Sphinx Tests":
           pkt_len = $(packet.len), expected_len = $packetSize, msg_len = $messageSize
         fail()
 
-      let res1 = processSphinxPacket(packet, privateKeys[0], tm, false)
+      let res1 = processSphinxPacket(packet, privateKeys[0], tm)
       if res1.isErr:
         error "Error in Sphinx processing", err = res1.error
         fail()
@@ -225,7 +224,7 @@ suite "Sphinx Tests":
           pkt_len = $(processedPacket1.len), expected_len = $packetSize
         fail()
 
-      let res2 = processSphinxPacket(processedPacket1, privateKeys[1], tm, false)
+      let res2 = processSphinxPacket(processedPacket1, privateKeys[1], tm)
       if res2.isErr:
         error "Error in Sphinx processing", err = res2.error
         fail()
@@ -240,7 +239,7 @@ suite "Sphinx Tests":
           pkt_len = $(processedPacket2.len), expected_len = $packetSize
         fail()
 
-      let res3 = processSphinxPacket(processedPacket2, privateKeys[2], tm, false)
+      let res3 = processSphinxPacket(processedPacket2, privateKeys[2], tm)
       if res3.isErr:
         error "Error in Sphinx processing", err = res3.error
         fail()
