@@ -13,3 +13,4 @@ jobs:
       test-command: |
         env NIMLANG=c nimble test
         env NIMLANG=cpp nimble test
+      nim-versions: '["version-2-0", "version-2-2", "devel"]'
