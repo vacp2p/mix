@@ -106,11 +106,11 @@ proc mixnetSimulation() {.async: (raises: [Exception]).} =
   if senderIndex < numberOfNodes - 1:
     receiverIndex = senderIndex + 1
 
-  let conn = createMixEntryConnection(
-    mixProto[senderIndex],
+  let conn = mixProto[senderIndex].toConnection(
     Opt.some(nodes[receiverIndex].peerInfo.addrs[0]),
     nodes[receiverIndex].peerInfo.peerId,
     NoRespPingCodec,
+    true,
   )
 
   discard await noRespPingProto[senderIndex].noRespPing(conn)

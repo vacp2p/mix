@@ -1,3 +1,5 @@
+# TODO: this file should likely become mix.nim in the root of the project
+
 import bearssl/rand, chronos, chronicles, results
 import std/[sequtils, sets]
 import libp2p/[multiaddress, protocols/pubsub/pubsubpeer, switch]
@@ -5,25 +7,14 @@ import ./[entry_connection, mix_protocol, protocol]
 
 const D* = 4 # No. of peers to forward to
 
-proc createMixEntryConnection*(
-    srcMix: MixProtocol, destAddr: Opt[MultiAddress], destPeerId: PeerId, codec: string
-): MixEntryConnection {.gcsafe, raises: [].} =
-  var sendDialerFunc = proc(
-      msg: seq[byte],
-      proto: ProtocolType,
-      destMultiAddr: Opt[MultiAddress],
-      destPeerId: PeerId,
-  ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
-    try:
-      await srcMix.anonymizeLocalProtocolSend(msg, proto, destMultiAddr, destPeerId)
-    except CatchableError as e:
-      error "Error during execution of anonymizeLocalProtocolSend: ", err = e.msg
-    return
-
-  # Create and return a new MixEntryConnection
-  MixEntryConnection.new(
-    destAddr, destPeerId, ProtocolType.fromString(codec), sendDialerFunc
-  )
+proc toConnection*(
+    srcMix: MixProtocol,
+    destAddr: Opt[MultiAddress],
+    destPeerId: PeerId,
+    codec: string,
+    exitNodeIsDestination: bool = false,
+): Connection {.gcsafe, raises: [].} =
+  MixEntryConnection.new(srcMix, destAddr, destPeerId, codec, exitNodeIsDestination)
 
 proc mixPeerSelection*(
     allPeers: HashSet[PubSubPeer],
