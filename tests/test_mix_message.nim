@@ -1,3 +1,5 @@
+{.used.}
+
 import chronicles, results, unittest
 import ../mix/[mix_message, protocol]
 

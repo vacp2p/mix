@@ -1,3 +1,5 @@
+{.used.}
+
 import chronicles, results, unittest
 import libp2p/peerid
 import ../mix/[config, fragmentation]

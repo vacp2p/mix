@@ -1,3 +1,5 @@
+{.used.}
+
 import chronicles, results, unittest
 import pkg/libp2p/crypto/curve25519
 import ../mix/curve25519

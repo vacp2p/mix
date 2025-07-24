@@ -1,3 +1,5 @@
+{.used.}
+
 import chronicles, random, results, unittest
 import ../mix/[config, curve25519, serialization, sphinx, tag_manager]
 

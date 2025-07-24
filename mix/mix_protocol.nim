@@ -252,7 +252,7 @@ proc anonymizeLocalProtocolSend*(
 
   mix_messages_recvd.inc(labelValues = ["Entry"])
 
-  let paddedMsg = padMessage(serialized, peerID)
+  let paddedMsg = padMessage(serialized, peerId)
 
   var
     multiAddrs: seq[string] = @[]
