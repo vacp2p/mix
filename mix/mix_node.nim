@@ -14,7 +14,7 @@ type MixNodeInfo* = object
   libp2pPubKey: SkPublicKey
   libp2pPrivKey: SkPrivateKey
 
-var mixNodes*: seq[MixNodeInfo] = @[]
+var mixNodes*: seq[MixNodeInfo] = @[] # TODO: global variable?
 
 proc initMixNodeInfo*(
     multiAddr: string,

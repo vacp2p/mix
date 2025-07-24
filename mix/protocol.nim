@@ -1,7 +1,9 @@
 import chronos, std/enumerate, strutils
 import
   libp2p/[builders, protocols/ping, protocols/pubsub/gossipsub/types, stream/connection]
-import ./protocols/noresp_ping
+import
+  ../examples/protocols/noresp_ping
+    # TODO: remove this in PR that makes it not necessary to have a ProtocolType enum
 
 const protocolTypeSize* = 2
 

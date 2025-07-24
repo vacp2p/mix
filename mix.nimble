@@ -2,6 +2,7 @@ version = "0.1.0"
 author = "Akshaya"
 description = "A custom Mix Protocol"
 license = "MIT"
+skipDirs = @["tests", "examples"]
 
 # Dependencies
 requires "stew >= 0.3.0"
