@@ -1,57 +1,22 @@
-import chronos, std/enumerate, strutils
+import chronos, std/enumerate
 import
   libp2p/[builders, protocols/ping, protocols/pubsub/gossipsub/types, stream/connection]
-import
-  ../examples/protocols/noresp_ping
-    # TODO: remove this in PR that makes it not necessary to have a ProtocolType enum
 
-const protocolTypeSize* = 2
-
-type ProtocolType* = enum
-  Ping
-  GossipSub12
-  GossipSub11
-  GossipSub10
-  NoRespPing
-  WakuLightPushProtocol
-  OtherProtocol
-
-proc `$`*(proto: ProtocolType): string =
-  case proto
-  of Ping:
-    PingCodec
-  of GossipSub12:
-    GossipSubCodec_12
-  of GossipSub11:
-    GossipSubCodec_11
-  of GossipSub10:
-    GossipSubCodec_10
-  of NoRespPing:
-    NoRespPingCodec
-  of WakuLightPushProtocol:
-    "/vac/waku/lightpush/3.0.0"
-      #TODO: fix this hardcoding, for now doing it as importing codecs from waku causses various build errors.
-  else:
-    "other" # Placeholder for other protocols
-
-type ProtocolHandler* = proc(conn: Connection, proto: ProtocolType): Future[void] {.
+type ProtocolHandler* = proc(conn: Connection, codec: string): Future[void] {.
   async: (raises: [CancelledError])
 .}
 
-proc fromString*(T: type ProtocolType, proto: string): ProtocolType =
-  try:
-    parseEnum[ProtocolType](proto)
-  except ValueError:
-    ProtocolType.OtherProtocol
-
 # TODO: this is temporary while I attempt to extract protocol specific logic from mix
-func destIsExit*(proto: ProtocolType): bool =
-  return not (proto == GossipSub12 or proto == GossipSub11 or proto == GossipSub10)
+func destIsExit*(proto: string): bool =
+  return
+    not (
+      proto == GossipSubCodec_12 or proto == GossipSubCodec_11 or
+      proto == GossipSubCodec_10
+    )
 
 method callHandler*(
-    switch: Switch, conn: Connection, proto: ProtocolType
+    switch: Switch, conn: Connection, codec: string
 ): Future[void] {.base, async.} =
-  let codec = $proto
   for index, handler in enumerate(switch.ms.handlers):
     if codec in handler.protos:
       await handler.protocol.handler(conn, codec)

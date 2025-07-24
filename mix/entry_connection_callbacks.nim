@@ -3,7 +3,7 @@
 import chronos, chronicles, results
 import std/[sequtils, sets]
 import libp2p/[multiaddress, protocols/pubsub/pubsubpeer, switch]
-import ./[entry_connection, mix_protocol, protocol]
+import ./[entry_connection, mix_protocol]
 
 const D* = 4 # No. of peers to forward to
 

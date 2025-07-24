@@ -15,5 +15,6 @@ export writeMixNodeInfoToFile
 export mixNodes
 export getMixNodeInfo
 export `new`
+export getMaxMessageSizeForCodec
 export deleteNodeInfoFolder
 export deletePubInfoFolder

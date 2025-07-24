@@ -1,18 +1,15 @@
 import hashes, chronos, stew/byteutils, results
 import libp2p/stream/connection
-import ./protocol, ./mix_protocol
+import ./mix_protocol
 
 type MixDialer* = proc(
-  msg: seq[byte],
-  proto: ProtocolType,
-  destMultiAddr: Opt[MultiAddress],
-  destPeerId: PeerId,
+  msg: seq[byte], codec: string, destMultiAddr: Opt[MultiAddress], destPeerId: PeerId
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true).}
 
 type MixEntryConnection* = ref object of Connection
   destMultiAddr: Opt[MultiAddress]
   destPeerId: PeerId
-  proto: ProtocolType
+  codec: string
   mixDialer: MixDialer
 
 method readExactly*(
@@ -39,7 +36,7 @@ method readLp*(
 method write*(
     self: MixEntryConnection, msg: seq[byte]
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
-  self.mixDialer(@msg, self.proto, self.destMultiAddr, self.destPeerId)
+  self.mixDialer(@msg, self.codec, self.destMultiAddr, self.destPeerId)
 
 proc write*(
     self: MixEntryConnection, msg: string
@@ -63,7 +60,7 @@ method writeLp*(
   buf[0 ..< vbytes.len] = vbytes.toOpenArray(0, vbytes.len - 1)
   buf[vbytes.len ..< buf.len] = msg
 
-  self.mixDialer(@buf, self.proto, self.destMultiAddr, self.destPeerId)
+  self.mixDialer(@buf, self.codec, self.destMultiAddr, self.destPeerId)
 
 method writeLp*(
     self: MixEntryConnection, msg: string
@@ -101,7 +98,7 @@ proc new*(
   let instance = T(
     destMultiAddr: destMultiAddr,
     destPeerId: destPeerId,
-    proto: ProtocolType.fromString(codec),
+    codec: codec,
     mixDialer: mixDialer,
   )
 
@@ -120,13 +117,13 @@ proc new*(
 ): T {.raises: [].} =
   var sendDialerFunc = proc(
       msg: seq[byte],
-      proto: ProtocolType,
+      codec: string,
       destMultiAddr: Opt[MultiAddress],
       destPeerId: PeerId,
   ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
     try:
       await srcMix.anonymizeLocalProtocolSend(
-        msg, proto, destMultiAddr, destPeerId, exitNodeIsDestination
+        msg, codec, destMultiAddr, destPeerId, exitNodeIsDestination
       )
     except CatchableError as e:
       error "Error during execution of anonymizeLocalProtocolSend: ", err = e.msg
