@@ -14,13 +14,13 @@ suite "Fragmentation":
       chunks = padAndChunkMessage(message, peerId)
       (paddingLength, data, seqNo) = getMessageChunk(chunks[0])
 
-    let serializedRes = serializeMessageChunk(chunks[0])
+    let serializedRes = chunks[0].serialize()
     if serializedRes.isErr:
       error "Serialization error", err = serializedRes.error
       fail()
     let serialized = serializedRes.get()
 
-    let deserializedRes = deserializeMessageChunk(serialized)
+    let deserializedRes = MessageChunk.deserialize(serialized)
     if deserializedRes.isErr:
       error "Deserialization error", err = deserializedRes.error
       fail()

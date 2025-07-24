@@ -118,7 +118,7 @@ proc computeBetaGammaDelta(
     msg: Message,
     delay: openArray[seq[byte]],
     destHop: Opt[Hop],
-): Result[(seq[byte], seq[byte], seq[byte]), string] =
+): Result[(seq[byte], seq[byte], seq[byte]), string] = # TODO: name tuples
   let sLen = s.len
   var
     beta: seq[byte]
@@ -143,8 +143,8 @@ proc computeBetaGammaDelta(
     if i == sLen - 1:
       var padding: seq[byte]
       if destHop.isSome:
-        let destBytes = serializeHop(destHop.get()).valueOr:
-          return err("Error in destination address serialization: " & error)
+        let destBytes = destHop.get().serialize().valueOr:
+            return err("Error in destination address serialization: " & error)
         let paddingLength = (((t + 1) * (r - L)) + 2) * k
         padding = destBytes & delay[i] & newSeq[byte](paddingLength)
       else:
@@ -155,30 +155,24 @@ proc computeBetaGammaDelta(
         return err("Error in aes: " & error)
       beta = aesRes & filler
 
-      let serializeRes = serializeMessage(msg).valueOr:
+      let serializedMsg = msg.serialize().valueOr:
         return err("Message serialization error: " & error)
 
-      let deltaRes = aes_ctr(delta_aes_key, delta_iv, serializeRes)
-      if deltaRes.isErr:
-        return err("Error in aes: " & deltaRes.error)
-      delta = deltaRes.get()
+      delta = aes_ctr(delta_aes_key, delta_iv, serializedMsg).valueOr:
+        return err("Error in aes: " & error)
     else:
-      let routingInfo = initRoutingInfo(
+      let routingInfo = RoutingInfo.init(
         hop[i + 1], delay[i + 1], gamma, beta[0 .. (((r * (t + 1)) - t) * k) - 1]
       )
 
-      let serializeRes = serializeRoutingInfo(routingInfo).valueOr:
+      let serializedRoutingInfo = routingInfo.serialize().valueOr:
         return err("Routing info serialization error: " & error)
 
-      let betaRes = aes_ctr(beta_aes_key, beta_iv, serializeRes)
-      if betaRes.isErr:
-        return err("Error in aes: " & betaRes.error)
-      beta = betaRes.get()
+      beta = aes_ctr(beta_aes_key, beta_iv, serializedRoutingInfo).valueOr:
+        return err("Error in aes: " & error)
 
-      let deltaRes = aes_ctr(delta_aes_key, delta_iv, delta)
-      if deltaRes.isErr:
-        return err("Error in aes: " & deltaRes.error)
-      delta = deltaRes.get()
+      delta = aes_ctr(delta_aes_key, delta_iv, delta).valueOr:
+        return err("Error in aes: " & error)
 
     gamma = toSeq(hmac(mac_key, beta))
 
@@ -192,45 +186,41 @@ proc wrapInSphinxPacket*(
     destHop: Opt[Hop],
 ): Result[seq[byte], string] =
   # Compute alphas and shared secrets
-  let res1 = computeAlpha(publicKeys)
-  if res1.isErr:
-    return err("Error in alpha generation: " & res1.error)
-  let (alpha_0, s) = res1.get()
+  let (alpha_0, s) = computeAlpha(publicKeys).valueOr:
+    return err("Error in alpha generation: " & error)
 
   # Compute betas, gammas, and deltas
-  let res2 = computeBetaGammaDelta(s, hop, msg, delay, destHop)
-  if res2.isErr:
-    return err("Error in beta, gamma, and delta generation: " & res2.error)
-  let (beta_0, gamma_0, delta_0) = res2.get()
+  let (beta_0, gamma_0, delta_0) = computeBetaGammaDelta(s, hop, msg, delay, destHop).valueOr:
+    return err("Error in beta, gamma, and delta generation: " & error)
 
   # Serialize sphinx packet
-  let sphinxPacket = initSphinxPacket(initHeader(alpha_0, beta_0, gamma_0), delta_0)
+  let sphinxPacket = SphinxPacket.init(Header.init(alpha_0, beta_0, gamma_0), delta_0)
 
-  let serializeRes = serializeSphinxPacket(sphinxPacket).valueOr:
+  let serialized = sphinxPacket.serialize().valueOr:
     return err("Sphinx packet serialization error: " & error)
 
-  return ok(serializeRes)
+  return ok(serialized)
 
 proc processSphinxPacket*(
     serSphinxPacket: seq[byte],
     privateKey: FieldElement,
     tm: var TagManager,
     isDestEmbedded: bool,
-): Result[(Hop, seq[byte], seq[byte], ProcessingStatus), string] =
+): Result[(Hop, seq[byte], seq[byte], ProcessingStatus), string] = # TODO: named touple
   # Deserialize the Sphinx packet
-  let deserializeRes = deserializeSphinxPacket(serSphinxPacket).valueOr:
+  let sphinxPacket = SphinxPacket.deserialize(serSphinxPacket).valueOr:
     return err("Sphinx packet deserialization error: " & error)
 
   let
-    (header, payload) = getSphinxPacket(deserializeRes)
+    (header, payload) = sphinxPacket.getSphinxPacket()
     (alpha, beta, gamma) = getHeader(header)
 
   # Compute shared secret
-  let alphaRes = bytesToFieldElement(alpha).valueOr:
+  let alphaFE = bytesToFieldElement(alpha).valueOr:
     return err("Error in bytes to field element conversion: " & error)
 
   let
-    s = multiplyPointWithScalars(alphaRes, [privateKey])
+    s = multiplyPointWithScalars(alphaFE, [privateKey])
     sBytes = fieldElementToBytes(s)
 
   # Check if the tag has been seen
@@ -285,38 +275,41 @@ proc processSphinxPacket*(
       0
 
   if B[bOffset .. bOffset + paddingLength - 1] == zeroPadding:
-    let deserializeRes = deserializeMessage(delta_prime).valueOr:
+    let msg = Message.deserialize(delta_prime).valueOr:
       return err("Message deserialization error: " & error)
-    let msg = getMessage(deserializeRes)
+
+    let content = msg.getContent()
 
     if isDestEmbedded:
-      let hop = deserializeHop(B[0 .. addrSize - 1]).valueOr:
+      let hop = Hop.deserialize(B[0 .. addrSize - 1]).valueOr:
         return err(error)
-      return ok((hop, B[addrSize .. ((t * k) - 1)], msg[0 .. messageSize - 1], Exit))
+      return
+        ok((hop, B[addrSize .. ((t * k) - 1)], content[0 .. messageSize - 1], Exit))
     else:
-      return ok((Hop(), @[], msg[0 .. messageSize - 1], Exit))
+      return ok((Hop(), @[], content[0 .. messageSize - 1], Exit))
   else:
     # Extract routing information from B
-    let deserializeRes = deserializeRoutingInfo(B).valueOr:
+    let routingInfo = RoutingInfo.deserialize(B).valueOr:
       return err("Routing info deserialization error: " & error)
 
-    let (address, delay, gamma_prime, beta_prime) = getRoutingInfo(deserializeRes)
+    let (address, delay, gamma_prime, beta_prime) = routingInfo.getRoutingInfo()
 
     # Compute alpha
     let blinder = bytesToFieldElement(sha256_hash(alpha & sBytes)).valueOr:
       return err("Error in bytes to field element conversion: " & error)
 
-    let alphaRes = bytesToFieldElement(alpha).valueOr:
+    let alphaFE = bytesToFieldElement(alpha).valueOr:
       return err("Error in bytes to field element conversion: " & error)
 
-    let alpha_prime = multiplyPointWithScalars(alphaRes, [blinder])
+    let alpha_prime = multiplyPointWithScalars(alphaFE, [blinder])
 
     # Serialize sphinx packet
-    let sphinxPkt = initSphinxPacket(
-      initHeader(fieldElementToBytes(alpha_prime), beta_prime, gamma_prime), delta_prime
+    let sphinxPkt = SphinxPacket.init(
+      Header.init(fieldElementToBytes(alpha_prime), beta_prime, gamma_prime),
+      delta_prime,
     )
 
-    let serializeRes = serializeSphinxPacket(sphinxPkt).valueOr:
+    let serializedSP = sphinxPkt.serialize().valueOr:
       return err("Sphinx packet serialization error: " & error)
 
-    return ok((address, delay, serializeRes, Intermediate))
+    return ok((address, delay, serializedSP, Intermediate))

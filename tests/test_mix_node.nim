@@ -102,12 +102,12 @@ suite "Mix Node Tests":
           multiaddr = fMultiAddr, original = multiAddr
         fail()
 
-      if not compareFieldElements(fMixPubKey, mixPubKey):
+      if fMixPubKey != mixPubKey:
         error "Mix public key does not match original mix public key",
           pubkey = fMixPubKey, original = mixPubKey
         fail()
 
-      if not compareFieldElements(fMixPrivKey, mixPrivKey):
+      if fMixPrivKey != mixPrivKey:
         error "Mix private key does not match original mix private key",
           privkey = fMixPrivKey, original = mixPrivKey
         fail()
@@ -167,12 +167,12 @@ suite "Mix Node Tests":
           multiaddr = rMultiAddr, original = multiAddr
         fail()
 
-      if not compareFieldElements(rMixPubKey, mixPubKey):
+      if rMixPubKey != mixPubKey:
         error "Mix public key does not match original mix public key",
           pubkey = rMixPubKey, original = mixPubKey
         fail()
 
-      if not compareFieldElements(rMixPrivKey, mixPrivKey):
+      if rMixPrivKey != mixPrivKey:
         error "Mix private key does not match original mix private key",
           privkey = rMixPrivKey, original = mixPrivKey
         fail()
@@ -215,7 +215,7 @@ suite "Mix Node Tests":
           multiaddr = rMultiAddr, original = multiAddr
         fail()
 
-      if not compareFieldElements(rMixPubKey, mixPubKey):
+      if rMixPubKey != mixPubKey:
         error "Mix public key does not match original mix public key",
           pubkey = rMixPubKey, original = mixPubKey
         fail()

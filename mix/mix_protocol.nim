@@ -87,7 +87,7 @@ proc handleMixNodeConnection(
   of Exit:
     mix_messages_recvd.inc(labelValues = ["Exit"])
     # This is the exit node, forward to destination
-    let msgChunk = deserializeMessageChunk(processedPkt).valueOr:
+    let msgChunk = MessageChunk.deserialize(processedPkt).valueOr:
       error "Deserialization failed", err = error
       mix_messages_error.inc(labelValues = ["Exit", "INVALID_SPHINX"])
       return
@@ -220,7 +220,7 @@ proc handleMixNodeConnection(
     discard
 
 proc getMaxMessageSizeForCodec*(codec: string): Result[int, string] =
-  let serializedMsg = ?MixMessage.new(@[], codec).serialize()
+  let serializedMsg = ?MixMessage.init(@[], codec).serialize()
   if serializedMsg.len > dataSize:
     return err("cannot encode messages for this codec")
   return ok(dataSize - serializedMsg.len)
@@ -233,7 +233,7 @@ proc anonymizeLocalProtocolSend*(
     destPeerId: PeerId,
     exitNodeIsDestination: bool,
 ) {.async.} =
-  let mixMsg = MixMessage.new(msg, codec)
+  let mixMsg = MixMessage.init(msg, codec)
 
   let serialized = mixMsg.serialize().valueOr:
     error "Serialization failed", err = error
@@ -320,7 +320,7 @@ proc anonymizeLocalProtocolSend*(
       #TODO: should we skip and pick a different node here??
       return
 
-    hop.add(initHop(multiAddrBytes))
+    hop.add(Hop.init(multiAddrBytes))
 
     # Compute delay
     let delayMilliSec = cryptoRandomInt(3).valueOr:
@@ -329,7 +329,7 @@ proc anonymizeLocalProtocolSend*(
       return
     delay.add(uint16ToBytes(uint16(delayMilliSec)))
     i = i + 1
-  let serializedRes = serializeMessageChunk(paddedMsg).valueOr:
+  let serializedMsgChunk = paddedMsg.serialize().valueOr:
     error "Failed to serialize padded message", err = error
     mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
     return
@@ -342,11 +342,11 @@ proc anonymizeLocalProtocolSend*(
       error "Failed to convert multiaddress to bytes", err = error
       mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
       return
-    destHop = Opt.some(initHop(destAddrBytes))
+    destHop = Opt.some(Hop.init(destAddrBytes))
 
   # Wrap in Sphinx packet
   let sphinxPacket = wrapInSphinxPacket(
-    initMessage(serializedRes), publicKeys, delay, hop, destHop
+    Message.init(serializedMsgChunk), publicKeys, delay, hop, destHop
   ).valueOr:
     error "Failed to wrap in sphinx packet", err = error
     mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
@@ -385,20 +385,28 @@ proc anonymizeLocalProtocolSend*(
       except CatchableError as e:
         error "Failed to close outgoing stream: ", err = e.msg
 
-proc createMixProtocol*(
+method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
+  proc handle(conn: Connection, proto: string) {.async: (raises: [CancelledError]).} =
+    await mixProtocol.handleMixNodeConnection(conn, proto)
+
+  mixProtocol.codecs = @[MixProtocolID]
+  mixProtocol.handler = handle
+
+proc new*(
+    T: typedesc[MixProtocol],
     mixNodeInfo: MixNodeInfo,
     pubNodeInfo: Table[PeerId, MixPubInfo],
     switch: Switch,
     tagManager: TagManager,
     handler: ProtocolHandler,
-): Result[MixProtocol, string] =
-  let mixProto = new MixProtocol
+): Result[T, string] =
+  let mixProto = new(T)
   mixProto.mixNodeInfo = mixNodeInfo
   mixProto.pubNodeInfo = pubNodeInfo
   mixProto.switch = switch
   mixProto.tagManager = tagManager
   mixProto.pHandler = handler
-  mixProto.init()
+  mixProto.init() # TODO: constructor should probably not call init
 
   return ok(mixProto)
 
@@ -425,15 +433,13 @@ proc new*(
       error "Error during execution of MixProtocol handler: ", err = e.msg
     return
 
-  let mixProto = T(
-    mixNodeInfo: mixNodeInfo,
-    pubNodeInfo: pubNodeInfo,
-    switch: switch,
-    tagManager: initTagManager(),
-    pHandler: sendHandlerFunc,
-  )
+  let mixProto =
+    ?MixProtocol.new(
+      mixNodeInfo, pubNodeInfo, switch, TagManager.new(), sendHandlerFunc
+    )
 
-  mixProto.init()
+  mixProto.init() # TODO: constructor should probably not call init
+
   return ok(mixProto)
 
 # TODO: is this needed
@@ -452,16 +458,9 @@ proc initialize*(
   mixProtocol.mixNodeInfo = localMixNodeInfo
   mixProtocol.switch = switch
   mixProtocol.pubNodeInfo = mixNodeTable
-  mixProtocol.tagManager = initTagManager()
+  mixProtocol.tagManager = TagManager.new()
 
   mixProtocol.init()
-
-method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
-  proc handle(conn: Connection, proto: string) {.async: (raises: [CancelledError]).} =
-    await mixProtocol.handleMixNodeConnection(conn, proto)
-
-  mixProtocol.codecs = @[MixProtocolID]
-  mixProtocol.handler = handle
 
 # TODO: is this needed
 method setNodePool*(

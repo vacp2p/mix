@@ -36,7 +36,7 @@ method readLp*(
 method write*(
     self: MixEntryConnection, msg: seq[byte]
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
-  self.mixDialer(@msg, self.codec, self.destMultiAddr, self.destPeerId)
+  self.mixDialer(msg, self.codec, self.destMultiAddr, self.destPeerId)
 
 proc write*(
     self: MixEntryConnection, msg: string
