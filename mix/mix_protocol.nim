@@ -234,9 +234,8 @@ proc anonymizeLocalProtocolSend*(
     mixProto: MixProtocol,
     msg: seq[byte],
     codec: string,
-    destMultiAddr: Opt[MultiAddress],
     destPeerId: PeerId,
-    exitNodeIsDestination: bool,
+    destForwardToAddr: Opt[MultiAddress],
 ) {.async.} =
   let mixMsg = MixMessage.init(msg, codec)
 
@@ -296,7 +295,7 @@ proc anonymizeLocalProtocolSend*(
 
   var i = 0
   while i < L:
-    if exitNodeIsDestination and i == L - 1:
+    if destForwardToAddr.isNone and i == L - 1:
       randPeerId = destPeerId
     else:
       let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
@@ -308,7 +307,7 @@ proc anonymizeLocalProtocolSend*(
       availableIndices.del(randomIndexPosition)
 
     # Skip the destination peer
-    if not exitNodeIsDestination and randPeerId == destPeerId:
+    if destForwardToAddr.isSome and randPeerId == destPeerId:
       continue
 
     info "Selected mix node: ", indexInPath = i, peerId = randPeerId
@@ -340,9 +339,9 @@ proc anonymizeLocalProtocolSend*(
     return
 
   let destHop =
-    if not exitNodeIsDestination:
+    if destForwardToAddr.isSome:
       #Encode destination
-      let dest = $destMultiAddr & "/p2p/" & $destPeerId
+      let dest = $destForwardToAddr.value & "/p2p/" & $destPeerId
       let destAddrBytes = multiAddrToBytes(dest).valueOr:
         error "Failed to convert multiaddress to bytes", err = error
         mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])

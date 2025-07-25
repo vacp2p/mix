@@ -3,12 +3,15 @@ import libp2p/stream/connection
 import ./mix_protocol
 
 type MixDialer* = proc(
-  msg: seq[byte], codec: string, destMultiAddr: Opt[MultiAddress], destPeerId: PeerId
+  msg: seq[byte],
+  codec: string,
+  destPeerId: PeerId,
+  destForwardToAddr: Opt[MultiAddress],
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true).}
 
 type MixEntryConnection* = ref object of Connection
-  destMultiAddr: Opt[MultiAddress]
   destPeerId: PeerId
+  destForwardToAddr: Opt[MultiAddress]
   codec: string
   mixDialer: MixDialer
 
@@ -36,7 +39,7 @@ method readLp*(
 method write*(
     self: MixEntryConnection, msg: seq[byte]
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
-  self.mixDialer(msg, self.codec, self.destMultiAddr, self.destPeerId)
+  self.mixDialer(msg, self.codec, self.destPeerId, self.destForwardToAddr)
 
 proc write*(
     self: MixEntryConnection, msg: string
@@ -60,7 +63,7 @@ method writeLp*(
   buf[0 ..< vbytes.len] = vbytes.toOpenArray(0, vbytes.len - 1)
   buf[vbytes.len ..< buf.len] = msg
 
-  self.mixDialer(@buf, self.codec, self.destMultiAddr, self.destPeerId)
+  self.mixDialer(@buf, self.codec, self.destPeerId, self.destForwardToAddr)
 
 method writeLp*(
     self: MixEntryConnection, msg: string
@@ -68,7 +71,8 @@ method writeLp*(
   self.writeLp(msg.toOpenArrayByte(0, msg.high))
 
 proc shortLog*(self: MixEntryConnection): string {.raises: [].} =
-  "[MixEntryConnection] Destination: " & $self.destMultiAddr & "/p2p/" & $self.destPeerId
+  "[MixEntryConnection] Destination: " & $self.destForwardToAddr & "/p2p/" &
+    $self.destPeerId
 
 method initStream*(self: MixEntryConnection) =
   discard
@@ -81,7 +85,7 @@ method closeImpl*(
   return fut
 
 func hash*(self: MixEntryConnection): Hash =
-  hash($self.destMultiAddr & "/p2p/" & $self.destPeerId)
+  hash($self.destForwardToAddr & "/p2p/" & $self.destPeerId)
 
 when defined(libp2p_agents_metrics):
   proc setShortAgent*(self: MixEntryConnection, shortAgent: string) =
@@ -90,13 +94,13 @@ when defined(libp2p_agents_metrics):
 proc new*(
     T: typedesc[MixEntryConnection],
     srcMix: MixProtocol,
-    destMultiAddr: Opt[MultiAddress],
     destPeerId: PeerId,
-    mixDialer: MixDialer,
+    destForwardToAddr: Opt[MultiAddress],
     codec: string,
+    mixDialer: MixDialer,
 ): T =
   let instance = T(
-    destMultiAddr: destMultiAddr,
+    destForwardToAddr: destForwardToAddr,
     destPeerId: destPeerId,
     codec: codec,
     mixDialer: mixDialer,
@@ -110,23 +114,20 @@ proc new*(
 proc new*(
     T: typedesc[MixEntryConnection],
     srcMix: MixProtocol,
-    destMultiAddr: Opt[MultiAddress],
     destPeerId: PeerId,
+    destForwardToAddr: Opt[MultiAddress],
     codec: string,
-    exitNodeIsDestination: bool = false,
 ): T {.raises: [].} =
   var sendDialerFunc = proc(
       msg: seq[byte],
       codec: string,
-      destMultiAddr: Opt[MultiAddress],
       destPeerId: PeerId,
+      destForwardToAddr: Opt[MultiAddress],
   ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
     try:
-      await srcMix.anonymizeLocalProtocolSend(
-        msg, codec, destMultiAddr, destPeerId, exitNodeIsDestination
-      )
+      await srcMix.anonymizeLocalProtocolSend(msg, codec, destPeerId, destForwardToAddr)
     except CatchableError as e:
       error "Error during execution of anonymizeLocalProtocolSend: ", err = e.msg
     return
 
-  T.new(srcMix, destMultiAddr, destPeerId, sendDialerFunc, codec)
+  T.new(srcMix, destPeerId, destForwardToAddr, codec, sendDialerFunc)
