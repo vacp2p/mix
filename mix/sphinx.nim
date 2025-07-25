@@ -111,6 +111,8 @@ proc generateRandomDelay(): seq[byte] =
   return toseq(delayBytes)
 ]#
 
+const paddingLength = (((t + 1) * (r - L)) + 2) * k
+
 # Function to compute betas, gammas, and deltas
 proc computeBetaGammaDelta(
     s: seq[seq[byte]],
@@ -141,7 +143,6 @@ proc computeBetaGammaDelta(
 
     # Compute Beta and Gamma
     if i == sLen - 1:
-      let paddingLength = (((t + 1) * (r - L)) + 2) * k
       let destBytes = ?destHop.serialize()
       let padding = destBytes & delay[i] & newSeq[byte](paddingLength)
 
@@ -196,12 +197,8 @@ proc wrapInSphinxPacket*(
   return ok(serialized)
 
 proc processSphinxPacket*(
-    serSphinxPacket: seq[byte], privateKey: FieldElement, tm: var TagManager
+    sphinxPacket: SphinxPacket, privateKey: FieldElement, tm: var TagManager
 ): Result[(Hop, seq[byte], seq[byte], ProcessingStatus), string] = # TODO: named touple
-  # Deserialize the Sphinx packet
-  let sphinxPacket = SphinxPacket.deserialize(serSphinxPacket).valueOr:
-    return err("Sphinx packet deserialization error: " & error)
-
   let
     (header, payload) = sphinxPacket.getSphinxPacket()
     (alpha, beta, gamma) = getHeader(header)
@@ -251,7 +248,6 @@ proc processSphinxPacket*(
     return err("Error in aes: " & error)
 
   # Check if B has the required prefix for the original message
-  paddingLength = (((t + 1) * (r - L)) + 2) * k
   zeroPadding = newSeq[byte](paddingLength)
 
   if B[(t * k) .. (t * k) + paddingLength - 1] == zeroPadding:

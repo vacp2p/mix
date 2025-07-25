@@ -58,12 +58,11 @@ proc exitNodeIsDestination(
   let exitConn = MixExitConnection.new(msg.message)
   trace "Received: ", receiver = multiAddr, message = message
   await mixProto.pHandler(exitConn, msg.codec)
-  if exitConn != nil:
-    try:
-      await exitConn.close()
-    except CatchableError as e:
-      error "Failed to close exit connection: ", err = e.msg
-    return
+  try:
+    await exitConn.close()
+  except CatchableError as e:
+    error "Failed to close exit connection: ", err = e.msg
+  return
 
 proc handleMixNodeConnection(
     mixProto: MixProtocol, conn: Connection
@@ -87,8 +86,13 @@ proc handleMixNodeConnection(
   # Process the packet
   let (multiAddr, _, mixPrivKey, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
 
+  let sphinxPacket = SphinxPacket.deserialize(receivedBytes).valueOr:
+    error "Sphinx packet deserialization error", err = error
+    mix_messages_error.inc(labelValues = ["Intermediate/Exit", "INVALID_SPHINX"])
+    return
+
   let (nextHop, delay, processedPkt, status) = processSphinxPacket(
-    receivedBytes, mixPrivKey, mixProto.tagManager
+    sphinxPacket, mixPrivKey, mixProto.tagManager
   ).valueOr:
     error "Failed to process Sphinx packet", err = error
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "INVALID_SPHINX"])
