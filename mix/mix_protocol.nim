@@ -52,8 +52,20 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   let value = cast[uint64](bytes)
   return ok(int(value mod uint64(max)))
 
+proc exitNodeIsDestination(
+    mixProto: MixProtocol, msg: MixMessage
+) {.async: (raises: [CancelledError]).} =
+  let exitConn = MixExitConnection.new(msg.message)
+  trace "Received: ", receiver = multiAddr, message = message
+  await mixProto.pHandler(exitConn, msg.codec)
+  try:
+    await exitConn.close()
+  except CatchableError as e:
+    error "Failed to close exit connection: ", err = e.msg
+  return
+
 proc handleMixNodeConnection(
-    mixProto: MixProtocol, conn: Connection, codec: string
+    mixProto: MixProtocol, conn: Connection
 ) {.async: (raises: [CancelledError]).} =
   var receivedBytes: seq[byte]
   try:
@@ -74,14 +86,17 @@ proc handleMixNodeConnection(
   # Process the packet
   let (multiAddr, _, mixPrivKey, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
 
-  let processedPktRes = processSphinxPacket(
-    receivedBytes, mixPrivKey, mixProto.tagManager, not codec.destIsExit
-  )
-  if processedPktRes.isErr:
-    error "Failed to process Sphinx packet", err = processedPktRes.error
+  let sphinxPacket = SphinxPacket.deserialize(receivedBytes).valueOr:
+    error "Sphinx packet deserialization error", err = error
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "INVALID_SPHINX"])
     return
-  let (nextHop, delay, processedPkt, status) = processedPktRes.get()
+
+  let (nextHop, delay, processedPkt, status) = processSphinxPacket(
+    sphinxPacket, mixPrivKey, mixProto.tagManager
+  ).valueOr:
+    error "Failed to process Sphinx packet", err = error
+    mix_messages_error.inc(labelValues = ["Intermediate/Exit", "INVALID_SPHINX"])
+    return
 
   case status
   of Exit:
@@ -105,18 +120,8 @@ proc handleMixNodeConnection(
     trace "Exit node - Received mix message: ",
       receiver = multiAddr, message = deserialized.message
 
-    if destIsExit(deserialized.codec):
-      let exitConn = MixExitConnection.new(deserialized.message)
-      trace "Received: ", receiver = multiAddr, message = message
-      await mixProto.pHandler(exitConn, deserialized.codec)
-      if exitConn != nil:
-        try:
-          await exitConn.close()
-        except CatchableError as e:
-          error "Failed to close exit connection: ", err = e.msg
-        return
-    elif nextHop != Hop() or delay != @[]:
-      error "Next hop and delay must be empty"
+    if nextHop == Hop() and delay == @[]:
+      await mixProto.exitNodeIsDestination(deserialized)
       return
 
     # Add delay
@@ -334,15 +339,17 @@ proc anonymizeLocalProtocolSend*(
     mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
     return
 
-  var destHop = Opt.none(Hop)
-  if not exitNodeIsDestination:
-    #Encode destination
-    let dest = $destMultiAddr & "/p2p/" & $destPeerId
-    let destAddrBytes = multiAddrToBytes(dest).valueOr:
-      error "Failed to convert multiaddress to bytes", err = error
-      mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
-      return
-    destHop = Opt.some(Hop.init(destAddrBytes))
+  let destHop =
+    if not exitNodeIsDestination:
+      #Encode destination
+      let dest = $destMultiAddr & "/p2p/" & $destPeerId
+      let destAddrBytes = multiAddrToBytes(dest).valueOr:
+        error "Failed to convert multiaddress to bytes", err = error
+        mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
+        return
+      Hop.init(destAddrBytes)
+    else:
+      Hop()
 
   # Wrap in Sphinx packet
   let sphinxPacket = wrapInSphinxPacket(
@@ -387,7 +394,7 @@ proc anonymizeLocalProtocolSend*(
 
 method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
   proc handle(conn: Connection, proto: string) {.async: (raises: [CancelledError]).} =
-    await mixProtocol.handleMixNodeConnection(conn, proto)
+    await mixProtocol.handleMixNodeConnection(conn)
 
   mixProtocol.codecs = @[MixProtocolID]
   mixProtocol.handler = handle

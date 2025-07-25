@@ -1,18 +1,9 @@
-import chronos, std/enumerate
-import
-  libp2p/[builders, protocols/ping, protocols/pubsub/gossipsub/types, stream/connection]
+import chronos, chronicles, std/enumerate
+import libp2p/[builders, stream/connection]
 
 type ProtocolHandler* = proc(conn: Connection, codec: string): Future[void] {.
   async: (raises: [CancelledError])
 .}
-
-# TODO: this is temporary while I attempt to extract protocol specific logic from mix
-func destIsExit*(proto: string): bool =
-  return
-    not (
-      proto == GossipSubCodec_12 or proto == GossipSubCodec_11 or
-      proto == GossipSubCodec_10
-    )
 
 method callHandler*(
     switch: Switch, conn: Connection, codec: string

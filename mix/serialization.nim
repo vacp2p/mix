@@ -50,20 +50,36 @@ type Hop* = object
   MultiAddress: seq[byte]
 
 proc init*(T: typedesc[Hop], multiAddress: seq[byte]): T =
-  T(MultiAddress: multiAddress)
+  T(
+    MultiAddress:
+      if multiAddress == newSeq[byte](addrSize):
+        @[]
+      else:
+        multiAddress
+  )
 
 proc getHop*(hop: Hop): seq[byte] =
   return hop.MultiAddress
 
 proc serialize*(hop: Hop): Result[seq[byte], string] =
-  if len(hop.MultiAddress) != addrSize:
+  if hop.MultiAddress.len == 0:
+    return ok(newSeq[byte](addrSize))
+  elif len(hop.MultiAddress) != addrSize:
     return err("MultiAddress must be exactly " & $addrSize & " bytes")
   return ok(hop.MultiAddress)
 
 proc deserialize*(T: typedesc[Hop], data: openArray[byte]): Result[T, string] =
   if len(data) != addrSize:
     return err("MultiAddress must be exactly " & $addrSize & " bytes")
-  return ok(T(MultiAddress: @data))
+  ok(
+    T(
+      MultiAddress:
+        if data == newSeq[byte](addrSize):
+          @[]
+        else:
+          @data
+    )
+  )
 
 type RoutingInfo* = object
   Addr: Hop
