@@ -49,43 +49,35 @@ proc runHandler(
   return
 
 proc onMessage*(
-    self: ExitLayer, codec: string, message: seq[byte], nextHop: Hop, delay: seq[byte]
+    self: ExitLayer, codec: string, message: seq[byte], nextHop: Hop
 ) {.async: (raises: [CancelledError]).} =
-  if nextHop == Hop() and delay == @[]:
+  if nextHop == Hop():
     await self.runHandler(codec, message)
     return
-  elif delay == @[] or nextHop == Hop():
-    error "delay and nextHop must contain values"
-    return
-
-  # Add delay
-  let delayMillis = (delay[0].int shl 8) or delay[1].int
-
-  await sleepAsync(milliseconds(delayMillis))
 
   # Forward to destination
   let destBytes = getHop(nextHop)
 
   let fullAddrStr = bytesToMultiAddr(destBytes).valueOr:
     error "Failed to convert bytes to multiaddress", err = error
-    mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
+    mix_messages_error.inc(labelValues = ["ExitLayer", "INVALID_DEST"])
     return
 
   let parts = fullAddrStr.split("/p2p/")
   if parts.len != 2:
     error "Invalid multiaddress format", parts
-    mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
+    mix_messages_error.inc(labelValues = ["ExitLayer", "INVALID_DEST"])
     return
 
   # Create MultiAddress and PeerId
   let locationAddr = MultiAddress.init(parts[0]).valueOr:
     error "Failed to parse location multiaddress: ", err = error
-    mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
+    mix_messages_error.inc(labelValues = ["ExitLayer", "INVALID_DEST"])
     return
 
   let peerId = PeerId.init(parts[1]).valueOr:
     error "Failed to initialize PeerId", err = error
-    mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
+    mix_messages_error.inc(labelValues = ["ExitLayer", "INVALID_DEST"])
     return
 
   var destConn: Connection
@@ -95,9 +87,7 @@ proc onMessage*(
     #TODO: When response is implemented, we can read the response here
   except CatchableError as e:
     error "Failed to dial next hop: ", err = e.msg
-    mix_messages_error.inc(labelValues = ["Exit", "DAIL_FAILED"])
+    mix_messages_error.inc(labelValues = ["ExitLayer", "DIAL_FAILED"])
   finally:
     if not destConn.isNil:
       await destConn.close()
-
-  mix_messages_forwarded.inc(labelValues = ["Exit"])

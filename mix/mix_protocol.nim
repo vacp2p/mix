@@ -109,8 +109,10 @@ proc handleMixNodeConnection(
       receiver = multiAddr, message = deserialized.message, codec = deserialized.codec
 
     await mixProto.exitLayer.onMessage(
-      deserialized.codec, deserialized.message, nextHop, delay
+      deserialized.codec, deserialized.message, nextHop
     )
+
+    mix_messages_forwarded.inc(labelValues = ["Exit"])
   of Intermediate:
     trace "# Intermediate: ", multiAddr = multiAddr
     # Add delay
@@ -335,13 +337,6 @@ proc anonymizeLocalProtocolSend*(
       except CatchableError as e:
         error "Failed to close outgoing stream: ", err = e.msg
 
-method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
-  proc handle(conn: Connection, proto: string) {.async: (raises: [CancelledError]).} =
-    await mixProtocol.handleMixNodeConnection(conn)
-
-  mixProtocol.codecs = @[MixProtocolID]
-  mixProtocol.handler = handle
-
 proc new*(
     T: typedesc[MixProtocol],
     mixNodeInfo: MixNodeInfo,
@@ -355,6 +350,12 @@ proc new*(
   mixProto.switch = switch
   mixProto.tagManager = tagManager
   mixProto.exitLayer = ExitLayer.init(switch)
+  mixProto.codecs = @[MixProtocolID]
+  mixProto.handler = proc(
+      conn: Connection, proto: string
+  ) {.async: (raises: [CancelledError]).} =
+    await mixProto.handleMixNodeConnection(conn)
+
   mixProto
 
 proc new*(

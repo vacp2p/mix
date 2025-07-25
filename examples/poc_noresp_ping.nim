@@ -87,8 +87,6 @@ proc mixnetSimulation() {.async: (raises: [Exception]).} =
       error "Mix protocol initialization failed", err = error
       return
 
-    proto.init()
-
     mixProto.add(proto)
 
     nodes[index].mount(noRespPingProto[index])
