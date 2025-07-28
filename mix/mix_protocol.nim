@@ -163,6 +163,9 @@ proc handleMixNodeConnection(
         except CatchableError as e:
           error "Failed to close outgoing stream: ", err = e.msg
       mix_messages_error.inc(labelValues = ["Intermediate", "DAIL_FAILED"])
+  of Reply:
+    # TODO: implement
+    discard
   of Duplicate:
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "DUPLICATE"])
     discard
