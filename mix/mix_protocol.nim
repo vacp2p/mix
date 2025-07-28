@@ -2,8 +2,8 @@ import chronicles, chronos, sequtils, strutils, os, results
 import std/[strformat, sysrand], metrics
 import
   ./[
-    config, curve25519, exit_connection, fragmentation, mix_message, mix_node, protocol,
-    sphinx, serialization, tag_manager, utils, mix_metrics,
+    config, curve25519, exit_connection, fragmentation, mix_message, mix_node, sphinx,
+    serialization, tag_manager, utils, mix_metrics, exit_layer,
   ]
 import libp2p
 import
@@ -17,7 +17,7 @@ type MixProtocol* = ref object of LPProtocol
   pubNodeInfo: Table[PeerId, MixPubInfo]
   switch: Switch
   tagManager: TagManager
-  pHandler: ProtocolHandler
+  exitLayer: ExitLayer
 
 proc loadMixNodeInfo*(
     index: int, nodeFolderInfoPath: string = "./nodeInfo"
@@ -51,18 +51,6 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   discard urandom(bytes)
   let value = cast[uint64](bytes)
   return ok(int(value mod uint64(max)))
-
-proc exitNodeIsDestination(
-    mixProto: MixProtocol, msg: MixMessage
-) {.async: (raises: [CancelledError]).} =
-  let exitConn = MixExitConnection.new(msg.message)
-  trace "Received: ", receiver = multiAddr, message = message
-  await mixProto.pHandler(exitConn, msg.codec)
-  try:
-    await exitConn.close()
-  except CatchableError as e:
-    error "Failed to close exit connection: ", err = e.msg
-  return
 
 proc handleMixNodeConnection(
     mixProto: MixProtocol, conn: Connection
@@ -118,54 +106,12 @@ proc handleMixNodeConnection(
       return
 
     trace "Exit node - Received mix message: ",
-      receiver = multiAddr, message = deserialized.message
+      receiver = multiAddr, message = deserialized.message, codec = deserialized.codec
 
-    if nextHop == Hop() and delay == @[]:
-      await mixProto.exitNodeIsDestination(deserialized)
-      return
+    await mixProto.exitLayer.onMessage(
+      deserialized.codec, deserialized.message, nextHop
+    )
 
-    # Add delay
-    let delayMillis = (delay[0].int shl 8) or delay[1].int
-    await sleepAsync(milliseconds(delayMillis))
-
-    # Forward to destination
-    let destBytes = getHop(nextHop)
-
-    let fullAddrStr = bytesToMultiAddr(destBytes).valueOr:
-      error "Failed to convert bytes to multiaddress", err = error
-      mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
-      return
-
-    let parts = fullAddrStr.split("/p2p/")
-    if parts.len != 2:
-      error "Invalid multiaddress format", parts = parts
-      mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
-      return
-
-    let
-      locationAddrStr = parts[0]
-      peerIdStr = parts[1]
-
-    # Create MultiAddress and PeerId
-    let locationAddr = MultiAddress.init(locationAddrStr).valueOr:
-      error "Failed to parse location multiaddress: ", err = error
-      mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
-      return
-
-    let peerId = PeerId.init(peerIdStr).valueOr:
-      error "Failed to initialize PeerId", err = error
-      mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
-      return
-
-    var destConn: Connection
-    try:
-      destConn = await mixProto.switch.dial(peerId, @[locationAddr], deserialized.codec)
-      await destConn.writeLp(deserialized.message)
-      #TODO: When response is implemented, we can read the response here
-      await destConn.close()
-    except CatchableError as e:
-      error "Failed to dial next hop: ", err = e.msg
-      mix_messages_error.inc(labelValues = ["Exit", "DAIL_FAILED"])
     mix_messages_forwarded.inc(labelValues = ["Exit"])
   of Intermediate:
     trace "# Intermediate: ", multiAddr = multiAddr
@@ -391,30 +337,26 @@ proc anonymizeLocalProtocolSend*(
       except CatchableError as e:
         error "Failed to close outgoing stream: ", err = e.msg
 
-method init*(mixProtocol: MixProtocol) {.gcsafe, raises: [].} =
-  proc handle(conn: Connection, proto: string) {.async: (raises: [CancelledError]).} =
-    await mixProtocol.handleMixNodeConnection(conn)
-
-  mixProtocol.codecs = @[MixProtocolID]
-  mixProtocol.handler = handle
-
 proc new*(
     T: typedesc[MixProtocol],
     mixNodeInfo: MixNodeInfo,
     pubNodeInfo: Table[PeerId, MixPubInfo],
     switch: Switch,
     tagManager: TagManager,
-    handler: ProtocolHandler,
-): Result[T, string] =
+): T =
   let mixProto = new(T)
   mixProto.mixNodeInfo = mixNodeInfo
   mixProto.pubNodeInfo = pubNodeInfo
   mixProto.switch = switch
   mixProto.tagManager = tagManager
-  mixProto.pHandler = handler
-  mixProto.init() # TODO: constructor should probably not call init
+  mixProto.exitLayer = ExitLayer.init(switch)
+  mixProto.codecs = @[MixProtocolID]
+  mixProto.handler = proc(
+      conn: Connection, proto: string
+  ) {.async: (raises: [CancelledError]).} =
+    await mixProto.handleMixNodeConnection(conn)
 
-  return ok(mixProto)
+  mixProto
 
 proc new*(
     T: typedesc[MixProtocol],
@@ -430,50 +372,6 @@ proc new*(
   ).valueOr:
     return err("Failed to load mix pub info for index " & $index & " - err: " & error)
 
-  var sendHandlerFunc = proc(
-      conn: Connection, codec: string
-  ): Future[void] {.async: (raises: [CancelledError]).} =
-    try:
-      await callHandler(switch, conn, codec)
-    except CatchableError as e:
-      error "Error during execution of MixProtocol handler: ", err = e.msg
-    return
-
-  let mixProto =
-    ?MixProtocol.new(
-      mixNodeInfo, pubNodeInfo, switch, TagManager.new(), sendHandlerFunc
-    )
-
-  mixProto.init() # TODO: constructor should probably not call init
+  let mixProto = MixProtocol.new(mixNodeInfo, pubNodeInfo, switch, TagManager.new())
 
   return ok(mixProto)
-
-# TODO: is this needed
-proc initialize*(
-    mixProtocol: MixProtocol,
-    localMixNodeInfo: MixNodeInfo,
-    switch: Switch,
-    mixNodeTable: Table[PeerId, MixPubInfo],
-) =
-  #if mixNodeTable.len == 0:
-  # TODO:This is temporary check for testing, needs to be removed later
-  # probably protocol can be initiated without any mix nodes itself,
-  # and can be later supplied with nodes as they are discovered.
-  #return err("No mix nodes passed for the protocol initialization.")
-
-  mixProtocol.mixNodeInfo = localMixNodeInfo
-  mixProtocol.switch = switch
-  mixProtocol.pubNodeInfo = mixNodeTable
-  mixProtocol.tagManager = TagManager.new()
-
-  mixProtocol.init()
-
-# TODO: is this needed
-method setNodePool*(
-    mixProtocol: MixProtocol, mixNodeTable: Table[PeerId, MixPubInfo]
-) {.base, gcsafe, raises: [].} =
-  mixProtocol.pubNodeInfo = mixNodeTable
-
-# TODO: is this needed
-method getNodePoolSize*(mixProtocol: MixProtocol): int {.base, gcsafe, raises: [].} =
-  mixProtocol.pubNodeInfo.len

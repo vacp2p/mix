@@ -1,5 +1,4 @@
 import chronicles, results
-import ./[config, utils]
 import stew/[byteutils, leb128]
 import libp2p/protobuf/minprotobuf
 
@@ -50,36 +49,3 @@ proc deserialize*(
       message: data[varintLen + codecLen ..< data.len],
     )
   )
-
-# TODO: These are not used anywhere
-# TODO: consider changing the `dest` parameter to a multiaddress
-proc serializeWithDestination*(
-    mixMsg: MixMessage, dest: string
-): Result[seq[byte], string] =
-  let destBytes = multiAddrToBytes(dest).valueOr:
-    return err("Error in multiaddress conversion to bytes: " & error)
-
-  if len(destBytes) != addrSize:
-    error "Destination address must be exactly " & $addrSize & " bytes"
-    return err("Destination address must be exactly " & $addrSize & " bytes")
-
-  var serializedMixMsg = ?mixMsg.serialize()
-  let oldLen = serializedMixMsg.len
-  serializedMixMsg.setLen(oldLen + destBytes.len)
-  copyMem(addr serializedMixMsg[oldLen], unsafeAddr destBytes[0], destBytes.len)
-
-  return ok(serializedMixMsg)
-
-# TODO: These are not used anywhere
-proc deserializeWithDestination*(
-    T: typedesc[MixMessage], data: openArray[byte]
-): Result[(T, string), string] =
-  if data.len <= addrSize:
-    return err("Deserialization with destination failed: not enough data")
-
-  let mixMsg = ?MixMessage.deserialize(data[0 ..^ (addrSize + 1)])
-
-  let dest = bytesToMultiAddr(data[^addrSize ..^ 1]).valueOr:
-    return err("Error in destination multiaddress conversion to bytes: " & error)
-
-  return ok((mixMsg, dest))

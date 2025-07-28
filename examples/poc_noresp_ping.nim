@@ -83,11 +83,11 @@ proc mixnetSimulation() {.async: (raises: [Exception]).} =
   for index, _ in enumerate(nodes):
     noRespPingProto.add(noresp_ping.NoRespPing.new(rng = rng))
 
-    let protoRes = MixProtocol.new(index, numberOfNodes, nodes[index])
-    if protoRes.isErr:
-      error "Mix protocol initialization failed", err = protoRes.error
+    let proto = MixProtocol.new(index, numberOfNodes, nodes[index]).valueOr:
+      error "Mix protocol initialization failed", err = error
       return
-    mixProto.add(protoRes.get())
+
+    mixProto.add(proto)
 
     nodes[index].mount(noRespPingProto[index])
     nodes[index].mount(mixProto[index])
