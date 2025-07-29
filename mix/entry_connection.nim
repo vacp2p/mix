@@ -1,6 +1,7 @@
 import hashes, chronos, stew/byteutils, results
 import libp2p/stream/connection
 import ./mix_protocol
+from fragmentation import dataSize
 
 type MixDialer* = proc(
   msg: seq[byte],
@@ -49,10 +50,16 @@ proc write*(
 method writeLp*(
     self: MixEntryConnection, msg: openArray[byte]
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
-  let length = msg.len().uint64
+  if msg.len() > dataSize:
+    let fut = newFuture[void]()
+    fut.fail(
+      newException(LPStreamError, "exceeds max msg size of " & $dataSize & " bytes")
+    )
+    return fut
+
   var
     vbytes: seq[byte] = @[]
-    value = length
+    value = msg.len().uint64
 
   while value >= 128:
     vbytes.add(byte((value and 127) or 128))

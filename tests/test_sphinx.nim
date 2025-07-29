@@ -49,7 +49,7 @@ proc createDummyData(): (
 
     message = Message.init(newSeq[byte](messageSize))
     dest = Hop.init(newSeq[byte](addrSize))
-  
+
   return (message, privateKeys, publicKeys, delay, hops, dest)
 
 # Unit tests for sphinx.nim
