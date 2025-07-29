@@ -1,7 +1,7 @@
 const
   k* = 16 # Security parameter
   r* = 5 # Maximum path length
-  t* = 3 # t.k - combined length of next hop address and delay
+  t* = 6 # t.k - combined length of next hop address and delay
   L* = 3 # Path length
   alphaSize* = 32 # Group element
   betaSize* = ((r * (t + 1)) + 1) * k # (r(t+1)+1)k bytes
