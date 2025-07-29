@@ -14,7 +14,7 @@ proc padMessage(message: openArray[byte], size: int): seq[byte] =
 
 # Helper function to create dummy data
 proc createDummyData(): (
-  Message, seq[FieldElement], seq[FieldElement], seq[seq[byte]], seq[Hop]
+  Message, seq[FieldElement], seq[FieldElement], seq[seq[byte]], seq[Hop], Hop
 ) =
   var keyPairResult = generateKeyPair()
   if keyPairResult.isErr:
@@ -48,8 +48,9 @@ proc createDummyData(): (
       ]
 
     message = Message.init(newSeq[byte](messageSize))
-
-  return (message, privateKeys, publicKeys, delay, hops)
+    dest = Hop.init(newSeq[byte](addrSize))
+  
+  return (message, privateKeys, publicKeys, delay, hops, dest)
 
 # Unit tests for sphinx.nim
 suite "Sphinx Tests":
@@ -62,9 +63,9 @@ suite "Sphinx Tests":
     clearTags(tm)
 
   test "sphinx_wrap_and_process":
-    let (message, privateKeys, publicKeys, delay, hops) = createDummyData()
+    let (message, privateKeys, publicKeys, delay, hops, dest) = createDummyData()
 
-    let packetBytesRes = wrapInSphinxPacket(message, publicKeys, delay, hops, Hop())
+    let packetBytesRes = wrapInSphinxPacket(message, publicKeys, delay, hops, dest)
     if packetBytesRes.isErr:
       error "Sphinx wrap error", err = packetBytesRes.error
       fail()
@@ -130,7 +131,7 @@ suite "Sphinx Tests":
     let (address3, delay3, processedPacket3, status3) = res3.get()
 
     if status3 != Exit:
-      error "Processing status should be Exit"
+      error "Processing status should be Exit", status3
       fail()
 
     let processedMessage = Message.init(processedPacket3)
@@ -139,17 +140,17 @@ suite "Sphinx Tests":
       fail()
 
   test "sphinx_wrap_empty_public_keys":
-    let (message, _, _, delay, _) = createDummyData()
+    let (message, _, _, delay, _, dest) = createDummyData()
 
-    let packetRes = wrapInSphinxPacket(message, @[], delay, @[], Hop())
+    let packetRes = wrapInSphinxPacket(message, @[], delay, @[], dest)
     if packetRes.isOk:
       error "Expected Sphinx wrap error when public keys are empty, but got success"
       fail()
 
   test "sphinx_process_invalid_mac":
-    let (message, privateKeys, publicKeys, delay, hops) = createDummyData()
+    let (message, privateKeys, publicKeys, delay, hops, dest) = createDummyData()
 
-    let packetBytesRes = wrapInSphinxPacket(message, publicKeys, delay, hops, Hop())
+    let packetBytesRes = wrapInSphinxPacket(message, publicKeys, delay, hops, dest)
     if packetBytesRes.isErr:
       error "Sphinx wrap error", err = packetBytesRes.error
     let packetBytes = packetBytesRes.get()
@@ -180,9 +181,9 @@ suite "Sphinx Tests":
       fail()
 
   test "sphinx_process_duplicate_tag":
-    let (message, privateKeys, publicKeys, delay, hops) = createDummyData()
+    let (message, privateKeys, publicKeys, delay, hops, dest) = createDummyData()
 
-    let packetBytesRes = wrapInSphinxPacket(message, publicKeys, delay, hops, Hop())
+    let packetBytesRes = wrapInSphinxPacket(message, publicKeys, delay, hops, dest)
     if packetBytesRes.isErr:
       error "Sphinx wrap error", err = packetBytesRes.error
     let packetBytes = packetBytesRes.get()
@@ -222,7 +223,7 @@ suite "Sphinx Tests":
   test "sphinx_wrap_and_process_message_sizes":
     let messageSizes = @[32, 64, 128, 256, 512]
     for size in messageSizes:
-      let (_, privateKeys, publicKeys, delay, hops) = createDummyData()
+      let (_, privateKeys, publicKeys, delay, hops, dest) = createDummyData()
       var message = newSeq[byte](size)
       randomize()
       for i in 0 ..< size:
@@ -230,7 +231,7 @@ suite "Sphinx Tests":
       let paddedMessage = padMessage(message, messageSize)
 
       let packetResBytes =
-        wrapInSphinxPacket(Message.init(paddedMessage), publicKeys, delay, hops, Hop())
+        wrapInSphinxPacket(Message.init(paddedMessage), publicKeys, delay, hops, dest)
       if packetResBytes.isErr:
         error "Sphinx wrap error", err = packetResBytes.error
       let packetBytes = packetResBytes.get()

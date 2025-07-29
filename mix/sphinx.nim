@@ -37,10 +37,8 @@ proc computeAlpha(
 
     # Compute alpha, shared secret, and blinder
     if i == 0:
-      let alphaRes = multiplyBasePointWithScalars([blinders[i]])
-      if alphaRes.isErr:
-        return err("Multiply base point with scalars error: " & alphaRes.error)
-      alpha = alphaRes.get()
+      alpha = multiplyBasePointWithScalars([blinders[i]]).valueOr:
+        return err("Multiply base point with scalars error: " & error)
 
       alpha_0 = fieldElementToBytes(alpha)
     else:
@@ -80,12 +78,10 @@ proc computeFillerStrings(s: seq[seq[byte]]): Result[seq[byte], string] =
       fillerLength = (t + 1) * k
       zeroPadding = newSeq[byte](fillerLength)
 
-    let fillerRes = aes_ctr_start_index(
+    filler = aes_ctr_start_index(
       aes_key, iv, filler & zeroPadding, (((t + 1) * (r - i)) + t + 2) * k
-    )
-    if fillerRes.isErr:
-      return err("Error in aes with start index: " & fillerRes.error)
-    filler = fillerRes.get()
+    ).valueOr:
+      return err("Error in aes with start index: " & error)
 
   return ok(filler)
 
@@ -144,11 +140,11 @@ proc computeBetaGammaDelta(
     # Compute Beta and Gamma
     if i == sLen - 1:
       let destBytes = ?destHop.serialize()
-      let padding = destBytes & delay[i] & newSeq[byte](paddingLength)
+      let destPadding = destBytes & delay[i] & newSeq[byte](paddingLength)
 
-      let aesRes = aes_ctr(beta_aes_key, beta_iv, padding).valueOr:
+      let aes = aes_ctr(beta_aes_key, beta_iv, destPadding).valueOr:
         return err("Error in aes: " & error)
-      beta = aesRes & filler
+      beta = aes & filler
 
       let serializedMsg = msg.serialize().valueOr:
         return err("Message serialization error: " & error)
@@ -238,11 +234,7 @@ proc processSphinxPacket*(
     return err("Error in aes: " & error)
 
   # Compute B
-  var
-    paddingLength: int
-    zeroPadding: seq[byte]
-  paddingLength = (t + 1) * k
-  zeroPadding = newSeq[byte](paddingLength)
+  var zeroPadding = newSeq[byte]((t + 1) * k)
 
   let B = aes_ctr(beta_aes_key, beta_iv, beta & zeroPadding).valueOr:
     return err("Error in aes: " & error)
