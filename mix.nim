@@ -1,11 +1,9 @@
 import results
-import ./mix/[entry_connection_callbacks, mix_protocol, mix_node]
+import ./mix/[mix_protocol, mix_node, entry_connection]
 
 export results
 
-export D
 export toConnection
-export mixPeerSelection
 export MixProtocolID
 export MixProtocol
 export initializeMixNodes

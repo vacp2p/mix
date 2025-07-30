@@ -9,6 +9,7 @@ import
     protocols/pubsub/pubsubpeer,
     protocols/pubsub/rpc/messages,
   ]
+import ./poc_gossipsub_utils
 
 type Node = tuple[switch: Switch, gossip: GossipSub, mix: MixProtocol, id: int]
 

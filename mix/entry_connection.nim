@@ -1,4 +1,4 @@
-import hashes, chronos, stew/byteutils, results
+import hashes, chronos, stew/byteutils, results, chronicles
 import libp2p/stream/connection
 import ./mix_protocol
 from fragmentation import dataSize
@@ -138,3 +138,11 @@ proc new*(
     return
 
   T.new(srcMix, destPeerId, destForwardToAddr, codec, sendDialerFunc)
+
+proc toConnection*(
+    srcMix: MixProtocol,
+    destPeerId: PeerId,
+    destForwardToAddr: Opt[MultiAddress],
+    codec: string,
+): Connection {.gcsafe, raises: [].} =
+  MixEntryConnection.new(srcMix, destPeerId, destForwardToAddr, codec)
