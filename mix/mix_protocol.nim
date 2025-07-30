@@ -232,12 +232,13 @@ proc anonymizeLocalProtocolSend*(
     randPeerId: PeerId
     availableIndices = toSeq(0 ..< numMixNodes)
 
-  let index = pubNodeInfoKeys.find(destPeerId)
-  if index != -1:
-    availableIndices.del(index)
-  else:
-    error "Destination does not support Mix"
-    return
+  if destForwardToAddr.isNone:
+    let index = pubNodeInfoKeys.find(destPeerId)
+    if index != -1:
+      availableIndices.del(index)
+    else:
+      error "Destination does not support Mix"
+      return
 
   var i = 0
   while i < L:
