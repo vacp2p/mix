@@ -2,7 +2,7 @@ import results, strutils
 import stew/base58
 import ./config
 
-const multiAddrLen = 39
+const peerIdByteLen = 39
 
 proc bytesToUInt16*(data: openArray[byte]): Result[uint16, string] =
   if len(data) != 2:
@@ -37,8 +37,8 @@ proc extractPeerId(parts: seq[string], index: int): Result[seq[byte], string] =
     return err("Peer ID must be exactly 53 characters")
   try:
     let peerIdBytes = Base58.decode(peerIdBase58)
-    if peerIdBytes.len != multiAddrLen:
-      return err("Peer ID must be exactly " & $multiAddrLen & " bytes")
+    if peerIdBytes.len != peerIdByteLen:
+      return err("Peer ID must be exactly " & $peerIdByteLen & " bytes")
     return ok(peerIdBytes)
   except Base58Error:
     return err("Invalid Peer ID")
@@ -135,9 +135,9 @@ proc bytesToMultiAddr*(bytes: openArray[byte]): Result[string, string] =
 
   let peerId1 = "/p2p/" & Base58.encode(bytes[7 ..< 46])
 
-  let peerId2Bytes = bytes[7 + multiAddrLen ..< 7 + (multiAddrLen * 2)]
+  let peerId2Bytes = bytes[7 + peerIdByteLen ..< 7 + (peerIdByteLen * 2)]
   let peerId2 =
-    if peerId2Bytes != newSeq[byte](multiAddrLen):
+    if peerId2Bytes != newSeq[byte](peerIdByteLen):
       "/p2p-circuit/p2p/" & Base58.encode(peerId2Bytes)
     else:
       ""
