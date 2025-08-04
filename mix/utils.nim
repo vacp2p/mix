@@ -2,7 +2,7 @@ import results, strutils
 import stew/base58
 import ./config
 
-const addrBytesSize* = 46
+const multiAddrLen = 39
 
 proc bytesToUInt16*(data: openArray[byte]): Result[uint16, string] =
   if len(data) != 2:
@@ -29,15 +29,38 @@ proc uint32ToBytes*(value: uint32): seq[byte] =
       byte(value and 0xFF),
     ]
 
+proc extractPeerId(parts: seq[string], index: int): Result[seq[byte], string] =
+  if parts[index - 1] != "p2p":
+    return err("Invalid peerId component")
+  let peerIdBase58 = parts[index]
+  if peerIdBase58.len != 53:
+    return err("Peer ID must be exactly 53 characters")
+  try:
+    let peerIdBytes = Base58.decode(peerIdBase58)
+    if peerIdBytes.len != multiAddrLen:
+      return err("Peer ID must be exactly " & $multiAddrLen & " bytes")
+    return ok(peerIdBytes)
+  except Base58Error:
+    return err("Invalid Peer ID")
+
 proc multiAddrToBytes*(multiAddr: string): Result[seq[byte], string] =
   var
     parts = multiAddr.split('/')
     res: seq[byte] = @[]
 
-  if parts.len != 7:
+  const minMultiAddrComponentLen = 7
+  const maxMultiAddrComponentLen = 11
+
+  if not (
+    parts.len >= minMultiAddrComponentLen and parts.len <= maxMultiAddrComponentLen
+  ):
     return err("Invalid multiaddress format")
 
-  # IP address (4 bytes) ToDo: Add support for ipv6. Supporting ipv4 only for testing purposes
+  if parts[1] != "ip4":
+    # ToDo: Add support for ipv6. Supporting ipv4 only for testing purposes
+    return err("Only ip4 addresses are supported")
+
+  # IP address (4 bytes) 
   let ipParts = parts[2].split('.')
   if ipParts.len != 4:
     return err("Invalid IP address format")
@@ -51,12 +74,14 @@ proc multiAddrToBytes*(multiAddr: string): Result[seq[byte], string] =
       return err("Invalid IP address format")
 
   # Protocol (1 byte) ToDo: TLS or QUIC
-  if parts[3] != "tcp" and parts[3] != "quic":
+  var isQuic = false
+  if parts[3] != "tcp" and not (parts[3] == "udp" and parts[5] == "quic-v1"):
     return err("Unsupported protocol")
   res.add(
     if parts[3] == "tcp":
       byte(0)
     else:
+      isQuic = true
       byte(1)
   ) # Using TCP for testing purposes
 
@@ -69,22 +94,26 @@ proc multiAddrToBytes*(multiAddr: string): Result[seq[byte], string] =
   except ValueError:
     return err("Invalid port")
 
-  # PeerID (39 bytes)
-  let peerIdBase58 = parts[6]
-  if peerIdBase58.len != 53:
-    return err("Peer ID must be exactly 53 characters")
-  try:
-    let peerIdBytes = Base58.decode(peerIdBase58)
-    if peerIdBytes.len != 39:
-      return err("Peer ID must be exactly 39 bytes")
-    res.add(peerIdBytes)
-  except Base58Error:
-    return err("Invalid Peer ID")
+  # PeerID (39 bytes),  if using circuit relay, this represents the relay server
+  let peerId1Bytes = ?extractPeerId(parts, if isQuic: 7 else: 6)
+  res.add(peerId1Bytes)
 
-  if res.len != addrSize:
-    return err("Address must be exactly " & $addrSize & " bytes")
+  if parts.len > minMultiAddrComponentLen + (if isQuic: 1 else: 0):
+    if not (
+      parts.len == maxMultiAddrComponentLen - 1 or
+      (isQuic and parts.len == maxMultiAddrComponentLen)
+    ):
+      return err("invalid p2p circuit relay multiaddress")
+    elif not (parts[if isQuic: 8 else: 7] == "p2p-circuit"):
+      return err("Invalid p2p-circuit component")
 
-  return ok(res)
+    let peerId2Bytes = ?extractPeerId(parts, if isQuic: 10 else: 9)
+    res.add(peerId2Bytes)
+
+  if res.len > addrSize:
+    return err("Address must be <= " & $addrSize & " bytes")
+
+  return ok(res & newSeq[byte](addrSize - res.len))
 
 proc bytesToMultiAddr*(bytes: openArray[byte]): Result[string, string] =
   if bytes.len != addrSize:
@@ -95,14 +124,24 @@ proc bytesToMultiAddr*(bytes: openArray[byte]): Result[string, string] =
     ipParts.add($bytes[i])
       # ToDo: Add support for ipv6. Supporting ipv4 only for testing purposes
 
-  let protocol = if bytes[4] == 0: "tcp" else: "quic"
+  let protocol = if bytes[4] == 0: "tcp" else: "udp"
+
+  let quic = if bytes[4] == 1: "/quic-v1" else: ""
+
     # ToDo: TLS or QUIC (Using TCP for testing purposes)
 
   let port = bytesToUInt16(bytes[5 .. 6]).valueOr:
     return err("Error in conversion of bytes to port no.: " & error)
 
-  let peerIdBase58 = Base58.encode(bytes[7 ..^ 1])
+  let peerId1 = "/p2p/" & Base58.encode(bytes[7 ..< 46])
+
+  let peerId2Bytes = bytes[7 + multiAddrLen ..< 7 + (multiAddrLen * 2)]
+  let peerId2 =
+    if peerId2Bytes != newSeq[byte](multiAddrLen):
+      "/p2p-circuit/p2p/" & Base58.encode(peerId2Bytes)
+    else:
+      ""
 
   return ok(
-    "/ip4/" & ipParts.join(".") & "/" & protocol & "/" & $port & "/p2p/" & peerIdBase58
+    "/ip4/" & ipParts.join(".") & "/" & protocol & "/" & $port & quic & peerId1 & peerId2
   )
