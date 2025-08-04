@@ -274,11 +274,17 @@ proc anonymizeLocalProtocolSend*(
     hop.add(Hop.init(multiAddrBytes))
 
     # Compute delay
-    let delayMilliSec = cryptoRandomInt(3).valueOr:
-      error "Failed to generate random number", err = error
-      mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
-      return
-    delay.add(uint16ToBytes(uint16(delayMilliSec)))
+    let delayMillisec =
+      if i != L - 1:
+        cryptoRandomInt(3).valueOr:
+          error "Failed to generate random number", err = error
+          mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
+          return
+      else:
+        0 # Last hop does not require a delay
+
+    delay.add(uint16ToBytes(delayMillisec.uint16))
+
     i = i + 1
   let serializedMsgChunk = paddedMsg.serialize().valueOr:
     error "Failed to serialize padded message", err = error
