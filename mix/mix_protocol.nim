@@ -386,9 +386,9 @@ proc new*(
 # TODO: look into removing this
 proc setNodePool*(
     mixProtocol: MixProtocol, mixNodeTable: Table[PeerId, MixPubInfo]
-) {gcsafe, raises: [].} =
+) {.gcsafe, raises: [].} =
   mixProtocol.pubNodeInfo = mixNodeTable
 
 # TODO: look into removing this
-proc getNodePoolSize*(mixProtocol: MixProtocol): int {gcsafe, raises: [].} =
+proc getNodePoolSize*(mixProtocol: MixProtocol): int {.gcsafe, raises: [].} =
   mixProtocol.pubNodeInfo.len
