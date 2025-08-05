@@ -16,3 +16,4 @@ export `new`
 export getMaxMessageSizeForCodec
 export deleteNodeInfoFolder
 export deletePubInfoFolder
+export initMixMultiAddrByIndex
