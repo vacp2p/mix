@@ -157,6 +157,10 @@ proc initMixPubInfo*(
 ): MixPubInfo =
   MixPubInfo(multiAddr: multiAddr, mixPubKey: mixPubKey, libp2pPubKey: libp2pPubKey)
 
+# TODO: merge with initMixPubInfo
+proc createMixPubInfo*(multiAddr: string, mixPubKey: FieldElement): MixPubInfo =
+  MixPubInfo(multiAddr: multiAddr, mixPubKey: mixPubKey)
+
 proc getMixPubInfo*(info: MixPubInfo): (string, FieldElement, SkPublicKey) =
   (info.multiAddr, info.mixPubKey, info.libp2pPubKey)
 
