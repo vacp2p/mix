@@ -349,7 +349,7 @@ proc new*(
     mixNodeInfo: MixNodeInfo,
     pubNodeInfo: Table[PeerId, MixPubInfo],
     switch: Switch,
-    tagManager: TagManager,
+    tagManager: TagManager = TagManager.new(),
 ): T =
   let mixProto = new(T)
   mixProto.mixNodeInfo = mixNodeInfo
