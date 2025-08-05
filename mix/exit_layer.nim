@@ -36,8 +36,6 @@ proc init*(T: typedesc[ExitLayer], switch: Switch): T =
 proc runHandler(
     self: ExitLayer, codec: string, message: seq[byte]
 ) {.async: (raises: [CancelledError]).} =
-  trace "Received: ", receiver = multiAddr, codec, message
-
   let exitConn = MixExitConnection.new(message)
 
   await self.pHandler(exitConn, codec)
@@ -52,6 +50,7 @@ proc onMessage*(
     self: ExitLayer, codec: string, message: seq[byte], nextHop: Hop
 ) {.async: (raises: [CancelledError]).} =
   if nextHop == Hop():
+    trace "onMessage - exit is destination", codec, message
     await self.runHandler(codec, message)
     return
 
@@ -79,6 +78,8 @@ proc onMessage*(
     error "Failed to initialize PeerId", err = error
     mix_messages_error.inc(labelValues = ["ExitLayer", "INVALID_DEST"])
     return
+
+  trace "onMessage - exit is not destination", peerId, locationAddr, codec, message
 
   var destConn: Connection
   try:
