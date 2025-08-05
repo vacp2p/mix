@@ -382,3 +382,13 @@ proc new*(
   let mixProto = MixProtocol.new(mixNodeInfo, pubNodeInfo, switch, TagManager.new())
 
   return ok(mixProto)
+
+# TODO: look into removing this
+proc setNodePool*(
+    mixProtocol: MixProtocol, mixNodeTable: Table[PeerId, MixPubInfo]
+) {gcsafe, raises: [].} =
+  mixProtocol.pubNodeInfo = mixNodeTable
+
+# TODO: look into removing this
+proc getNodePoolSize*(mixProtocol: MixProtocol): int {gcsafe, raises: [].} =
+  mixProtocol.pubNodeInfo.len
