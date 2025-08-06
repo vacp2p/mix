@@ -109,6 +109,16 @@ proc oneNode(node: Node) {.async.} =
   await sleepAsync(1000.milliseconds)
   await node.switch.stop()
 
+proc makeMixConnCb(mixProto: MixProtocol): CustomConnCreationProc =
+  return proc(
+      destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
+  ): Connection {.gcsafe, raises: [].} =
+    try:
+      return mixProto.toConnection(destPeerId, Opt.none(MultiAddress), codec)
+    except CatchableError as e:
+      error "Error during execution of MixEntryConnection callback: ", err = e.msg
+      return nil
+
 proc mixnet_gossipsub_test() {.async: (raises: [Exception]).} =
   let
     numberOfNodes = 5
@@ -120,14 +130,7 @@ proc mixnet_gossipsub_test() {.async: (raises: [Exception]).} =
       error "Mix protocol initialization failed", err = error
       return
 
-    let mixConn = proc(
-        destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
-    ): Connection {.gcsafe, raises: [].} =
-      try:
-        return mixProto.toConnection(destPeerId, Opt.none(MultiAddress), codec)
-      except CatchableError as e:
-        error "Error during execution of MixEntryConnection callback: ", err = e.msg
-        return nil
+    let mixConnCb = makeMixConnCb(mixProto)
 
     let mixPeerSelect = proc(
         allPeers: HashSet[PubSubPeer],
@@ -146,7 +149,7 @@ proc mixnet_gossipsub_test() {.async: (raises: [Exception]).} =
       triggerSelf = true,
       customConnCallbacks = some(
         CustomConnectionCallbacks(
-          customConnCreationCB: mixConn, customPeerSelectionCB: mixPeerSelect
+          customConnCreationCB: mixConnCb, customPeerSelectionCB: mixPeerSelect
         )
       ),
     )
