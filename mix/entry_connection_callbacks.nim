@@ -19,7 +19,6 @@ proc createMixEntryConnection*(
       destMultiAddr: Option[MultiAddress],
       destPeerId: PeerId,
   ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
-    echo ">>>>> ", srcMix.mixNodeInfo, " - ", whoAmI
     try:
       await srcMix.anonymizeLocalProtocolSend(whoAmI, msg, proto, destMultiAddr, destPeerId)
     except CatchableError as e:
