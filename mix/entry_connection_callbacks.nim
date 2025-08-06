@@ -2,11 +2,13 @@ import bearssl/rand, chronos, chronicles
 import std/[options, sequtils, sets]
 import libp2p/[multiaddress, protocols/pubsub/pubsubpeer, switch]
 import ./[entry_connection, mix_protocol, protocol]
+import ./mix_node
 
 const D* = 4 # No. of peers to forward to
 
 proc createMixEntryConnection*(
     srcMix: MixProtocol,
+    whoAmI: PeerId,
     destAddr: Option[MultiAddress],
     destPeerId: PeerId,
     codec: string,
@@ -17,8 +19,9 @@ proc createMixEntryConnection*(
       destMultiAddr: Option[MultiAddress],
       destPeerId: PeerId,
   ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
+    echo ">>>>> ", srcMix.mixNodeInfo, " - ", whoAmI
     try:
-      await srcMix.anonymizeLocalProtocolSend(msg, proto, destMultiAddr, destPeerId)
+      await srcMix.anonymizeLocalProtocolSend(whoAmI, msg, proto, destMultiAddr, destPeerId)
     except CatchableError as e:
       error "Error during execution of anonymizeLocalProtocolSend: ", err = e.msg
     return

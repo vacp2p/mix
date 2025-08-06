@@ -13,7 +13,7 @@ import
 const MixProtocolID* = "/mix/1.0.0"
 
 type MixProtocol* = ref object of LPProtocol
-  mixNodeInfo: MixNodeInfo
+  mixNodeInfo*: MixNodeInfo
   pubNodeInfo: Table[PeerId, MixPubInfo]
   switch: Switch
   tagManager: TagManager
@@ -160,6 +160,7 @@ proc handleMixNodeConnection(
 
 proc anonymizeLocalProtocolSend*(
     mixProto: MixProtocol,
+    whoAmI: PeerId,
     msg: seq[byte],
     proto: ProtocolType,
     destMultiAddr: Option[MultiAddress],
@@ -202,7 +203,13 @@ proc anonymizeLocalProtocolSend*(
   if index != -1:
     availableIndices.del(index)
   else:
+    echo "********************"
+    echo "********************"
+    echo "I AM: ", whoAmI, " and choose ", destPeerId, " in anonymizeLocalProtocolSend and it does not support mix"
     error "Destination does not support Mix"
+    echo pubNodeInfoKeys
+    echo "********************"
+    echo "********************"
     return
 
   for i in 0 ..< L:

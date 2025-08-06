@@ -126,22 +126,26 @@ proc mixnet_gossipsub_test() {.async.} =
       return
 
     let mixConn = proc(
-        destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
+        whoAmI: PeerId, destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
     ): Connection {.gcsafe, raises: [].} =
       try:
-        return mixProto.createMixEntryConnection(destAddr, destPeerId, codec)
+        echo " MIX CONN: -  I AM: ", whoAmI, " - DESTADDR ", destAddr, " - DESTPEERID ", destPeerId
+        return mixProto.createMixEntryConnection(whoAmI, destAddr, destPeerId, codec)
       except CatchableError as e:
         error "Error during execution of MixEntryConnection callback: ", err = e.msg
         return nil
 
     let mixPeerSelect = proc(
+        whoAmI:  PeerId,
         allPeers: HashSet[PubSubPeer],
         directPeers: HashSet[PubSubPeer],
         meshPeers: HashSet[PubSubPeer],
         fanoutPeers: HashSet[PubSubPeer],
     ): HashSet[PubSubPeer] {.gcsafe, raises: [].} =
       try:
-        return mixPeerSelection(allPeers, directPeers, meshPeers, fanoutPeers)
+        let x =  mixPeerSelection(allPeers, directPeers, meshPeers, fanoutPeers)
+        echo "I AM ", whoAmI, " AND I AM SENDING MSGS TO ", x
+        return x
       except CatchableError as e:
         error "Error during execution of MixPeerSelection callback: ", err = e.msg
         return initHashSet[PubSubPeer]()
@@ -161,6 +165,17 @@ proc mixnet_gossipsub_test() {.async.} =
     nodes.add((switch[i], gossip, mixProto, i))
 
   await connectNodesTCP(nodes)
+
+
+  echo "=========================================="
+  echo "=========================================="
+  echo "=========================================="
+  echo "=========================================="
+  echo "NODE SUMMARY: "
+  for i, node in nodes:
+    echo i, "---",  node.switch.peerInfo.peerId,  " - ", node.switch.peerInfo.addrs[0]
+
+
 
   var allFuts: seq[Future[void]]
   for node in nodes:
