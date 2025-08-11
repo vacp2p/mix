@@ -153,7 +153,7 @@ proc computeBetaGammaDelta(
         return err("Error in aes: " & error)
     else:
       let routingInfo = RoutingInfo.init(
-        hop[i + 1], delay[i + 1], gamma, beta[0 .. (((r * (t + 1)) - t) * k) - 1]
+        hop[i + 1], delay[i], gamma, beta[0 .. (((r * (t + 1)) - t) * k) - 1]
       )
 
       let serializedRoutingInfo = routingInfo.serialize().valueOr:
