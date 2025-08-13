@@ -10,9 +10,6 @@ proc init*(T: typedesc[MixMessage], message: openArray[byte], codec: string): T 
   return T(message: @message, codec: codec)
 
 proc serialize*(mixMsg: MixMessage): Result[seq[byte], string] =
-  if mixMsg.codec.len == 0:
-    return err("serialization failed: codec cannot be empty")
-
   let vbytes = toBytes(mixMsg.codec.len.uint64, Leb128)
   if vbytes.len > 2:
     return err("serialization failed: codec length exceeds 2 bytes")

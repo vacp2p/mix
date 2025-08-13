@@ -1,5 +1,7 @@
 import results
 import ./config
+import bearssl/rand
+import std/sequtils
 
 type Header* = object
   Alpha: seq[byte]
@@ -22,6 +24,20 @@ proc serialize*(header: Header): Result[seq[byte], string] =
   if len(header.Gamma) != gammaSize:
     return err("Gamma must be exactly " & $gammaSize & " bytes")
   return ok(header.Alpha & header.Beta & header.Gamma)
+
+proc deserialize*(
+    T: typedesc[Header], serializedHeader: openArray[byte]
+): Result[T, string] =
+  if len(serializedHeader) < headerSize:
+    return err("Serialized header must be exactly " & $headerSize & " bytes")
+
+  let header = Header(
+    Alpha: serializedHeader[0 .. (alphaSize - 1)],
+    Beta: serializedHeader[alphaSize .. (alphaSize + betaSize - 1)],
+    Gamma: serializedHeader[(alphaSize + betaSize) .. (headerSize - 1)],
+  )
+
+  ok(header)
 
 type Message* = object
   Content: seq[byte]
@@ -149,10 +165,59 @@ proc deserialize*(T: typedesc[SphinxPacket], data: openArray[byte]): Result[T, s
   if len(data) != packetSize:
     return err("Sphinx packet size must be exactly " & $packetSize & " bytes")
 
-  let header = Header(
-    Alpha: data[0 .. (alphaSize - 1)],
-    Beta: data[alphaSize .. (alphaSize + betaSize - 1)],
-    Gamma: data[(alphaSize + betaSize) .. (headerSize - 1)],
-  )
+  let header = ?Header.deserialize(data)
 
   return ok(SphinxPacket(Hdr: header, Payload: data[headerSize ..^ 1]))
+
+type
+  secret* = seq[seq[byte]]
+
+  key* = seq[byte]
+
+  I* = array[surbIdLen, byte]
+
+  SURB* = object
+    hop*: Hop
+    header*: Header
+    key*: key
+    secret*: Opt[secret]
+
+proc serializeMessageWithSURBs*(
+    msg: seq[byte], surbs: seq[SURB], rng: ref HmacDrbgContext
+): Result[seq[byte], string] =
+  if surbs.len > high(int8):
+    return err("too many SURBs")
+  let surbBytes =
+    surbs.mapIt(?it.hop.serialize() & ?it.header.serialize() & it.key).concat()
+  ok(byte(surbs.len) & surbBytes & msg)
+
+proc readBytes(
+    data: seq[byte], offset: var int, dataLen: int = -1
+): Result[seq[byte], string] =
+  if dataLen > 0:
+    if data.len < offset + dataLen:
+      return err("not enough data")
+
+    let slice = data[offset ..< offset + dataLen]
+    offset += dataLen
+    return ok(slice)
+  elif data.len < offset:
+    return err("not enough data")
+
+  let slice = data[offset .. ^1]
+  offset = data.len
+  return ok(slice)
+
+proc extractSURBs*(msg: seq[byte]): Result[(seq[SURB], seq[byte]), string] =
+  var offset = 0
+  let surbsLenBytes = ?readBytes(msg, offset, 1)
+  let surbsLen = int(surbsLenBytes[0])
+  var surbs: seq[SURB] = newSeq[SURB](surbsLen)
+  for i in 0 ..< surbsLen:
+    let hopBytes = ?readBytes(msg, offset, addrSize)
+    let headerBytes = ?readBytes(msg, offset, headerSize)
+    surbs[i].hop = ?Hop.deserialize(hopBytes)
+    surbs[i].header = ?Header.deserialize(headerBytes)
+    surbs[i].key = ?readBytes(msg, offset, k)
+  let msg = ?readBytes(msg, offset)
+  return ok((surbs, msg))

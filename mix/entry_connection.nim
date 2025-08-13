@@ -1,6 +1,7 @@
 import hashes, chronos, stew/byteutils, results, chronicles
 import libp2p/stream/connection
 import ./mix_protocol
+import ./config
 from fragmentation import dataSize
 
 type
@@ -33,14 +34,20 @@ type MixDialer* = proc(
   msg: seq[byte], codec: string, destination: Destination
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true).}
 
+type MixParameters* = object
+  expectReply*: Opt[bool]
+  numSurbs*: Opt[uint8]
+
 type MixEntryConnection* = ref object of Connection
   destination: Destination
   codec: string
   mixDialer: MixDialer
+  params: Opt[MixParameters]
 
 method readExactly*(
     self: MixEntryConnection, pbytes: pointer, nbytes: int
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError]), public.} =
+  await sleepAsync(10.minutes) # TODO: implement readExactly
   raise
     newException(LPStreamError, "readExactly not implemented for MixEntryConnection")
 
@@ -102,9 +109,6 @@ method writeLp*(
 proc shortLog*(self: MixEntryConnection): string {.raises: [].} =
   "[MixEntryConnection] Destination: " & $self.destination
 
-method initStream*(self: MixEntryConnection) =
-  discard
-
 method closeImpl*(
     self: MixEntryConnection
 ): Future[void] {.async: (raises: [], raw: true).} =
@@ -125,8 +129,10 @@ proc new*(
     destination: Destination,
     codec: string,
     mixDialer: MixDialer,
+    params: Opt[MixParameters],
 ): T =
-  let instance = T(destination: destination, codec: codec, mixDialer: mixDialer)
+  let instance =
+    T(destination: destination, codec: codec, mixDialer: mixDialer, params: params)
 
   when defined(libp2p_agents_metrics):
     instance.shortAgent = connection.shortAgent
@@ -138,7 +144,16 @@ proc new*(
     srcMix: MixProtocol,
     destination: Destination,
     codec: string,
+    params: Opt[MixParameters],
 ): T {.raises: [].} =
+  let params = params.get(MixParameters())
+  let expectReply = params.expectReply.get(false)
+  let surbs =
+    if expectReply:
+      params.numSurbs.get(defaultSurbs)
+    else:
+      0
+
   var sendDialerFunc = proc(
       msg: seq[byte], codec: string, dest: Destination
   ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
@@ -149,19 +164,26 @@ proc new*(
         else:
           (Opt.none(PeerId), Opt.some(MixDestination.init(dest.peerId, dest.address)))
 
-      await srcMix.anonymizeLocalProtocolSend(msg, codec, peerId, destination)
+      await srcMix.anonymizeLocalProtocolSend(msg, codec, peerId, destination, surbs)
     except CatchableError as e:
       error "Error during execution of anonymizeLocalProtocolSend: ", err = e.msg
     return
 
-  T.new(srcMix, destination, codec, sendDialerFunc)
+  T.new(srcMix, destination, codec, sendDialerFunc, Opt.some(params))
 
 proc toConnection*(
-    srcMix: MixProtocol, destination: Destination | PeerId, codec: string
-): Connection {.gcsafe, raises: [].} =
+    srcMix: MixProtocol,
+    destination: Destination | PeerId,
+    codec: string,
+    params: Opt[MixParameters] = Opt.none(MixParameters),
+): Result[Connection, string] {.gcsafe, raises: [].} =
   let dest =
     when destination is PeerId:
       Destination.mixNode(destination)
     else:
       destination
-  MixEntryConnection.new(srcMix, dest, codec)
+
+  if dest.kind == DestinationType.ForwardAddr and not srcMix.hasFwdBehavior(codec):
+    return err("no forward behavior for codec")
+
+  ok(MixEntryConnection.new(srcMix, dest, codec, params))

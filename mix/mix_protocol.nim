@@ -18,6 +18,18 @@ type MixProtocol* = ref object of LPProtocol
   switch: Switch
   tagManager: TagManager
   exitLayer: ExitLayer
+  rng: ref HmacDrbgContext
+  # TODO: might require cleanup?
+  idToSKey: Table[array[surbIdLen, byte], seq[(secret, key)]]
+  fwdRWBehavior: TableRef[string, fwdBehaviorCb]
+
+proc hasFwdBehavior*(mixProto: MixProtocol, codec: string): bool =
+  return mixProto.fwdRWBehavior.hasKey(codec)
+
+proc registerFwdBehavior*(
+    mixProto: MixProtocol, codec: string, fwdBehavior: fwdBehaviorCb
+) =
+  mixProto.fwdRWBehavior[codec] = fwdBehavior
 
 proc loadMixNodeInfo*(
     index: int, nodeFolderInfoPath: string = "./nodeInfo"
@@ -86,33 +98,42 @@ proc handleMixNodeConnection(
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "INVALID_SPHINX"])
     return
 
+  echo "\e[0;31m::::::::: I AM ",
+    mixProto.switch.peerInfo.peerId, " and received a msg with status ", status, "\e[0m"
+
   case status
   of Exit:
-    mix_messages_recvd.inc(labelValues = ["Exit"])
+    mix_messages_recvd.inc(labelValues = [$status])
     # This is the exit node, forward to destination
     let msgChunk = MessageChunk.deserialize(processedPkt).valueOr:
       error "Deserialization failed", err = error
-      mix_messages_error.inc(labelValues = ["Exit", "INVALID_SPHINX"])
+      mix_messages_error.inc(labelValues = [$status, "INVALID_SPHINX"])
       return
 
     let unpaddedMsg = unpadMessage(msgChunk).valueOr:
       error "Unpadding message failed", err = error
-      mix_messages_error.inc(labelValues = ["Exit", "INVALID_SPHINX"])
+      mix_messages_error.inc(labelValues = [$status, "INVALID_SPHINX"])
       return
 
     let deserialized = MixMessage.deserialize(unpaddedMsg).valueOr:
       error "Deserialization failed", err = error
-      mix_messages_error.inc(labelValues = ["Exit", "INVALID_SPHINX"])
+      mix_messages_error.inc(labelValues = [$status, "INVALID_SPHINX"])
       return
 
-    trace "Exit node - Received mix message: ",
+    let (surbs, message) = extractSURBs(deserialized.message).valueOr:
+      error "Extracting surbs from payload failed", err = error
+      mix_messages_error.inc(labelValues = [$status, "INVALID_MSG_SURBS"])
+      return
+
+    trace "Exit node - Received mix message",
       receiver = multiAddr, message = deserialized.message, codec = deserialized.codec
 
-    await mixProto.exitLayer.onMessage(
-      deserialized.codec, deserialized.message, nextHop
-    )
+    await mixProto.exitLayer.onMessage(deserialized.codec, message, nextHop, surbs)
 
-    mix_messages_forwarded.inc(labelValues = ["Exit"])
+    mix_messages_forwarded.inc(labelValues = [$status])
+  of Reply:
+    echo "REPLY STATE !!!!!!!!!!!"
+    # TODO: process reply at entry side
   of Intermediate:
     trace "# Intermediate: ", multiAddr = multiAddr
     # Add delay
@@ -163,9 +184,6 @@ proc handleMixNodeConnection(
         except CatchableError as e:
           error "Failed to close outgoing stream: ", err = e.msg
       mix_messages_error.inc(labelValues = ["Intermediate", "DAIL_FAILED"])
-  of Reply:
-    # TODO: implement
-    discard
   of Duplicate:
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "DUPLICATE"])
     discard
@@ -173,11 +191,170 @@ proc handleMixNodeConnection(
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "INVALID_MAC"])
     discard
 
-proc getMaxMessageSizeForCodec*(codec: string): Result[int, string] =
+proc getMaxMessageSizeForCodec*(
+    codec: string, numberOfSurbs: uint8 = 0
+): Result[int, string] =
   let serializedMsg = ?MixMessage.init(@[], codec).serialize()
-  if serializedMsg.len > dataSize:
+  var totalLen = serializedMsg.len + surbLenSize + (int(numberOfSurbs) * surbSize)
+  if numberOfSurbs > 0:
+    totalLen += surbIdLen
+  if totalLen > dataSize:
     return err("cannot encode messages for this codec")
-  return ok(dataSize - serializedMsg.len)
+  return ok(dataSize - totalLen)
+
+proc buildSurbs(
+    mixProto: MixProtocol, numSurbs: uint8, skipPeer: PeerId
+): Result[seq[SURB], string] =
+  var response: seq[SURB]
+  var surbSK: seq[(secret, key)] = @[]
+  var id: I
+  hmacDrbgGenerate(mixProto.rng[], id)
+
+  echo "\e[0;31mI AM: ", mixProto.switch.peerInfo.peerId, "\e[0m"
+  echo "\e[0;31mDESTINATION IS: ", skipPeer, "\e[0m"
+
+  for _ in uint8(0) ..< numSurbs:
+    var
+      multiAddrs: seq[string] = @[]
+      publicKeys: seq[FieldElement] = @[]
+      hops: seq[Hop] = @[]
+      delay: seq[seq[byte]] = @[]
+
+    # Select L mix nodes at random
+    let numMixNodes = mixProto.pubNodeInfo.len
+
+    if mixProto.pubNodeInfo.len < L:
+      return err("No. of public mix nodes less than path length")
+
+    var
+      pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
+      randPeerId: PeerId
+      availableIndices = toSeq(0 ..< numMixNodes)
+
+    echo "\e[0;31mSURB PATH: :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::\e[0m\n"
+
+    var i = 0
+    while i < L:
+      let (multiAddr, mixPubKey, delayMillisec) =
+        if i < L - 1:
+          let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
+            return err("failed to generate random num: " & error)
+          let selectedIndex = availableIndices[randomIndexPosition]
+          randPeerId = pubNodeInfoKeys[selectedIndex]
+          if randPeerId == skipPeer:
+            continue
+
+          availableIndices.del(randomIndexPosition)
+          debug "Selected mix node for surbs: ", indexInPath = i, peerId = randPeerId
+          let mixPubInfo = getMixPubInfo(mixProto.pubNodeInfo.getOrDefault(randPeerId))
+          # Compute delay
+          let delayMillisec = cryptoRandomInt(3).valueOr:
+            mix_messages_error.inc(labelValues = ["Entry/SURB", "NON_RECOVERABLE"])
+            return err("failed to generate random number: " & error)
+          (mixPubInfo[0], mixPubInfo[1], delayMillisec)
+        else:
+          let mixPubInfo = mixProto.mixNodeInfo.getMixNodeInfo()
+          (mixPubInfo[0], mixPubInfo[1], 0)
+
+      echo "\e[0;31m" & $i & " - " & multiAddr & "\e[0m\n"
+
+      multiAddrs.add(multiAddr)
+      publicKeys.add(mixPubKey)
+
+      let multiAddrBytes = multiAddrToBytes(multiAddr).valueOr:
+        mix_messages_error.inc(labelValues = ["Entry/SURB", "INVALID_MIX_INFO"])
+        return err("failed to convert multiaddress to bytes: " & error)
+
+      hops.add(Hop.init(multiAddrBytes))
+
+      delay.add(uint16ToBytes(delayMillisec.uint16))
+
+      i = i + 1
+
+    let (destAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
+    let destAddrBytes = multiAddrToBytes(destAddr).valueOr:
+      mix_messages_error.inc(labelValues = ["Entry/SURBS", "INVALID_DEST"])
+      return err("failed to convert multiaddress to bytes: " & error)
+    let dest = Hop.init(destAddrBytes)
+
+    let surb = createSURB(publicKeys, delay, hops, dest, id).valueOr:
+      return err(error)
+
+    surbSK.add((surb.secret.get(), surb.key))
+
+    response.add(surb)
+
+  if surbSK.len != 0:
+    mixProto.idToSKey[id] = surbSK
+
+  return ok(response)
+
+proc prepareMsgWithSurbs(
+    mixProto: MixProtocol, msg: seq[byte], numSurbs: uint8 = 0, skipPeer: PeerId
+): Result[seq[byte], string] =
+  let surbs = buildSurbs(mixProto, numSurbs, skipPeer).valueOr:
+    return err(error)
+
+  let serialized = ?serializeMessageWithSURBs(msg, surbs, mixProto.rng)
+
+  ok(serialized)
+
+proc sendPacket(
+    mixProto: MixProtocol, multiAddrs: string, sphinxPacket: seq[byte], label: string
+) {.async: (raises: []).} =
+  # Send the wrapped message to the first mix node in the selected path
+  let parts = multiAddrs.split("/p2p/")
+  if parts.len != 2:
+    error "Invalid multiaddress format", parts = parts
+    mix_messages_error.inc(labelValues = [label, "NON_RECOVERABLE"])
+    return
+
+  let firstMixAddr = MultiAddress.init(parts[0]).valueOr:
+    error "Failed to initialize MultiAddress", err = error
+    mix_messages_error.inc(labelValues = [label, "NON_RECOVERABLE"])
+    return
+
+  let firstMixPeerId = PeerId.init(parts[1]).valueOr:
+    error "Failed to initialize PeerId", err = error
+    mix_messages_error.inc(labelValues = [label, "NON_RECOVERABLE"])
+    return
+
+  var nextHopConn: Connection
+  try:
+    nextHopConn =
+      await mixProto.switch.dial(firstMixPeerId, @[firstMixAddr], @[MixProtocolID])
+    await nextHopConn.writeLp(sphinxPacket)
+    mix_messages_forwarded.inc(labelValues = ["Entry"])
+  except CatchableError as e:
+    error "Failed to send message to next hop: ", err = e.msg
+    mix_messages_error.inc(labelValues = [label, "SEND_FAILED"])
+  finally:
+    if nextHopConn != nil:
+      try:
+        await nextHopConn.close()
+      except CatchableError as e:
+        error "Failed to close outgoing stream: ", err = e.msg
+
+proc buildMessage(
+    msg: seq[byte], codec: string, multiAddr: string
+): Result[Message, (string, string)] =
+  let mixMsg = MixMessage.init(msg, codec)
+
+  let serialized = mixMsg.serialize().valueOr:
+    return err(("message serialization failed: " & error, "NON_RECOVERABLE"))
+
+  if len(serialized) > dataSize:
+    return err(("message size exceeds maximum payload size", "INVALID_SIZE"))
+
+  let peerId = getPeerIdFromMultiAddr(multiAddr).valueOr:
+    return err(("failed to get peer id from multiaddress: " & error, "INVALID_DEST"))
+
+  let paddedMsg = padMessage(serialized, peerId)
+
+  let serializedMsgChunk = paddedMsg.serialize().valueOr:
+    return err(("failed to serialize padded message: " & error, "NON_RECOVERABLE"))
+
+  ok(Message.init(serializedMsgChunk))
 
 type MixDestination* = object
   peerId*: PeerId
@@ -195,6 +372,7 @@ proc anonymizeLocalProtocolSend*(
     codec: string,
     destPeerId: Opt[PeerId],
     fwdDestination: Opt[MixDestination],
+    numSurbs: uint8,
 ) {.async.} =
   ## destPeerId: use when dest == exit
   ## fwdDestination: use when dest != exit
@@ -203,35 +381,16 @@ proc anonymizeLocalProtocolSend*(
     (destPeerId.isNone and fwdDestination.isSome),
     "specify either the destPeerId or destination but not both"
 
-  let mixMsg = MixMessage.init(msg, codec)
-
-  let serialized = mixMsg.serialize().valueOr:
-    error "Serialization failed", err = error
-    mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
-    return
-
-  if len(serialized) > dataSize:
-    error "Message size exceeds maximum payload size",
-      size = len(serialized), limit = dataSize
-    mix_messages_error.inc(labelValues = ["Entry", "INVALID_SIZE"])
-    return
-
   let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
 
-  let peerId = getPeerIdFromMultiAddr(multiAddr).valueOr:
-    error "Failed to get peer id from multiaddress", err = error
-    mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
-    return
-
   mix_messages_recvd.inc(labelValues = ["Entry"])
-
-  let paddedMsg = padMessage(serialized, peerId)
 
   var
     multiAddrs: seq[string] = @[]
     publicKeys: seq[FieldElement] = @[]
     hop: seq[Hop] = @[]
     delay: seq[seq[byte]] = @[]
+    exitNode: PeerId
 
   # Select L mix nodes at random
   let numMixNodes = mixProto.pubNodeInfo.len
@@ -267,6 +426,7 @@ proc anonymizeLocalProtocolSend*(
   while i < L:
     if destPeerId.isSome and i == L - 1:
       randPeerId = destPeerId.value()
+      exitNode = destPeerId.value()
     else:
       let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
         error "Failed to genanrate random number", err = error
@@ -280,6 +440,9 @@ proc anonymizeLocalProtocolSend*(
       # Skip the destination peer
       if randPeerId == fwdDestination.value().peerId:
         continue
+      # Last hop will be the exit node that will forward the request
+      if i == L - 1:
+        exitNode = randPeerId
 
     debug "Selected mix node: ", indexInPath = i, peerId = randPeerId
 
@@ -310,10 +473,6 @@ proc anonymizeLocalProtocolSend*(
     delay.add(uint16ToBytes(delayMillisec.uint16))
 
     i = i + 1
-  let serializedMsgChunk = paddedMsg.serialize().valueOr:
-    error "Failed to serialize padded message", err = error
-    mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
-    return
 
   let destHop =
     if fwdDestination.isSome:
@@ -326,46 +485,44 @@ proc anonymizeLocalProtocolSend*(
     else:
       Hop()
 
+  let msgWithSurbs = prepareMsgWithSurbs(mixProto, msg, numSurbs, exitNode).valueOr:
+    error "Could not prepend SURBs", err = error
+    return
+
+  let message = buildMessage(msgWithSurbs, codec, multiAddr).valueOr:
+    error "Error building message", err = error[0]
+    mix_messages_error.inc(labelValues = ["Entry", error[1]])
+    return
+
   # Wrap in Sphinx packet
-  let sphinxPacket = wrapInSphinxPacket(
-    Message.init(serializedMsgChunk), publicKeys, delay, hop, destHop
-  ).valueOr:
+  let sphinxPacket = wrapInSphinxPacket(message, publicKeys, delay, hop, destHop).valueOr:
     error "Failed to wrap in sphinx packet", err = error
     mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
     return
 
   # Send the wrapped message to the first mix node in the selected path
-  let parts = multiAddrs[0].split("/p2p/")
-  if parts.len != 2:
-    error "Invalid multiaddress format", parts = parts
-    mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
+  await mixProto.sendPacket(multiAddrs[0], sphinxPacket, "Entry")
+
+proc reply(
+    mixProto: MixProtocol, surb: SURB, msg: seq[byte]
+) {.async: (raises: [CancelledError]).} =
+  let multiAddr = bytesToMultiAddr(surb.hop.getHop()).valueOr:
+    error "could not obtain multiaddress from hop", err = error
     return
 
-  let firstMixAddr = MultiAddress.init(parts[0]).valueOr:
-    error "Failed to initialize MultiAddress", err = error
-    mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
+  echo "ON REPLY!::::: NODE: PEERID ", mixProto.switch.peerInfo.peerId
+  echo "ON REPLY!::::: MADDR ", multiAddr
+
+  # Message does not require a codec, as it is already associated to a specific I
+  let message = buildMessage(msg, "", multiAddr).valueOr:
+    error "could not build reply message", err = error
     return
 
-  let firstMixPeerId = PeerId.init(parts[1]).valueOr:
-    error "Failed to initialize PeerId", err = error
-    mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
+  let sphinxPacket = useSURB(surb.header, surb.key, message).valueOr:
+    error "Use SURB error", err = error
     return
 
-  var nextHopConn: Connection
-  try:
-    nextHopConn =
-      await mixProto.switch.dial(firstMixPeerId, @[firstMixAddr], @[MixProtocolID])
-    await nextHopConn.writeLp(sphinxPacket)
-    mix_messages_forwarded.inc(labelValues = ["Entry"])
-  except CatchableError as e:
-    error "Failed to send message to next hop: ", err = e.msg
-    mix_messages_error.inc(labelValues = ["Entry", "SEND_FAILED"])
-  finally:
-    if nextHopConn != nil:
-      try:
-        await nextHopConn.close()
-      except CatchableError as e:
-        error "Failed to close outgoing stream: ", err = e.msg
+  await mixProto.sendPacket(multiAddr, sphinxPacket, "Reply")
 
 proc new*(
     T: typedesc[MixProtocol],
@@ -373,14 +530,23 @@ proc new*(
     pubNodeInfo: Table[PeerId, MixPubInfo],
     switch: Switch,
     tagManager: TagManager = TagManager.new(),
+    rng: ref HmacDrbgContext = newRng(),
 ): T =
   let mixProto = new(T)
   mixProto.mixNodeInfo = mixNodeInfo
   mixProto.pubNodeInfo = pubNodeInfo
   mixProto.switch = switch
   mixProto.tagManager = tagManager
-  mixProto.exitLayer = ExitLayer.init(switch)
+  mixProto.fwdRWBehavior = newTable[string, fwdBehaviorCb]()
+
+  let onReplyDialer = proc(
+      surb: SURB, message: seq[byte]
+  ) {.async: (raises: [CancelledError]).} =
+    await mixProto.reply(surb, message)
+
+  mixProto.exitLayer = ExitLayer.init(switch, onReplyDialer, mixProto.fwdRWBehavior)
   mixProto.codecs = @[MixProtocolID]
+  mixProto.rng = rng
   mixProto.handler = proc(
       conn: Connection, proto: string
   ) {.async: (raises: [CancelledError]).} =
@@ -393,6 +559,7 @@ proc new*(
     index, numNodes: int,
     switch: Switch,
     nodeFolderInfoPath: string = ".",
+    rng: ref HmacDrbgContext = newRng(),
 ): Result[T, string] =
   let mixNodeInfo = loadMixNodeInfo(index, nodeFolderInfoPath / fmt"nodeInfo").valueOr:
     return err("Failed to load mix node info for index " & $index & " - err: " & error)
@@ -402,7 +569,8 @@ proc new*(
   ).valueOr:
     return err("Failed to load mix pub info for index " & $index & " - err: " & error)
 
-  let mixProto = MixProtocol.new(mixNodeInfo, pubNodeInfo, switch, TagManager.new())
+  let mixProto =
+    MixProtocol.new(mixNodeInfo, pubNodeInfo, switch, TagManager.new(), rng)
 
   return ok(mixProto)
 
