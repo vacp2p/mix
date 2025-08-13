@@ -1,9 +1,7 @@
 import chronicles, chronos, results, strutils
 import std/[enumerate, sysrand]
 import libp2p
-import libp2p/[crypto/secp]
-import ./protocols/noresp_ping
-
+import libp2p/[crypto/secp, protocols/ping]
 import ../mix
 
 proc cryptoRandomInt(max: int): Result[int, string] =
@@ -76,20 +74,33 @@ proc mixnetSimulation() {.async: (raises: [Exception]).} =
 
   var
     mixProto: seq[MixProtocol] = @[]
-    noRespPingProto: seq[NoRespPing] = @[]
+    pingProto: seq[Ping] = @[]
 
   # Start nodes
-  let rng = newRng()
   for index, _ in enumerate(nodes):
-    noRespPingProto.add(noresp_ping.NoRespPing.new(rng = rng))
+    pingProto.add(Ping.new())
 
     let proto = MixProtocol.new(index, numberOfNodes, nodes[index]).valueOr:
       error "Mix protocol initialization failed", err = error
       return
 
+    # We'll fwd requests, so let's register how should the exit node behave
+    proto.registerFwdBehavior(
+      PingCodec,
+      proc(
+          conn: Connection, msg: seq[byte]
+      ): Future[seq[byte]] {.async: (raises: [CancelledError, LPStreamError]).} =
+        debug "writing ping to destination"
+        await conn.write(msg)
+        debug "reading ping from destination"
+        let resultBuf = newSeqUninit[byte](32)
+        await conn.readExactly(addr resultBuf[0], 32)
+        return resultBuf,
+    )
+
     mixProto.add(proto)
 
-    nodes[index].mount(noRespPingProto[index])
+    nodes[index].mount(pingProto[index])
     nodes[index].mount(mixProto[index])
 
     await nodes[index].start()
@@ -108,12 +119,14 @@ proc mixnetSimulation() {.async: (raises: [Exception]).} =
     Destination.forwardToAddr(
       nodes[receiverIndex].peerInfo.peerId, nodes[receiverIndex].peerInfo.addrs[0]
     ),
-    NoRespPingCodec,
+    PingCodec,
+    Opt.some(MixParameters(expectReply: Opt.some(true), numSurbs: Opt.some(byte(1)))),
   ).valueOr:
-    error "could not obtain connection", err = error
+    error "Could not obtain connection", err = error
     return
 
-  discard await noRespPingProto[senderIndex].noRespPing(conn)
+  let response = await pingProto[senderIndex].ping(conn)
+
   await sleepAsync(1.seconds)
 
   deleteNodeInfoFolder()

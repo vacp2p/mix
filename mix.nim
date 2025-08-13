@@ -1,5 +1,5 @@
 import results
-import ./mix/[mix_protocol, mix_node, entry_connection]
+import ./mix/[mix_protocol, mix_node, entry_connection, exit_layer]
 
 export results
 
@@ -21,3 +21,6 @@ export Destination
 export DestinationType
 export forwardToAddr
 export mixNode
+export MixParameters
+export fwdBehaviorCb
+export registerFwdBehavior
