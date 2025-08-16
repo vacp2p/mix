@@ -1,8 +1,8 @@
-import results, strutils
+import results, strutils, net, tables
 import stew/base58
 import config
 
-const addrBytesSize* = 46
+const addrBytesSize* = 46 # Legacy constant for backward compatibility
 
 proc bytesToUInt16*(data: openArray[byte]): Result[uint16, string] =
   if len(data) != 2:
@@ -29,26 +29,53 @@ proc uint32ToBytes*(value: uint32): seq[byte] =
       byte(value and 0xFF),
     ]
 
-proc multiAddrToBytes*(multiAddr: string): Result[seq[byte], string] =
-  var
-    parts = multiAddr.split('/')
-    res: seq[byte] = @[]
-
-  if parts.len != 7:
-    return err("Invalid multiaddress format")
-
-  # IP address (4 bytes) ToDo: Add support for ipv6. Supporting ipv4 only for testing purposes
-  let ipParts = parts[2].split('.')
+proc parseIPv4ToBytes(ipStr: string): Result[seq[byte], string] =
+  let ipParts = ipStr.split('.')
   if ipParts.len != 4:
-    return err("Invalid IP address format")
+    return err("Invalid IPv4 address format")
+
+  var ipBytes: seq[byte] = @[byte(4)] # IP version
   for part in ipParts:
     try:
       let ipPart = parseInt(part)
       if ipPart < 0 or ipPart > 255:
-        return err("Invalid IP address format")
-      res.add(byte(ipPart))
+        return err("Invalid IPv4 address format")
+      ipBytes.add(byte(ipPart))
     except ValueError:
-      return err("Invalid IP address format")
+      return err("Invalid IPv4 address format")
+  ok(ipBytes)
+
+proc parseIPv6ToBytes(ipStr: string): Result[seq[byte], string] =
+  try:
+    let ipv6Addr = parseIpAddress(ipStr)
+    if ipv6Addr.family != IpAddressFamily.IPv6:
+      return err("Invalid IPv6 address")
+
+    var ipBytes: seq[byte] = @[byte(6)] # IP version
+    for i in 0 .. 15:
+      ipBytes.add(ipv6Addr.address_v6[i])
+    ok(ipBytes)
+  except ValueError:
+    err("Invalid IPv6 address format")
+
+proc multiAddrToBytes*(multiAddr: string): Result[seq[byte], string] =
+  let parts = multiAddr.split('/')
+  if parts.len != 7:
+    return err("Invalid multiaddress format")
+
+  # Protocol handler map
+  let ipParsers = {"ip4": parseIPv4ToBytes, "ip6": parseIPv6ToBytes}.toTable()
+
+  # Parse IP address using appropriate handler
+  let parser = ipParsers.getOrDefault(parts[1])
+  if parser.isNil:
+    return err("Unsupported IP version, only ip4 and ip6 are supported")
+
+  let ipBytesRes = parser(parts[2])
+  if ipBytesRes.isErr:
+    return ipBytesRes
+
+  var res = ipBytesRes.get()
 
   # Protocol (1 byte) ToDo: TLS or QUIC
   if parts[3] != "tcp" and parts[3] != "quic":
@@ -81,30 +108,72 @@ proc multiAddrToBytes*(multiAddr: string): Result[seq[byte], string] =
   except Base58Error:
     return err("Invalid Peer ID")
 
-  if res.len != addrSize:
-    return err("Address must be exactly " & $addrSize & " bytes")
+  # Check for correct size based on IP version
+  let expectedSize = if res[0] == 4: ipv4AddrSize else: ipv6AddrSize
+  if res.len != expectedSize:
+    return err("Address must be exactly " & $expectedSize & " bytes")
 
   return ok(res)
 
-proc bytesToMultiAddr*(bytes: openArray[byte]): Result[string, string] =
-  if bytes.len != addrSize:
-    return err("Address must be exactly " & $addrSize & " bytes")
-
+proc bytesIPv4ToString(bytes: openArray[byte], offset: int): string =
   var ipParts: seq[string] = @[]
-  for i in 0 .. 3:
+  for i in offset .. offset + 3:
     ipParts.add($bytes[i])
-      # ToDo: Add support for ipv6. Supporting ipv4 only for testing purposes
+  "/ip4/" & ipParts.join(".")
 
-  let protocol = if bytes[4] == 0: "tcp" else: "quic"
-    # ToDo: TLS or QUIC (Using TCP for testing purposes)
+proc bytesIPv6ToString(bytes: openArray[byte], offset: int): string =
+  var ipv6Bytes: array[16, byte]
+  for i in 0 .. 15:
+    ipv6Bytes[i] = bytes[offset + i]
 
-  let portRes = bytesToUInt16(bytes[5 .. 6])
+  var ipv6Addr: IpAddress
+  ipv6Addr.family = IpAddressFamily.IPv6
+  ipv6Addr.address_v6 = ipv6Bytes
+  "/ip6/" & $ipv6Addr
+
+type IPHandler =
+  tuple[
+    bytesToString: proc(bytes: openArray[byte], offset: int): string {.nimcall.},
+    protocolOffset: int,
+    expectedSize: int,
+  ]
+
+proc bytesToMultiAddr*(bytes: openArray[byte]): Result[string, string] =
+  if bytes.len < 1:
+    return err("Address must be at least 1 byte for version")
+
+  let ipVersion = bytes[0]
+
+  # Define handlers for each IP version
+  let handlers = {
+    4'u8:
+      (bytesToString: bytesIPv4ToString, protocolOffset: 5, expectedSize: ipv4AddrSize),
+    6'u8:
+      (bytesToString: bytesIPv6ToString, protocolOffset: 17, expectedSize: ipv6AddrSize),
+  }.toTable()
+
+  let handler = handlers.getOrDefault(ipVersion)
+  if handler.bytesToString.isNil:
+    return err("Unsupported IP version: " & $ipVersion)
+
+  if bytes.len != handler.expectedSize:
+    return err(
+      "Address must be exactly " & $handler.expectedSize & " bytes for IPv" & $ipVersion
+    )
+
+  # Parse IP address
+  let ipStr = handler.bytesToString(bytes, 1) # Skip version byte
+
+  # Parse protocol
+  let protocol = if bytes[handler.protocolOffset] == 0: "tcp" else: "quic"
+
+  # Parse port
+  let portRes =
+    bytesToUInt16(bytes[handler.protocolOffset + 1 .. handler.protocolOffset + 2])
   if portRes.isErr:
     return err(portRes.error)
-  let port = portRes.get()
 
-  let peerIdBase58 = Base58.encode(bytes[7 ..^ 1])
+  # Parse peer ID
+  let peerIdBase58 = Base58.encode(bytes[handler.protocolOffset + 3 ..^ 1])
 
-  return ok(
-    "/ip4/" & ipParts.join(".") & "/" & protocol & "/" & $port & "/p2p/" & peerIdBase58
-  )
+  ok(ipStr & "/" & protocol & "/" & $portRes.get() & "/p2p/" & peerIdBase58)

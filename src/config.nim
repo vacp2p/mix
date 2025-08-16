@@ -9,7 +9,9 @@ const
   gammaSize* = 16 # Output of HMAC-SHA-256, truncated to 16 bytes
   headerSize* = alphaSize + betaSize + gammaSize # Total header size
   delaySize* = 2 # Delay size
-  addrSize* = (t * k) - delaySize # Address size
+  addrSize* = (t * k) - delaySize # Address size (legacy, for IPv4 compatibility)
+  ipv4AddrSize* = 47 # 1 (version) + 4 (IPv4) + 1 (protocol) + 2 (port) + 39 (peerID)
+  ipv6AddrSize* = 59 # 1 (version) + 16 (IPv6) + 1 (protocol) + 2 (port) + 39 (peerID)
   messageSize* = 2413 - headerSize - k - powSize # Size of the message itself
   payloadSize* = messageSize + powSize + k # Total payload size
   packetSize* = headerSize + payloadSize # Total packet size

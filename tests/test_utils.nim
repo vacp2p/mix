@@ -16,8 +16,9 @@ suite "Utils tests":
         fail()
       let multiAddrBytes = multiAddrBytesRes.get()
 
-      if multiAddrBytes.len != addrSize:
-        error "Incorrect address size", expected = addrSize, actual = multiAddrBytes.len
+      if multiAddrBytes.len != ipv4AddrSize:
+        error "Incorrect IPv4 address size",
+          expected = ipv4AddrSize, actual = multiAddrBytes.len
         fail()
 
       let multiAddrStringRes = bytesToMultiAddr(multiAddrBytes)
@@ -28,6 +29,45 @@ suite "Utils tests":
 
       if multiAddrString != multiAddr:
         error "MultiAddr mismatch", expected = multiAddr, actual = multiAddrString
+        fail()
+
+  test "ipv6_multi_addr_conversion":
+    let ipv6MultiAddrs = [
+      "/ip6/::1/tcp/4242/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC",
+      "/ip6/2001:db8::1/quic/8080/p2p/16Uiu2HAm6WNzw8AssyPscYYi8x1bY5wXyQrGTShRH75bh5dPCjBQ",
+      "/ip6/fe80::1/tcp/1234/p2p/16Uiu2HAmDHw4mwBdEjxjJPhrt8Eq1kvDjXAuwkqCmhNiz363AFV2",
+    ]
+
+    for multiAddr in ipv6MultiAddrs:
+      let multiAddrBytesRes = multiAddrToBytes(multiAddr)
+      if multiAddrBytesRes.isErr:
+        error "IPv6 multiaddress to bytes conversion failed",
+          err = multiAddrBytesRes.error
+        fail()
+      let multiAddrBytes = multiAddrBytesRes.get()
+
+      if multiAddrBytes.len != ipv6AddrSize:
+        error "Incorrect IPv6 address size",
+          expected = ipv6AddrSize, actual = multiAddrBytes.len
+        fail()
+
+      let multiAddrStringRes = bytesToMultiAddr(multiAddrBytes)
+      if multiAddrStringRes.isErr:
+        error "Bytes to IPv6 MultiAddr conversion failed",
+          err = multiAddrStringRes.error
+        fail()
+      let multiAddrString = multiAddrStringRes.get()
+
+      # Note: IPv6 addresses might be formatted differently when converted back
+      # So we check that they parse to the same address
+      let originalBytesRes = multiAddrToBytes(multiAddrString)
+      if originalBytesRes.isErr:
+        error "Round-trip IPv6 conversion failed", err = originalBytesRes.error
+        fail()
+
+      if originalBytesRes.get() != multiAddrBytes:
+        error "IPv6 round-trip mismatch",
+          original = multiAddr, roundtrip = multiAddrString
         fail()
 
   test "invalid_protocol":
@@ -87,6 +127,22 @@ suite "Utils tests":
     )
     if res.isOk:
       error "Expected error for invalid port number, but conversion succeeded"
+      fail()
+
+  test "invalid_ip_version":
+    let res = multiAddrToBytes(
+      "/ip5/127.0.0.1/tcp/4242/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
+    )
+    if res.isOk:
+      error "Expected error for invalid IP version, but conversion succeeded"
+      fail()
+
+  test "invalid_ipv6_address":
+    let res = multiAddrToBytes(
+      "/ip6/invalid::address/tcp/4242/p2p/16Uiu2HAmFkwLVsVh6gGPmSm9R3X4scJ5thVdKfWYeJsKeVrbcgVC"
+    )
+    if res.isOk:
+      error "Expected error for invalid IPv6 address, but conversion succeeded"
       fail()
 
   test "bytes_to_uint16_conversion":
