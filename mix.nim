@@ -17,3 +17,7 @@ export getMaxMessageSizeForCodec
 export deleteNodeInfoFolder
 export deletePubInfoFolder
 export initMixMultiAddrByIndex
+export Destination
+export DestinationType
+export forwardToAddr
+export mixNode

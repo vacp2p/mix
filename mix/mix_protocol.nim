@@ -1,5 +1,5 @@
 import chronicles, chronos, sequtils, strutils, os, results
-import std/[strformat, sysrand], metrics
+import std/[strformat, sysrand, tables], metrics
 import
   ./[
     config, curve25519, exit_connection, fragmentation, mix_message, mix_node, sphinx,
@@ -11,6 +11,32 @@ import
     [protocols/ping, protocols/protocol, stream/connection, stream/lpstream, switch]
 
 const MixProtocolID* = "/mix/1.0.0"
+
+type
+  DestinationType* = enum
+    MixNode
+    ForwardAddr
+
+  Destination* = object
+    peerId*: PeerId
+    case kind*: DestinationType
+    of ForwardAddr:
+      address*: MultiAddress
+    else:
+      discard
+
+proc mixNode*(T: typedesc[Destination], p: PeerId): T =
+  T(kind: DestinationType.MixNode, peerId: p)
+
+proc forwardToAddr*(T: typedesc[Destination], p: PeerId, address: MultiAddress): T =
+  T(kind: DestinationType.ForwardAddr, peerId: p, address: address)
+
+proc `$`*(d: Destination): string =
+  case d.kind
+  of MixNode:
+    "Destination[MixNode](" & $d.peerId & ")"
+  of ForwardAddr:
+    "Destination[ForwardAddr](" & $d.address & "/p2p/" & $d.peerId & ")"
 
 type MixProtocol* = ref object of LPProtocol
   mixNodeInfo: MixNodeInfo
@@ -177,11 +203,7 @@ proc getMaxMessageSizeForCodec*(codec: string): Result[int, string] =
   return ok(dataSize - serializedMsg.len)
 
 proc anonymizeLocalProtocolSend*(
-    mixProto: MixProtocol,
-    msg: seq[byte],
-    codec: string,
-    destPeerId: PeerId,
-    destForwardToAddr: Opt[MultiAddress],
+    mixProto: MixProtocol, msg: seq[byte], codec: string, destination: Destination
 ) {.async.} =
   let mixMsg = MixMessage.init(msg, codec)
 
@@ -217,8 +239,9 @@ proc anonymizeLocalProtocolSend*(
   let numMixNodes = mixProto.pubNodeInfo.len
   var numAvailableNodes = numMixNodes
 
-  if mixProto.pubNodeInfo.hasKey(destPeerId):
-    info "Destination peer is a mix node", destPeerId = destPeerId
+  info "Destination data", dest = destination
+
+  if mixProto.pubNodeInfo.hasKey(destination.peerId):
     numAvailableNodes = numMixNodes - 1
 
   if numAvailableNodes < L:
@@ -232,8 +255,8 @@ proc anonymizeLocalProtocolSend*(
     randPeerId: PeerId
     availableIndices = toSeq(0 ..< numMixNodes)
 
-  if destForwardToAddr.isNone:
-    let index = pubNodeInfoKeys.find(destPeerId)
+  if destination.kind == DestinationType.MixNode:
+    let index = pubNodeInfoKeys.find(destination.peerId)
     if index != -1:
       availableIndices.del(index)
     else:
@@ -242,8 +265,8 @@ proc anonymizeLocalProtocolSend*(
 
   var i = 0
   while i < L:
-    if destForwardToAddr.isNone and i == L - 1:
-      randPeerId = destPeerId
+    if destination.kind == DestinationType.MixNode and i == L - 1:
+      randPeerId = destination.peerId
     else:
       let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
         error "Failed to genanrate random number", err = error
@@ -253,11 +276,12 @@ proc anonymizeLocalProtocolSend*(
       randPeerId = pubNodeInfoKeys[selectedIndex]
       availableIndices.del(randomIndexPosition)
 
-    # Skip the destination peer
-    if destForwardToAddr.isSome and randPeerId == destPeerId:
-      continue
+    if destination.kind == DestinationType.ForwardAddr:
+      # Skip the destination peer
+      if randPeerId == destination.peerId:
+        continue
 
-    info "Selected mix node: ", indexInPath = i, peerId = randPeerId
+    debug "Selected mix node: ", indexInPath = i, peerId = randPeerId
 
     # Extract multiaddress, mix public key, and hop
     let (multiAddr, mixPubKey, _) =
@@ -292,9 +316,9 @@ proc anonymizeLocalProtocolSend*(
     return
 
   let destHop =
-    if destForwardToAddr.isSome:
+    if destination.kind == DestinationType.ForwardAddr:
       #Encode destination
-      let dest = $destForwardToAddr.value & "/p2p/" & $destPeerId
+      let dest = $destination.address & "/p2p/" & $destination.peerId
       let destAddrBytes = multiAddrToBytes(dest).valueOr:
         error "Failed to convert multiaddress to bytes", err = error
         mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])

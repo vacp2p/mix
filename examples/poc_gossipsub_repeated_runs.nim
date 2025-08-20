@@ -116,11 +116,10 @@ proc makeMixConnCb(mixProto: MixProtocol): CustomConnCreationProc =
       destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
   ): Connection {.gcsafe, raises: [].} =
     try:
-      return mixProto.toConnection(destPeerId, Opt.none(MultiAddress), codec)
+      return mixProto.toConnection(destPeerId, codec)
     except CatchableError as e:
       error "Error during execution of MixEntryConnection callback: ", err = e.msg
       return nil
-
 
 proc mixnet_gossipsub_test(): Future[int] {.async: (raises: [Exception]).} =
   let
