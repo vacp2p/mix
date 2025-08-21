@@ -6,7 +6,7 @@ import ./[config, crypto, curve25519, serialization, tag_manager]
 type ProcessingStatus* = enum
   Exit # Packet processed successfully at exit
   Intermediate # Packet processed successfully at intermediate node
-  Reply # Packet processed successfully at exit; a reply message
+  Reply # Reply received at entry node for a message succesfuly processed at exit node
   Duplicate # Packet was discarded due to duplicate tag
   InvalidMAC
     # Packet was discarded due to MAC verification failure
@@ -15,6 +15,9 @@ type ProcessingStatus* = enum
 
     # Function to compute alphas, shared secrets, and blinders
 
+# Compute alpha, an ephemeral public value. Each mix node uses its private key and 
+# alpha to derive a shared session key for that hop. 
+# This session key is used to decrypt and process one layer of the packet.
 proc computeAlpha(
     publicKeys: openArray[FieldElement]
 ): Result[(seq[byte], seq[seq[byte]]), string] =
@@ -111,7 +114,9 @@ proc generateRandomDelay(): seq[byte] =
 
 const paddingLength = (((t + 1) * (r - L)) + 2) * k
 
-# Function to compute betas, gammas, and deltas
+# Function to compute:
+# Beta: The nested encrypted routing information. It encodes the next hop address, the forwarding delay, integrity check Gamma for the next hop, and the Beta for subsequent hops.
+# Gamma: A message authentication code computed over Beta using the session key derived from Alpha. It ensures header integrity at each hop.
 proc computeBetaGamma(
     s: seq[seq[byte]], hop: openArray[Hop], delay: openArray[seq[byte]], destHop: Hop
 ): Result[(seq[byte], seq[byte]), string] = # TODO: name tuples
