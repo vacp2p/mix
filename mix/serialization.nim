@@ -1,6 +1,5 @@
 import results
 import ./config
-import bearssl/rand
 import std/sequtils
 
 type Header* = object
@@ -183,7 +182,7 @@ type
     secret*: Opt[secret]
 
 proc serializeMessageWithSURBs*(
-    msg: seq[byte], surbs: seq[SURB], rng: ref HmacDrbgContext
+    msg: seq[byte], surbs: seq[SURB]
 ): Result[seq[byte], string] =
   if surbs.len > high(int8):
     return err("too many SURBs")

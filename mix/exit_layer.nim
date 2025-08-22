@@ -13,7 +13,7 @@ type ProtocolHandler* = proc(conn: Connection, codec: string): Future[void] {.
   async: (raises: [CancelledError])
 .}
 
-type fwdBehaviorCb* = proc(conn: Connection, msg: seq[byte]): Future[seq[byte]] {.
+type fwdReadBehaviorCb* = proc(conn: Connection): Future[seq[byte]] {.
   async: (raises: [CancelledError, LPStreamError])
 .}
 
@@ -21,7 +21,7 @@ type ExitLayer* = object
   switch: Switch
   pHandler: ProtocolHandler
   onReplyDialer: OnReplyDialer
-  fwdRWBehavior: TableRef[string, fwdBehaviorCb]
+  fwdRBehavior: TableRef[string, fwdReadBehaviorCb]
 
 proc callHandler(
     switch: Switch, conn: Connection, codec: string
@@ -37,12 +37,12 @@ proc init*(
     T: typedesc[ExitLayer],
     switch: Switch,
     onReplyDialer: OnReplyDialer,
-    fwdRWBehavior: TableRef[string, fwdBehaviorCb],
+    fwdRBehavior: TableRef[string, fwdReadBehaviorCb],
 ): T =
   ExitLayer(
     switch: switch,
     onReplyDialer: onReplyDialer,
-    fwdRWBehavior: fwdRWBehavior,
+    fwdRBehavior: fwdRBehavior,
     pHandler: proc(
         conn: Connection, codec: string
     ): Future[void] {.async: (raises: [CancelledError]).} =
@@ -74,7 +74,6 @@ proc reply(
   if surbs.len == 0:
     return
 
-  echo "\e[0;31mREPLYING>>>>>>>>>>>>>>>>>>>>>>>>>", response, "\e[0m"
   let replyConn = MixReplyConnection.new(surbs, self.replyDialerCbFactory())
   defer:
     if not replyConn.isNil:
@@ -88,7 +87,6 @@ proc reply(
 proc runHandler(
     self: ExitLayer, codec: string, message: seq[byte], surbs: seq[SURB]
 ) {.async: (raises: [CancelledError]).} =
-  echo "Exit is handling request >>>>"
   let exitConn = MixExitConnection.new(message)
   defer:
     if not exitConn.isNil:
@@ -107,14 +105,6 @@ proc onMessage*(
     trace "onMessage - exit is destination", codec, message
     await self.runHandler(codec, message, surbs)
     return
-
-  echo "\e[0;32m>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
-  echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
-  echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
-  echo ">>>>>>>>    REPLYING      >>>>>>>>"
-  echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
-  echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
-  echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\e[0m"
 
   # Forward to destination
   let destBytes = getHop(nextHop)
@@ -143,22 +133,24 @@ proc onMessage*(
 
   trace "onMessage - exit is not destination", peerId, locationAddr, codec, message
 
-  if not self.fwdRWBehavior.hasKey(codec):
-    error "No fwdRWBehavior for codec", codec
-    return
-
-  var behaviorCb: fwdBehaviorCb
-  try:
-    behaviorCb = self.fwdRWBehavior[codec]
-  except KeyError:
-    doAssert false, "checked with HasKey"
-
   var destConn: Connection
   var response: seq[byte]
   try:
-    echo "EXIT IS DIALING: ", peerId, locationAddr
     destConn = await self.switch.dial(peerId, @[locationAddr], codec)
-    response = await behaviorCb(destConn, message)
+    await destConn.write(message)
+
+    if surbs.len != 0:
+      if not self.fwdRBehavior.hasKey(codec):
+        error "No fwdRBehavior for codec", codec
+        return
+
+      var behaviorCb: fwdReadBehaviorCb
+      try:
+        behaviorCb = self.fwdRBehavior[codec]
+      except KeyError:
+        doAssert false, "checked with HasKey"
+
+      response = await behaviorCb(destConn)
   except CatchableError as e:
     error "Failed to dial next hop: ", err = e.msg
     mix_messages_error.inc(labelValues = ["ExitLayer", "DIAL_FAILED"])

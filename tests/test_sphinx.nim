@@ -2,6 +2,7 @@
 
 import chronicles, random, results, unittest
 import ../mix/[config, curve25519, serialization, sphinx, tag_manager]
+import bearssl/rand
 
 # Helper function to pad/truncate message
 proc padMessage(message: openArray[byte], size: int): seq[byte] =
@@ -50,6 +51,14 @@ proc createDummyData(): (
     message = Message.init(newSeq[byte](messageSize))
     dest = Hop.init(newSeq[byte](addrSize))
   return (message, privateKeys, publicKeys, delay, hops, dest)
+
+proc randomI(): I =
+  let rng = HmacDrbgContext.new()
+  if rng.isNil:
+    doAssert false, "Failed to creat HmacDrbgContext with system randomness"
+  var id: I
+  hmacDrbgGenerate(rng[], id)
+  return id
 
 # Unit tests for sphinx.nim
 suite "Sphinx Tests":
@@ -305,9 +314,9 @@ suite "Sphinx Tests":
         fail()
 
   test "create_and_use_surb":
-    let (message, privateKeys, publicKeys, delay, hops, dest) = createDummyData()
+    let (message, privateKeys, publicKeys, delay, hops, _) = createDummyData()
 
-    let surbRes = createSURB(publicKeys, delay, hops, dest, default(I))
+    let surbRes = createSURB(publicKeys, delay, hops, randomI())
     if surbRes.isErr:
       error "Create SURB error", err = surbRes.error
     let surb = surbRes.get()
@@ -391,17 +400,17 @@ suite "Sphinx Tests":
       fail()
 
   test "create_surb_empty_public_keys":
-    let (message, _, _, delay, _, dest) = createDummyData()
+    let (message, _, _, delay, _, _) = createDummyData()
 
-    let surbRes = createSURB(@[], delay, @[], dest, default(I))
+    let surbRes = createSURB(@[], delay, @[], randomI())
     if surbRes.isOk:
       error "Expected create SURB error when public keys are empty, but got success"
       fail()
 
   test "surb_sphinx_process_invalid_mac":
-    let (message, privateKeys, publicKeys, delay, hops, dest) = createDummyData()
+    let (message, privateKeys, publicKeys, delay, hops, _) = createDummyData()
 
-    let surbRes = createSURB(publicKeys, delay, hops, dest, default(I))
+    let surbRes = createSURB(publicKeys, delay, hops, randomI())
     if surbRes.isErr:
       error "Create SURB error", err = surbRes.error
     let surb = surbRes.get()
@@ -437,9 +446,9 @@ suite "Sphinx Tests":
       fail()
 
   test "surb_sphinx_process_duplicate_tag":
-    let (message, privateKeys, publicKeys, delay, hops, dest) = createDummyData()
+    let (message, privateKeys, publicKeys, delay, hops, _) = createDummyData()
 
-    let surbRes = createSURB(publicKeys, delay, hops, dest, default(I))
+    let surbRes = createSURB(publicKeys, delay, hops, randomI())
     if surbRes.isErr:
       error "Create SURB error", err = surbRes.error
     let surb = surbRes.get()
@@ -484,14 +493,14 @@ suite "Sphinx Tests":
   test "create_and_use_surb_message_sizes":
     let messageSizes = @[32, 64, 128, 256, 512]
     for size in messageSizes:
-      let (_, privateKeys, publicKeys, delay, hops, dest) = createDummyData()
+      let (_, privateKeys, publicKeys, delay, hops, _) = createDummyData()
       var message = newSeq[byte](size)
       randomize()
       for i in 0 ..< size:
         message[i] = byte(rand(256))
       let paddedMessage = padMessage(message, messageSize)
 
-      let surbRes = createSURB(publicKeys, delay, hops, dest, default(I))
+      let surbRes = createSURB(publicKeys, delay, hops, randomI())
       if surbRes.isErr:
         error "Create SURB error", err = surbRes.error
       let surb = surbRes.get()
