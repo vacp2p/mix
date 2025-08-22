@@ -271,13 +271,7 @@ proc buildSurbs(
 
       i = i + 1
 
-    let (destAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
-    let destAddrBytes = multiAddrToBytes(destAddr).valueOr:
-      mix_messages_error.inc(labelValues = ["Entry/SURBS", "INVALID_DEST"])
-      return err("failed to convert multiaddress to bytes: " & error)
-    let dest = Hop.init(destAddrBytes)
-
-    let surb = createSURB(publicKeys, delay, hops, dest, id).valueOr:
+    let surb = createSURB(publicKeys, delay, hops, Hop(), id).valueOr:
       return err(error)
 
     surbSK.add((surb.secret.get(), surb.key))
