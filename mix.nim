@@ -22,5 +22,5 @@ export DestinationType
 export forwardToAddr
 export mixNode
 export MixParameters
-export fwdBehaviorCb
-export registerFwdBehavior
+export fwdReadBehaviorCb
+export registerFwdReadBehavior

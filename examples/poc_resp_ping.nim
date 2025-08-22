@@ -85,15 +85,13 @@ proc mixnetSimulation() {.async: (raises: [Exception]).} =
       return
 
     # We'll fwd requests, so let's register how should the exit node behave
-    proto.registerFwdBehavior(
+    proto.registerFwdReadBehavior(
       PingCodec,
       proc(
-          conn: Connection, msg: seq[byte]
+          conn: Connection
       ): Future[seq[byte]] {.async: (raises: [CancelledError, LPStreamError]).} =
-        debug "writing ping to destination"
-        await conn.write(msg)
         debug "reading ping from destination"
-        let resultBuf = newSeqUninit[byte](32)
+        let resultBuf = newSeqUninitialized[byte](32)
         await conn.readExactly(addr resultBuf[0], 32)
         return resultBuf,
     )

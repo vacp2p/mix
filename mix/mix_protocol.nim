@@ -21,15 +21,15 @@ type MixProtocol* = ref object of LPProtocol
   rng: ref HmacDrbgContext
   # TODO: might require cleanup?
   idToSKey: Table[array[surbIdLen, byte], seq[(secret, key)]]
-  fwdRWBehavior: TableRef[string, fwdBehaviorCb]
+  fwdRBehavior: TableRef[string, fwdReadBehaviorCb]
 
 proc hasFwdBehavior*(mixProto: MixProtocol, codec: string): bool =
-  return mixProto.fwdRWBehavior.hasKey(codec)
+  return mixProto.fwdRBehavior.hasKey(codec)
 
-proc registerFwdBehavior*(
-    mixProto: MixProtocol, codec: string, fwdBehavior: fwdBehaviorCb
+proc registerFwdReadBehavior*(
+    mixProto: MixProtocol, codec: string, fwdBehavior: fwdReadBehaviorCb
 ) =
-  mixProto.fwdRWBehavior[codec] = fwdBehavior
+  mixProto.fwdRBehavior[codec] = fwdBehavior
 
 proc loadMixNodeInfo*(
     index: int, nodeFolderInfoPath: string = "./nodeInfo"
@@ -98,9 +98,6 @@ proc handleMixNodeConnection(
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "INVALID_SPHINX"])
     return
 
-  echo "\e[0;31m::::::::: I AM ",
-    mixProto.switch.peerInfo.peerId, " and received a msg with status ", status, "\e[0m"
-
   case status
   of Exit:
     mix_messages_recvd.inc(labelValues = [$status])
@@ -132,7 +129,7 @@ proc handleMixNodeConnection(
 
     mix_messages_forwarded.inc(labelValues = [$status])
   of Reply:
-    echo "REPLY STATE !!!!!!!!!!!"
+    error "TODO: IMPLEMENT REPLY STATE"
     # TODO: process reply at entry side
   of Intermediate:
     trace "# Intermediate: ", multiAddr = multiAddr
@@ -210,9 +207,6 @@ proc buildSurbs(
   var id: I
   hmacDrbgGenerate(mixProto.rng[], id)
 
-  echo "\e[0;31mI AM: ", mixProto.switch.peerInfo.peerId, "\e[0m"
-  echo "\e[0;31mDESTINATION IS: ", skipPeer, "\e[0m"
-
   for _ in uint8(0) ..< numSurbs:
     var
       multiAddrs: seq[string] = @[]
@@ -230,8 +224,6 @@ proc buildSurbs(
       pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
       randPeerId: PeerId
       availableIndices = toSeq(0 ..< numMixNodes)
-
-    echo "\e[0;31mSURB PATH: :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::\e[0m\n"
 
     var i = 0
     while i < L:
@@ -256,8 +248,6 @@ proc buildSurbs(
           let mixPubInfo = mixProto.mixNodeInfo.getMixNodeInfo()
           (mixPubInfo[0], mixPubInfo[1], 0)
 
-      echo "\e[0;31m" & $i & " - " & multiAddr & "\e[0m\n"
-
       multiAddrs.add(multiAddr)
       publicKeys.add(mixPubKey)
 
@@ -271,7 +261,7 @@ proc buildSurbs(
 
       i = i + 1
 
-    let surb = createSURB(publicKeys, delay, hops, Hop(), id).valueOr:
+    let surb = createSURB(publicKeys, delay, hops, id).valueOr:
       return err(error)
 
     surbSK.add((surb.secret.get(), surb.key))
@@ -289,7 +279,7 @@ proc prepareMsgWithSurbs(
   let surbs = buildSurbs(mixProto, numSurbs, skipPeer).valueOr:
     return err(error)
 
-  let serialized = ?serializeMessageWithSURBs(msg, surbs, mixProto.rng)
+  let serialized = ?serializeMessageWithSURBs(msg, surbs)
 
   ok(serialized)
 
@@ -504,9 +494,6 @@ proc reply(
     error "could not obtain multiaddress from hop", err = error
     return
 
-  echo "ON REPLY!::::: NODE: PEERID ", mixProto.switch.peerInfo.peerId
-  echo "ON REPLY!::::: MADDR ", multiAddr
-
   # Message does not require a codec, as it is already associated to a specific I
   let message = buildMessage(msg, "", multiAddr).valueOr:
     error "could not build reply message", err = error
@@ -531,14 +518,14 @@ proc new*(
   mixProto.pubNodeInfo = pubNodeInfo
   mixProto.switch = switch
   mixProto.tagManager = tagManager
-  mixProto.fwdRWBehavior = newTable[string, fwdBehaviorCb]()
+  mixProto.fwdRBehavior = newTable[string, fwdReadBehaviorCb]()
 
   let onReplyDialer = proc(
       surb: SURB, message: seq[byte]
   ) {.async: (raises: [CancelledError]).} =
     await mixProto.reply(surb, message)
 
-  mixProto.exitLayer = ExitLayer.init(switch, onReplyDialer, mixProto.fwdRWBehavior)
+  mixProto.exitLayer = ExitLayer.init(switch, onReplyDialer, mixProto.fwdRBehavior)
   mixProto.codecs = @[MixProtocolID]
   mixProto.rng = rng
   mixProto.handler = proc(

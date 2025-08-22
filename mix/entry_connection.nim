@@ -183,7 +183,9 @@ proc toConnection*(
     else:
       destination
 
-  if dest.kind == DestinationType.ForwardAddr and not srcMix.hasFwdBehavior(codec):
+  if dest.kind == DestinationType.ForwardAddr and
+      params.get(MixParameters()).expectReply.get(false) and
+      not srcMix.hasFwdBehavior(codec):
     return err("no forward behavior for codec")
 
   ok(MixEntryConnection.new(srcMix, dest, codec, params))

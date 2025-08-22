@@ -191,19 +191,17 @@ proc createSURB*(
     publicKeys: openArray[FieldElement],
     delay: openArray[seq[byte]],
     hops: openArray[Hop],
-    destHop: Hop,
     id: I,
 ): Result[SURB, string] =
-  if hops.len != 0:
-    assert hops[hops.len - 1] == destHop,
-      "Last element from hops sequence should match the destHop"
+  if id == default(I):
+    return err("id should be initialized")
 
   # Compute alpha and shared secrets
   let (alpha_0, s) = computeAlpha(publicKeys).valueOr:
     return err("Error in alpha generation: " & error)
 
   # Compute beta and gamma
-  let (beta_0, gamma_0) = computeBetaGamma(s, hops, delay, destHop, id).valueOr:
+  let (beta_0, gamma_0) = computeBetaGamma(s, hops, delay, Hop(), id).valueOr:
     return err("Error in beta and gamma generation: " & error)
 
   # Generate key
@@ -343,17 +341,21 @@ proc processSphinxPacket*(
   # Check if B has the required prefix for the original message
   zeroPadding = newSeq[byte](paddingLength)
 
-  if B[(t * k) .. (t * k) + paddingLength - 1] == zeroPadding:
+  if B[((t + 1) * k) .. ((t + 1) * k) + paddingLength - 1] == zeroPadding:
     let hop = Hop.deserialize(B[0 .. addrSize - 1]).valueOr:
       return err(error)
 
-    if delta_prime[0 .. (k - 1)] == newSeq[byte](k):
-      let msg = Message.deserialize(delta_prime).valueOr:
-        return err("Message deserialization error: " & error)
-      let content = msg.getContent()
-      return
-        ok((hop, B[addrSize .. ((t * k) - 1)], content[0 .. messageSize - 1], Exit))
-    else:
+    if B[addrSize .. ((t + 1) * k) - 1] == newSeq[byte](k + 2):
+      if delta_prime[0 .. (k - 1)] == newSeq[byte](k):
+        let msg = Message.deserialize(delta_prime).valueOr:
+          return err("Message deserialization error: " & error)
+        let content = msg.getContent()
+        return
+          ok((hop, B[addrSize .. ((t * k) - 1)], content[0 .. messageSize - 1], Exit))
+      else:
+        return err("delta_prime should be all zeros")
+    elif B[0 .. (t * k) - 1] == newSeq[byte](t * k):
+      # TODO: extract I
       return ok((hop, B[addrSize .. ((t * k) - 1)], delta_prime, Reply))
   else:
     # Extract routing information from B

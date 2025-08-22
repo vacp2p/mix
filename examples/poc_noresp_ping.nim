@@ -85,7 +85,7 @@ proc mixnetSimulation() {.async: (raises: [Exception]).} =
 
     let proto = MixProtocol.new(index, numberOfNodes, nodes[index]).valueOr:
       error "Mix protocol initialization failed", err = error
-      return
+      return # We'll fwd requests, so let's register how should the exit node behave
 
     mixProto.add(proto)
 
