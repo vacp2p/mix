@@ -3,6 +3,32 @@ import libp2p/stream/connection
 import ./mix_protocol
 from fragmentation import dataSize
 
+type
+  DestinationType* = enum
+    MixNode
+    ForwardAddr
+
+  Destination* = object
+    peerId*: PeerId
+    case kind*: DestinationType
+    of ForwardAddr:
+      address*: MultiAddress
+    else:
+      discard
+
+proc mixNode*(T: typedesc[Destination], p: PeerId): T =
+  T(kind: DestinationType.MixNode, peerId: p)
+
+proc forwardToAddr*(T: typedesc[Destination], p: PeerId, address: MultiAddress): T =
+  T(kind: DestinationType.ForwardAddr, peerId: p, address: address)
+
+proc `$`*(d: Destination): string =
+  case d.kind
+  of MixNode:
+    "Destination[MixNode](" & $d.peerId & ")"
+  of ForwardAddr:
+    "Destination[ForwardAddr](" & $d.address & "/p2p/" & $d.peerId & ")"
+
 type MixDialer* = proc(
   msg: seq[byte], codec: string, destination: Destination
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true).}
@@ -114,10 +140,16 @@ proc new*(
     codec: string,
 ): T {.raises: [].} =
   var sendDialerFunc = proc(
-      msg: seq[byte], codec: string, destination: Destination
+      msg: seq[byte], codec: string, dest: Destination
   ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
     try:
-      await srcMix.anonymizeLocalProtocolSend(msg, codec, destination)
+      let (peerId, destination) =
+        if dest.kind == DestinationType.MixNode:
+          (Opt.some(dest.peerId), Opt.none(MixDestination))
+        else:
+          (Opt.none(PeerId), Opt.some(MixDestination.init(dest.peerId, dest.address)))
+
+      await srcMix.anonymizeLocalProtocolSend(msg, codec, peerId, destination)
     except CatchableError as e:
       error "Error during execution of anonymizeLocalProtocolSend: ", err = e.msg
     return

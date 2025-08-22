@@ -12,32 +12,6 @@ import
 
 const MixProtocolID* = "/mix/1.0.0"
 
-type
-  DestinationType* = enum
-    MixNode
-    ForwardAddr
-
-  Destination* = object
-    peerId*: PeerId
-    case kind*: DestinationType
-    of ForwardAddr:
-      address*: MultiAddress
-    else:
-      discard
-
-proc mixNode*(T: typedesc[Destination], p: PeerId): T =
-  T(kind: DestinationType.MixNode, peerId: p)
-
-proc forwardToAddr*(T: typedesc[Destination], p: PeerId, address: MultiAddress): T =
-  T(kind: DestinationType.ForwardAddr, peerId: p, address: address)
-
-proc `$`*(d: Destination): string =
-  case d.kind
-  of MixNode:
-    "Destination[MixNode](" & $d.peerId & ")"
-  of ForwardAddr:
-    "Destination[ForwardAddr](" & $d.address & "/p2p/" & $d.peerId & ")"
-
 type MixProtocol* = ref object of LPProtocol
   mixNodeInfo: MixNodeInfo
   pubNodeInfo: Table[PeerId, MixPubInfo]
@@ -202,9 +176,30 @@ proc getMaxMessageSizeForCodec*(codec: string): Result[int, string] =
     return err("cannot encode messages for this codec")
   return ok(dataSize - serializedMsg.len)
 
+type MixDestination* = object
+  peerId*: PeerId
+  address*: MultiAddress
+
+proc init*(T: typedesc[MixDestination], peerId: PeerId, address: MultiAddress): T =
+  T(peerId: peerId, address: address)
+
+proc `$`*(d: MixDestination): string =
+  $d.address & "/p2p/" & $d.peerId
+
 proc anonymizeLocalProtocolSend*(
-    mixProto: MixProtocol, msg: seq[byte], codec: string, destination: Destination
+    mixProto: MixProtocol,
+    msg: seq[byte],
+    codec: string,
+    destPeerId: Opt[PeerId],
+    fwdDestination: Opt[MixDestination],
 ) {.async.} =
+  ## destPeerId: use when dest == exit
+  ## fwdDestination: use when dest != exit
+
+  doAssert (destPeerId.isSome and fwdDestination.isNone) or
+    (destPeerId.isNone and fwdDestination.isSome),
+    "specify either the destPeerId or destination but not both"
+
   let mixMsg = MixMessage.init(msg, codec)
 
   let serialized = mixMsg.serialize().valueOr:
@@ -239,9 +234,11 @@ proc anonymizeLocalProtocolSend*(
   let numMixNodes = mixProto.pubNodeInfo.len
   var numAvailableNodes = numMixNodes
 
-  info "Destination data", dest = destination
+  info "Destination data", destPeerId, fwdDestination
 
-  if mixProto.pubNodeInfo.hasKey(destination.peerId):
+  let skipDest = destPeerId.valueOr:
+    fwdDestination.value.peerId
+  if mixProto.pubNodeInfo.hasKey(skipDest):
     numAvailableNodes = numMixNodes - 1
 
   if numAvailableNodes < L:
@@ -255,8 +252,8 @@ proc anonymizeLocalProtocolSend*(
     randPeerId: PeerId
     availableIndices = toSeq(0 ..< numMixNodes)
 
-  if destination.kind == DestinationType.MixNode:
-    let index = pubNodeInfoKeys.find(destination.peerId)
+  if destPeerId.isSome:
+    let index = pubNodeInfoKeys.find(destPeerId.value())
     if index != -1:
       availableIndices.del(index)
     else:
@@ -265,8 +262,8 @@ proc anonymizeLocalProtocolSend*(
 
   var i = 0
   while i < L:
-    if destination.kind == DestinationType.MixNode and i == L - 1:
-      randPeerId = destination.peerId
+    if destPeerId.isSome and i == L - 1:
+      randPeerId = destPeerId.value()
     else:
       let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
         error "Failed to genanrate random number", err = error
@@ -276,9 +273,9 @@ proc anonymizeLocalProtocolSend*(
       randPeerId = pubNodeInfoKeys[selectedIndex]
       availableIndices.del(randomIndexPosition)
 
-    if destination.kind == DestinationType.ForwardAddr:
+    if fwdDestination.isSome:
       # Skip the destination peer
-      if randPeerId == destination.peerId:
+      if randPeerId == fwdDestination.value().peerId:
         continue
 
     debug "Selected mix node: ", indexInPath = i, peerId = randPeerId
@@ -316,10 +313,9 @@ proc anonymizeLocalProtocolSend*(
     return
 
   let destHop =
-    if destination.kind == DestinationType.ForwardAddr:
+    if fwdDestination.isSome:
       #Encode destination
-      let dest = $destination.address & "/p2p/" & $destination.peerId
-      let destAddrBytes = multiAddrToBytes(dest).valueOr:
+      let destAddrBytes = multiAddrToBytes($fwdDestination.value()).valueOr:
         error "Failed to convert multiaddress to bytes", err = error
         mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
         return
