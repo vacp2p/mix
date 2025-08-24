@@ -84,18 +84,9 @@ proc mixnetSimulation() {.async: (raises: [Exception]).} =
       error "Mix protocol initialization failed", err = error
       return
 
-    # We'll fwd requests, so let's register how should the exit node behave
-    proto.registerFwdReadBehavior(
-      PingCodec,
-      proc(
-          conn: Connection
-      ): Future[seq[byte]] {.async: (raises: [CancelledError, LPStreamError]).} =
-        debug "reading ping from destination"
-        let resultBuf = newSeqUninitialized[byte](32)
-        await conn.readExactly(addr resultBuf[0], 32)
-        return resultBuf,
-    )
-
+    # We'll fwd requests, so let's register how should the exit node will read responses
+    proto.registerFwdReadBehavior(PingCodec, readExactly(32))
+    
     mixProto.add(proto)
 
     nodes[index].mount(pingProto[index])
