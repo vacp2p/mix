@@ -355,7 +355,8 @@ proc processSphinxPacket*(
       else:
         return err("delta_prime should be all zeros")
     elif B[0 .. (t * k) - 1] == newSeq[byte](t * k):
-      # TODO: extract I
+      let I = B[(t * k) .. (((t + 1) * k) - 1)]
+      # TODO: return I
       return ok((hop, B[addrSize .. ((t * k) - 1)], delta_prime, Reply))
   else:
     # Extract routing information from B
