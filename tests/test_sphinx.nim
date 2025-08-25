@@ -94,18 +94,19 @@ suite "Sphinx Tests":
     if res1.isErr:
       error "Error in Sphinx processing", err = res1.error
       fail()
-    let (address1, delay1, processedPacket1Bytes, status1) = res1.get()
+    let processedSP1 = res1.get()
 
-    if status1 != Intermediate:
+    if processedSP1.status != Intermediate:
       error "Processing status should be Intermediate"
       fail()
 
-    if processedPacket1Bytes.len != packetSize:
+    if processedSP1.serializedSphinxPacket.len != packetSize:
       error "Packet length is not valid",
-        pkt_len = $(processedPacket1Bytes.len), expected_len = $packetSize
+        pkt_len = $(processedSP1.serializedSphinxPacket.len), expected_len = $packetSize
       fail()
 
-    let processedPacket1Res = SphinxPacket.deserialize(processedPacket1Bytes)
+    let processedPacket1Res =
+      SphinxPacket.deserialize(processedSP1.serializedSphinxPacket)
     if processedPacket1Res.isErr:
       error "Sphinx wrap error", err = processedPacket1Res.error
       fail()
@@ -115,18 +116,19 @@ suite "Sphinx Tests":
     if res2.isErr:
       error "Error in Sphinx processing", err = res2.error
       fail()
-    let (address2, delay2, processedPacket2Bytes, status2) = res2.get()
+    let processedSP2 = res2.get()
 
-    if status2 != Intermediate:
+    if processedSP2.status != Intermediate:
       error "Processing status should be Intermediate"
       fail()
 
-    if processedPacket2Bytes.len != packetSize:
+    if processedSP2.serializedSphinxPacket.len != packetSize:
       error "Packet length is not valid",
-        pkt_len = $(processedPacket2Bytes.len), expected_len = $packetSize
+        pkt_len = $(processedSP2.serializedSphinxPacket.len), expected_len = $packetSize
       fail()
 
-    let processedPacket2Res = SphinxPacket.deserialize(processedPacket2Bytes)
+    let processedPacket2Res =
+      SphinxPacket.deserialize(processedSP2.serializedSphinxPacket)
     if processedPacket2Res.isErr:
       error "Sphinx wrap error", err = processedPacket2Res.error
       fail()
@@ -136,13 +138,13 @@ suite "Sphinx Tests":
     if res3.isErr:
       error "Error in Sphinx processing", err = res3.error
       fail()
-    let (address3, delay3, processedPacket3, status3) = res3.get()
+    let processedSP3 = res3.get()
 
-    if status3 != Exit:
-      error "Processing status should be Exit", status3
+    if processedSP3.status != Exit:
+      error "Processing status should be Exit", status = processedSP3.status
       fail()
 
-    let processedMessage = Message.init(processedPacket3)
+    let processedMessage = Message.init(processedSP3.messageChunk)
     if processedMessage != message:
       error "Packet processing failed"
       fail()
@@ -182,9 +184,9 @@ suite "Sphinx Tests":
     if res.isErr:
       error "Error in Sphinx processing", err = res.error
       fail()
-    let (_, _, _, status) = res.get()
+    let invalidMacPkt = res.get()
 
-    if status != InvalidMAC:
+    if invalidMacPkt.status != InvalidMAC:
       error "Processing status should be InvalidMAC"
       fail()
 
@@ -212,9 +214,9 @@ suite "Sphinx Tests":
     if res1.isErr:
       error "Error in Sphinx processing", err = res1.error
       fail()
-    let (_, _, _, status1) = res1.get()
+    let processedSP1 = res1.get()
 
-    if status1 != Intermediate:
+    if processedSP1.status != Intermediate:
       error "Processing status should be Intermediate"
       fail()
 
@@ -222,9 +224,9 @@ suite "Sphinx Tests":
     if res2.isErr:
       error "Error in Sphinx processing", err = res2.error
       fail()
-    let (_, _, _, status2) = res2.get()
+    let processedSP2 = res2.get()
 
-    if status2 != Duplicate:
+    if processedSP2.status != Duplicate:
       error "Processing status should be Duplicate"
       fail()
 
@@ -261,18 +263,20 @@ suite "Sphinx Tests":
       if res1.isErr:
         error "Error in Sphinx processing", err = res1.error
         fail()
-      let (address1, delay1, processedPacket1Bytes, status1) = res1.get()
+      let processedSP1 = res1.get()
 
-      if status1 != Intermediate:
+      if processedSP1.status != Intermediate:
         error "Processing status should be Intermediate"
         fail()
 
-      if processedPacket1Bytes.len != packetSize:
+      if processedSP1.serializedSphinxPacket.len != packetSize:
         error "Packet length is not valid",
-          pkt_len = $(processedPacket1Bytes.len), expected_len = $packetSize
+          pkt_len = $(processedSP1.serializedSphinxPacket.len),
+          expected_len = $packetSize
         fail()
 
-      let processedPacket1Res = SphinxPacket.deserialize(processedPacket1Bytes)
+      let processedPacket1Res =
+        SphinxPacket.deserialize(processedSP1.serializedSphinxPacket)
       if processedPacket1Res.isErr:
         error "Sphinx wrap error", err = processedPacket1Res.error
         fail()
@@ -282,18 +286,20 @@ suite "Sphinx Tests":
       if res2.isErr:
         error "Error in Sphinx processing", err = res2.error
         fail()
-      let (address2, delay2, processedPacket2Bytes, status2) = res2.get()
+      let processedSP2 = res2.get()
 
-      if status2 != Intermediate:
+      if processedSP2.status != Intermediate:
         error "Processing status should be Intermediate"
         fail()
 
-      if processedPacket2Bytes.len != packetSize:
+      if processedSP2.serializedSphinxPacket.len != packetSize:
         error "Packet length is not valid",
-          pkt_len = $(processedPacket2Bytes.len), expected_len = $packetSize
+          pkt_len = $(processedSP2.serializedSphinxPacket.len),
+          expected_len = $packetSize
         fail()
 
-      let processedPacket2Res = SphinxPacket.deserialize(processedPacket2Bytes)
+      let processedPacket2Res =
+        SphinxPacket.deserialize(processedSP2.serializedSphinxPacket)
       if processedPacket2Res.isErr:
         error "Sphinx wrap error", err = processedPacket2Res.error
         fail()
@@ -303,13 +309,13 @@ suite "Sphinx Tests":
       if res3.isErr:
         error "Error in Sphinx processing", err = res3.error
         fail()
-      let (address3, delay3, processedPacket3, status3) = res3.get()
+      let processedSP3 = res3.get()
 
-      if status3 != Exit:
+      if processedSP3.status != Exit:
         error "Processing status should be Exit"
         fail()
 
-      if processedPacket3 != paddedMessage:
+      if processedSP3.messageChunk != paddedMessage:
         error "Packet processing failed"
         fail()
 
@@ -341,18 +347,19 @@ suite "Sphinx Tests":
     if res1.isErr:
       error "Error in Sphinx processing", err = res1.error
       fail()
-    let (address1, delay1, processedPacket1Bytes, status1) = res1.get()
+    let processedSP1 = res1.get()
 
-    if status1 != Intermediate:
+    if processedSP1.status != Intermediate:
       error "Processing status should be Intermediate"
       fail()
 
-    if processedPacket1Bytes.len != packetSize:
+    if processedSP1.serializedSphinxPacket.len != packetSize:
       error "Packet length is not valid",
-        pkt_len = $(processedPacket1Bytes.len), expected_len = $packetSize
+        pkt_len = $(processedSP1.serializedSphinxPacket.len), expected_len = $packetSize
       fail()
 
-    let processedPacket1Res = SphinxPacket.deserialize(processedPacket1Bytes)
+    let processedPacket1Res =
+      SphinxPacket.deserialize(processedSP1.serializedSphinxPacket)
     if processedPacket1Res.isErr:
       error "Sphinx wrap error", err = processedPacket1Res.error
       fail()
@@ -362,18 +369,19 @@ suite "Sphinx Tests":
     if res2.isErr:
       error "Error in Sphinx processing", err = res2.error
       fail()
-    let (address2, delay2, processedPacket2Bytes, status2) = res2.get()
+    let processedSP2 = res2.get()
 
-    if status2 != Intermediate:
+    if processedSP2.status != Intermediate:
       error "Processing status should be Success"
       fail()
 
-    if processedPacket2Bytes.len != packetSize:
+    if processedSP2.serializedSphinxPacket.len != packetSize:
       error "Packet length is not valid",
-        pkt_len = $(processedPacket2Bytes.len), expected_len = $packetSize
+        pkt_len = $(processedSP2.serializedSphinxPacket.len), expected_len = $packetSize
       fail()
 
-    let processedPacket2Res = SphinxPacket.deserialize(processedPacket2Bytes)
+    let processedPacket2Res =
+      SphinxPacket.deserialize(processedSP2.serializedSphinxPacket)
     if processedPacket2Res.isErr:
       error "Sphinx wrap error", err = processedPacket2Res.error
       fail()
@@ -383,13 +391,13 @@ suite "Sphinx Tests":
     if res3.isErr:
       error "Error in Sphinx processing", err = res3.error
       fail()
-    let (address3, delay3, processedPacket3, status3) = res3.get()
+    let processedSP3 = res3.get()
 
-    if status3 != Reply:
+    if processedSP3.status != Reply:
       error "Processing status should be Reply"
       fail()
 
-    let msgRes = processReply(surb.key, surb.secret.get(), processedPacket3)
+    let msgRes = processReply(surb.key, surb.secret.get(), processedSP3.delta_prime)
     if msgRes.isErr:
       error "Reply processing failed", err = msgRes.error
     let msg = msgRes.get()
@@ -439,9 +447,9 @@ suite "Sphinx Tests":
     if res.isErr:
       error "Error in Sphinx processing", err = res.error
       fail()
-    let (_, _, _, status) = res.get()
+    let processedSP1 = res.get()
 
-    if status != InvalidMAC:
+    if processedSP1.status != InvalidMAC:
       error "Processing status should be InvalidMAC"
       fail()
 
@@ -474,9 +482,9 @@ suite "Sphinx Tests":
     if res1.isErr:
       error "Error in Sphinx processing", err = res1.error
       fail()
-    let (_, _, _, status1) = res1.get()
+    let processedSP1 = res1.get()
 
-    if status1 != Intermediate:
+    if processedSP1.status != Intermediate:
       error "Processing status should be Success"
       fail()
 
@@ -484,9 +492,9 @@ suite "Sphinx Tests":
     if res2.isErr:
       error "Error in Sphinx processing", err = res2.error
       fail()
-    let (_, _, _, status2) = res2.get()
+    let processedSP2 = res2.get()
 
-    if status2 != Duplicate:
+    if processedSP2.status != Duplicate:
       error "Processing status should be Duplicate"
       fail()
 
@@ -527,18 +535,20 @@ suite "Sphinx Tests":
       if res1.isErr:
         error "Error in Sphinx processing", err = res1.error
         fail()
-      let (address1, delay1, processedPacket1Bytes, status1) = res1.get()
+      let processedSP1 = res1.get()
 
-      if status1 != Intermediate:
+      if processedSP1.status != Intermediate:
         error "Processing status should be Success"
         fail()
 
-      if processedPacket1Bytes.len != packetSize:
+      if processedSP1.serializedSphinxPacket.len != packetSize:
         error "Packet length is not valid",
-          pkt_len = $(processedPacket1Bytes.len), expected_len = $packetSize
+          pkt_len = $(processedSP1.serializedSphinxPacket.len),
+          expected_len = $packetSize
         fail()
 
-      let processedPacket1Res = SphinxPacket.deserialize(processedPacket1Bytes)
+      let processedPacket1Res =
+        SphinxPacket.deserialize(processedSP1.serializedSphinxPacket)
       if processedPacket1Res.isErr:
         error "Sphinx wrap error", err = processedPacket1Res.error
         fail()
@@ -548,18 +558,20 @@ suite "Sphinx Tests":
       if res2.isErr:
         error "Error in Sphinx processing", err = res2.error
         fail()
-      let (address2, delay2, processedPacket2Bytes, status2) = res2.get()
+      let processedSP2 = res2.get()
 
-      if status2 != Intermediate:
+      if processedSP2.status != Intermediate:
         error "Processing status should be Success"
         fail()
 
-      if processedPacket2Bytes.len != packetSize:
+      if processedSP2.serializedSphinxPacket.len != packetSize:
         error "Packet length is not valid",
-          pkt_len = $(processedPacket2Bytes.len), expected_len = $packetSize
+          pkt_len = $(processedSP2.serializedSphinxPacket.len),
+          expected_len = $packetSize
         fail()
 
-      let processedPacket2Res = SphinxPacket.deserialize(processedPacket2Bytes)
+      let processedPacket2Res =
+        SphinxPacket.deserialize(processedSP2.serializedSphinxPacket)
       if processedPacket1Res.isErr:
         error "Sphinx wrap error", err = processedPacket2Res.error
         fail()
@@ -569,13 +581,13 @@ suite "Sphinx Tests":
       if res3.isErr:
         error "Error in Sphinx processing", err = res3.error
         fail()
-      let (address3, delay3, processedPacket3, status3) = res3.get()
+      let processedSP3 = res3.get()
 
-      if status3 != Reply:
+      if processedSP3.status != Reply:
         error "Processing status should be Reply"
         fail()
 
-      let msgRes = processReply(surb.key, surb.secret.get(), processedPacket3)
+      let msgRes = processReply(surb.key, surb.secret.get(), processedSP3.delta_prime)
       if msgRes.isErr:
         error "Reply processing failed", err = msgRes.error
       let msg = msgRes.get()

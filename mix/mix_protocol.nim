@@ -91,55 +91,54 @@ proc handleMixNodeConnection(
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "INVALID_SPHINX"])
     return
 
-  let (nextHop, delay, processedPkt, status) = processSphinxPacket(
-    sphinxPacket, mixPrivKey, mixProto.tagManager
-  ).valueOr:
+  let processedSP = processSphinxPacket(sphinxPacket, mixPrivKey, mixProto.tagManager).valueOr:
     error "Failed to process Sphinx packet", err = error
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "INVALID_SPHINX"])
     return
 
-  case status
+  case processedSP.status
   of Exit:
-    mix_messages_recvd.inc(labelValues = [$status])
+    mix_messages_recvd.inc(labelValues = [$processedSP.status])
     # This is the exit node, forward to destination
-    let msgChunk = MessageChunk.deserialize(processedPkt).valueOr:
+    let msgChunk = MessageChunk.deserialize(processedSP.messageChunk).valueOr:
       error "Deserialization failed", err = error
-      mix_messages_error.inc(labelValues = [$status, "INVALID_SPHINX"])
+      mix_messages_error.inc(labelValues = [$processedSP.status, "INVALID_SPHINX"])
       return
 
     let unpaddedMsg = unpadMessage(msgChunk).valueOr:
       error "Unpadding message failed", err = error
-      mix_messages_error.inc(labelValues = [$status, "INVALID_SPHINX"])
+      mix_messages_error.inc(labelValues = [$processedSP.status, "INVALID_SPHINX"])
       return
 
     let deserialized = MixMessage.deserialize(unpaddedMsg).valueOr:
       error "Deserialization failed", err = error
-      mix_messages_error.inc(labelValues = [$status, "INVALID_SPHINX"])
+      mix_messages_error.inc(labelValues = [$processedSP.status, "INVALID_SPHINX"])
       return
 
     let (surbs, message) = extractSURBs(deserialized.message).valueOr:
       error "Extracting surbs from payload failed", err = error
-      mix_messages_error.inc(labelValues = [$status, "INVALID_MSG_SURBS"])
+      mix_messages_error.inc(labelValues = [$processedSP.status, "INVALID_MSG_SURBS"])
       return
 
     trace "Exit node - Received mix message",
       receiver = multiAddr, message = deserialized.message, codec = deserialized.codec
 
-    await mixProto.exitLayer.onMessage(deserialized.codec, message, nextHop, surbs)
+    await mixProto.exitLayer.onMessage(
+      deserialized.codec, message, processedSP.destination, surbs
+    )
 
-    mix_messages_forwarded.inc(labelValues = [$status])
+    mix_messages_forwarded.inc(labelValues = [$processedSP.status])
   of Reply:
-    error "TODO: IMPLEMENT REPLY STATE"
+    trace "# Reply", id = processedSP.id, delta_prime = processedSP.delta_prime
     # TODO: process reply at entry side
   of Intermediate:
     trace "# Intermediate: ", multiAddr = multiAddr
     # Add delay
-    let delayMillis = (delay[0].int shl 8) or delay[1].int
     mix_messages_recvd.inc(labelValues = ["Intermediate"])
-    await sleepAsync(milliseconds(delayMillis))
+    await sleepAsync(milliseconds(processedSP.delayMs))
 
     # Forward to next hop
-    let nextHopBytes = getHop(nextHop)
+    let nextHopBytes = getHop(processedSP.nextHop)
 
     let fullAddrStr = bytesToMultiAddr(nextHopBytes).valueOr:
       error "Failed to convert bytes to multiaddress", err = error
@@ -170,7 +169,7 @@ proc handleMixNodeConnection(
     var nextHopConn: Connection
     try:
       nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
-      await nextHopConn.writeLp(processedPkt)
+      await nextHopConn.writeLp(processedSP.serializedSphinxPacket)
       mix_messages_forwarded.inc(labelValues = ["Intermediate"])
     except CatchableError as e:
       error "Failed to dial next hop: ", err = e.msg
