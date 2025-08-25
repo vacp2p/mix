@@ -79,7 +79,7 @@ proc reply(
     if not replyConn.isNil:
       await replyConn.close()
   try:
-    await replyConn.writeLp(response)
+    await replyConn.write(response)
   except LPStreamError as exc:
     error "could not reply", description = exc.msg
     mix_messages_error.inc(labelValues = ["ExitLayer", "REPLY_FAILED"])

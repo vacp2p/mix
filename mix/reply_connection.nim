@@ -1,4 +1,4 @@
-import hashes, chronos, stew/byteutils, results, chronicles
+import hashes, chronos, results, chronicles
 import libp2p/stream/connection
 import libp2p
 import ./[serialization]
@@ -36,16 +36,6 @@ method readLp*(
 method write*(
     self: MixReplyConnection, msg: seq[byte]
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
-  self.mixReplyDialer(self.surbs, msg)
-
-proc write*(
-    self: MixReplyConnection, msg: string
-): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
-  self.write(msg.toBytes())
-
-method writeLp*(
-    self: MixReplyConnection, msg: openArray[byte]
-): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
   if msg.len() > dataSize:
     let fut = newFuture[void]()
     fut.fail(
@@ -53,25 +43,38 @@ method writeLp*(
     )
     return fut
 
-  var
-    vbytes: seq[byte] = @[]
-    value = msg.len().uint64
+  self.mixReplyDialer(self.surbs, msg)
 
-  while value >= 128:
-    vbytes.add(byte((value and 127) or 128))
-    value = value shr 7
-  vbytes.add(byte(value))
+proc write*(
+    self: MixReplyConnection, msg: string
+): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
+  let fut = newFuture[void]()
+  fut.fail(
+    newException(LPStreamError, "write(string) not implemented for MixReplyConnection")
+  )
+  return fut
 
-  var buf = newSeqUninitialized[byte](msg.len() + vbytes.len)
-  buf[0 ..< vbytes.len] = vbytes.toOpenArray(0, vbytes.len - 1)
-  buf[vbytes.len ..< buf.len] = msg
-
-  self.mixReplyDialer(self.surbs, @buf)
+method writeLp*(
+    self: MixReplyConnection, msg: openArray[byte]
+): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
+  let fut = newFuture[void]()
+  fut.fail(
+    newException(
+      LPStreamError, "writeLp(seq[byte]) not implemented for MixReplyConnection"
+    )
+  )
+  return fut
 
 method writeLp*(
     self: MixReplyConnection, msg: string
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
-  self.writeLp(msg.toOpenArrayByte(0, msg.high))
+  let fut = newFuture[void]()
+  fut.fail(
+    newException(
+      LPStreamError, "writeLp(string) not implemented for MixReplyConnection"
+    )
+  )
+  return fut
 
 proc shortLog*(self: MixReplyConnection): string {.raises: [].} =
   "[MixReplyConnection]"
