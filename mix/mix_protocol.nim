@@ -170,7 +170,7 @@ proc handleMixNodeConnection(
         await connCred.incoming.put(deserialized.message)
       else:
         error "could not process reply", id = processedSP.id
-    except KeyError as ex:
+    except KeyError:
       doAssert false, "checked with hasKey"
   of Intermediate:
     trace "# Intermediate: ", multiAddr = multiAddr

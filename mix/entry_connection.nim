@@ -170,7 +170,7 @@ method readLp*(
   if length == 0:
     return
 
-  var res = newSeqUninit[byte](length)
+  var res = newSeqUninitialized[byte](length)
   await s.readExactly(addr res[0], res.len)
   res
 

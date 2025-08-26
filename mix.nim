@@ -8,24 +8,26 @@ export results
 export toConnection
 export MixProtocolID
 export MixProtocol
+
 export initializeMixNodes
 export getMixPubInfoByIndex
 export writeMixPubInfoToFile
 export writeMixNodeInfoToFile
-export mixNodes
 export getMixNodeInfo
 export `new`
 export getMaxMessageSizeForCodec
 export deleteNodeInfoFolder
 export deletePubInfoFolder
-export initMixMultiAddrByIndex
+
 export Destination
 export DestinationType
 export forwardToAddr
 export mixNode
+
 export MixParameters
 export fwdReadBehaviorCb
 export registerFwdReadBehavior
+export MixNodes
 
 proc readLp*(maxSize: int): fwdReadBehaviorCb =
   return proc(
