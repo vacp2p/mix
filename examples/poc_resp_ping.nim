@@ -28,17 +28,17 @@ proc setUpNodes(numNodes: int): seq[Switch] =
   # This is not actually GC-safe
   {.gcsafe.}:
     # Initialize mix nodes
-    discard initializeMixNodes(numNodes)
+    let mixNodes = initializeMixNodes(numNodes).valueOr:
+      error "Could not initialize mixnodes", err = error
+      return
 
     var nodes: seq[Switch] = @[]
 
     for index, node in enumerate(mixNodes):
       # Write public info of all mix nodes
-      let nodePubInfoRes = getMixPubInfoByIndex(index)
-      if nodePubInfoRes.isErr:
-        error "Get mix pub info by index error", err = nodePubInfoRes.error
+      let nodePubInfo = mixNodes.getMixPubInfoByIndex(index).valueOr:
+        error "Get mix pub info by index error", err = error
         continue
-      let nodePubInfo = nodePubInfoRes.get()
 
       let writePubRes = writeMixPubInfoToFile(nodePubInfo, index)
       if writePubRes.isErr:
@@ -86,7 +86,7 @@ proc mixnetSimulation() {.async: (raises: [Exception]).} =
 
     # We'll fwd requests, so let's register how should the exit node will read responses
     proto.registerFwdReadBehavior(PingCodec, readExactly(32))
-    
+
     mixProto.add(proto)
 
     nodes[index].mount(pingProto[index])

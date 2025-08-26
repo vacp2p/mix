@@ -5,9 +5,16 @@ import libp2p/[crypto/crypto, crypto/secp, multiaddress, peerid]
 import ../mix/[curve25519, mix_node]
 
 suite "Mix Node Tests":
+  var mixNodes {.threadvar.}: MixNodes
+
   setup:
     var count = 5
-    discard initializeMixNodes(count)
+    let mixNodesRes = initializeMixNodes(count)
+    if mixNodesRes.isErr():
+      error "could not generate mix nodes"
+      fail()
+    mixNodes = mixNodesRes.value()
+
     deleteNodeInfoFolder()
     deletePubInfoFolder()
 
@@ -21,12 +28,7 @@ suite "Mix Node Tests":
       fail()
 
     for i in 0 ..< count:
-      let nodeRes = getMixNodeByIndex(i)
-      if nodeRes.isErr:
-        error "Get mix node by index error", err = nodeRes.error
-        fail()
-      let node = nodeRes.get()
-
+      let node = mixNodes[i]
       let
         (multiAddr, mixPubKey, mixPrivKey, libp2pPubKey, libp2pPrivKey) =
           getMixNodeInfo(node)
@@ -73,11 +75,7 @@ suite "Mix Node Tests":
 
   test "find_mix_node_by_peer_id":
     for i in 0 ..< count:
-      let nodeRes = getMixNodeByIndex(i)
-      if nodeRes.isErr:
-        error "Get mix node by index error", err = nodeRes.error
-        fail()
-      let node = nodeRes.get()
+      let node = mixNodes[i]
 
       let (multiAddr, mixPubKey, mixPrivKey, libp2pPubKey, libp2pPrivKey) =
         getMixNodeInfo(node)
@@ -88,7 +86,7 @@ suite "Mix Node Tests":
         fail()
       let peerId = peerIdRes.get()
 
-      let foundNodeRes = findMixNodeByPeerId(peerId)
+      let foundNodeRes = mixNodes.findByPeerId(peerId)
       if foundNodeRes.isErr:
         error "Find mix node error", err = foundNodeRes.error
         fail()
@@ -133,17 +131,13 @@ suite "Mix Node Tests":
       fail()
     let peerId = peerIdRes.get()
 
-    let foundNodeRes = findMixNodeByPeerId(peerId)
+    let foundNodeRes = mixNodes.findByPeerId(peerId)
     if foundNodeRes.isOk:
       fail()
 
   test "write_and_read_mix_node_info":
     for i in 0 ..< count:
-      let nodeRes = getMixNodeByIndex(i)
-      if nodeRes.isErr:
-        error "Get mix node by index error", err = nodeRes.error
-        fail()
-      let node = nodeRes.get()
+      let node = mixNodes[i]
 
       let (multiAddr, mixPubKey, mixPrivKey, libp2pPubKey, libp2pPrivKey) =
         getMixNodeInfo(node)
@@ -189,15 +183,15 @@ suite "Mix Node Tests":
 
   test "write_and_read_mix_pub_info":
     for i in 0 ..< count:
-      let nodeRes = getMixPubInfoByIndex(i)
-      if nodeRes.isErr:
-        error "Get mix node by index error", err = nodeRes.error
+      let mixPubInfoRes = mixNodes.getMixPubInfoByIndex(i)
+      if mixPubInfoRes.isErr:
+        error "Get mix pubinfo by index error", err = mixPubInfoRes.error
         fail()
-      let node = nodeRes.get()
+      let mixPubInfo = mixPubInfoRes.get()
 
-      let (multiAddr, mixPubKey, libp2pPubKey) = getMixPubInfo(node)
+      let (multiAddr, mixPubKey, libp2pPubKey) = getMixPubInfo(mixPubInfo)
 
-      let writeNodeRes = writeMixPubInfoToFile(node, i)
+      let writeNodeRes = writeMixPubInfoToFile(mixPubInfo, i)
       if writeNodeRes.isErr:
         error "File write error", index = i
         fail()
@@ -234,14 +228,13 @@ suite "Mix Node Tests":
   test "generate_mix_nodes_with_different_ports":
     count = 3
     let basePort = 5000
-    discard initializeMixNodes(count, basePort)
+    let mixNodesRes2 = initializeMixNodes(count, basePort)
+    if mixNodesRes2.isErr:
+      error "could not generate mixnodes", err = mixNodesRes2.error()
+    let mixNodes = mixNodesRes2.value()
 
     for i in 0 ..< count:
-      let nodeRes = getMixNodeByIndex(i)
-      if nodeRes.isErr:
-        error "Get mix node by index error", err = nodeRes.error
-        fail()
-      let node = nodeRes.get()
+      let node = mixNodes[i]
 
       let (multiAddr, _, _, _, _) = getMixNodeInfo(node)
 
