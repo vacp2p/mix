@@ -12,6 +12,10 @@ import
 
 const MixProtocolID* = "/mix/1.0.0"
 
+type ConnCreds = object
+  incoming: AsyncQueue[seq[byte]]
+  surbSKSeq: seq[(secret, key)]
+
 type MixProtocol* = ref object of LPProtocol
   mixNodeInfo: MixNodeInfo
   pubNodeInfo: Table[PeerId, MixPubInfo]
@@ -19,8 +23,8 @@ type MixProtocol* = ref object of LPProtocol
   tagManager: TagManager
   exitLayer: ExitLayer
   rng: ref HmacDrbgContext
-  # TODO: might require cleanup?
-  idToSKey: Table[array[surbIdLen, byte], seq[(secret, key)]]
+  # TODO: verify if this requires cleanup for cases in which response never arrives (and connection is closed)
+  connCreds: Table[I, ConnCreds]
   fwdRBehavior: TableRef[string, fwdReadBehaviorCb]
 
 proc hasFwdBehavior*(mixProto: MixProtocol, codec: string): bool =
@@ -129,8 +133,45 @@ proc handleMixNodeConnection(
 
     mix_messages_forwarded.inc(labelValues = [$processedSP.status])
   of Reply:
-    trace "# Reply", id = processedSP.id, delta_prime = processedSP.delta_prime
-    # TODO: process reply at entry side
+    trace "# Reply", id = processedSP.id
+    try:
+      if not mixProto.connCreds.hasKey(processedSP.id):
+        mix_messages_error.inc(labelValues = ["Sender/Reply", "NO_CONN_FOUND"])
+        return
+
+      let connCred = mixProto.connCreds[processedSP.id]
+      mixProto.connCreds.del(processedSP.id)
+
+      var couldProcessReply = false
+      var reply: seq[byte]
+      for sk in connCred.surbSKSeq:
+        let processReplyRes = processReply(sk[1], sk[0], processedSP.delta_prime)
+        if processReplyRes.isOk:
+          couldProcessReply = true
+          reply = processReplyRes.value()
+          break
+
+      if couldProcessReply:
+        let msgChunk = MessageChunk.deserialize(reply).valueOr:
+          error "Deserialization failed", err = error
+          mix_messages_error.inc(labelValues = [$processedSP.status, "INVALID_SPHINX"])
+          return
+
+        let unpaddedMsg = unpadMessage(msgChunk).valueOr:
+          error "Unpadding message failed", err = error
+          mix_messages_error.inc(labelValues = [$processedSP.status, "INVALID_SPHINX"])
+          return
+
+        let deserialized = MixMessage.deserialize(unpaddedMsg).valueOr:
+          error "Deserialization failed", err = error
+          mix_messages_error.inc(labelValues = [$processedSP.status, "INVALID_SPHINX"])
+          return
+
+        await connCred.incoming.put(deserialized.message)
+      else:
+        error "could not process reply", id = processedSP.id
+    except KeyError as ex:
+      doAssert false, "checked with hasKey"
   of Intermediate:
     trace "# Intermediate: ", multiAddr = multiAddr
     # Add delay
@@ -199,7 +240,10 @@ proc getMaxMessageSizeForCodec*(
   return ok(dataSize - totalLen)
 
 proc buildSurbs(
-    mixProto: MixProtocol, numSurbs: uint8, skipPeer: PeerId
+    mixProto: MixProtocol,
+    incoming: AsyncQueue[seq[byte]],
+    numSurbs: uint8,
+    skipPeer: PeerId,
 ): Result[seq[SURB], string] =
   var response: seq[SURB]
   var surbSK: seq[(secret, key)] = @[]
@@ -268,14 +312,18 @@ proc buildSurbs(
     response.add(surb)
 
   if surbSK.len != 0:
-    mixProto.idToSKey[id] = surbSK
+    mixProto.connCreds[id] = ConnCreds(surbSKSeq: surbSK, incoming: incoming)
 
   return ok(response)
 
 proc prepareMsgWithSurbs(
-    mixProto: MixProtocol, msg: seq[byte], numSurbs: uint8 = 0, skipPeer: PeerId
+    mixProto: MixProtocol,
+    incoming: AsyncQueue[seq[byte]],
+    msg: seq[byte],
+    numSurbs: uint8 = 0,
+    skipPeer: PeerId,
 ): Result[seq[byte], string] =
-  let surbs = buildSurbs(mixProto, numSurbs, skipPeer).valueOr:
+  let surbs = mixProto.buildSurbs(incoming, numSurbs, skipPeer).valueOr:
     return err(error)
 
   let serialized = ?serializeMessageWithSURBs(msg, surbs)
@@ -351,6 +399,7 @@ proc `$`*(d: MixDestination): string =
 
 proc anonymizeLocalProtocolSend*(
     mixProto: MixProtocol,
+    incoming: AsyncQueue[seq[byte]],
     msg: seq[byte],
     codec: string,
     destPeerId: Opt[PeerId],
@@ -468,7 +517,7 @@ proc anonymizeLocalProtocolSend*(
     else:
       Hop()
 
-  let msgWithSurbs = prepareMsgWithSurbs(mixProto, msg, numSurbs, exitNode).valueOr:
+  let msgWithSurbs = mixProto.prepareMsgWithSurbs(incoming, msg, numSurbs, exitNode).valueOr:
     error "Could not prepend SURBs", err = error
     return
 

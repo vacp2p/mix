@@ -123,7 +123,7 @@ proc computeBetaGamma(
     delay: openArray[seq[byte]],
     destHop: Hop,
     id: I,
-): Result[(seq[byte], seq[byte]), string] = # TODO: name tuples
+): Result[tuple[beta: seq[byte], gamma: seq[byte]], string] =
   let sLen = s.len
   var
     beta: seq[byte]
@@ -161,7 +161,7 @@ proc computeBetaGamma(
 
     gamma = toSeq(hmac(mac_key, beta))
 
-  return ok((beta, gamma))
+  return ok((beta: beta, gamma: gamma))
 
 # Function to compute deltas
 proc computeDelta(s: seq[seq[byte]], msg: Message): Result[seq[byte], string] =

@@ -116,7 +116,7 @@ proc mixnetSimulation() {.async: (raises: [Exception]).} =
 
   let response = await pingProto[senderIndex].ping(conn)
 
-  await sleepAsync(1.seconds)
+  info "PING RESPONSE", response
 
   deleteNodeInfoFolder()
   deletePubInfoFolder()
