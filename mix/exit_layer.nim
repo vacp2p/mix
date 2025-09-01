@@ -1,57 +1,27 @@
-import std/[enumerate, strutils]
+import std/strutils
 import chronicles, chronos, metrics
 import libp2p, libp2p/[builders, stream/connection]
-import
-  ./[
-    mix_metrics, exit_connection, reply_connection, serialization, utils # fragmentation
-  ]
+import ./[mix_metrics, reply_connection, serialization, utils]
 
 type OnReplyDialer* =
   proc(surb: SURB, message: seq[byte]) {.async: (raises: [CancelledError]).}
 
-type ProtocolHandler* = proc(conn: Connection, codec: string): Future[void] {.
-  async: (raises: [CancelledError])
-.}
-
-type fwdReadBehaviorCb* = proc(conn: Connection): Future[seq[byte]] {.
+type destReadBehaviorCb* = proc(conn: Connection): Future[seq[byte]] {.
   async: (raises: [CancelledError, LPStreamError])
 .}
 
 type ExitLayer* = object
   switch: Switch
-  pHandler: ProtocolHandler
   onReplyDialer: OnReplyDialer
-  fwdRBehavior: TableRef[string, fwdReadBehaviorCb]
-
-proc callHandler(
-    switch: Switch, conn: Connection, codec: string
-): Future[void] {.async: (raises: [CatchableError]).} =
-  for index, handler in enumerate(switch.ms.handlers):
-    if codec in handler.protos:
-      await handler.protocol.handler(conn, codec)
-      return
-
-  error "Handler doesn't exist", codec = codec
+  destReadBehavior: TableRef[string, destReadBehaviorCb]
 
 proc init*(
     T: typedesc[ExitLayer],
     switch: Switch,
     onReplyDialer: OnReplyDialer,
-    fwdRBehavior: TableRef[string, fwdReadBehaviorCb],
+    destReadBehavior: TableRef[string, destReadBehaviorCb],
 ): T =
-  ExitLayer(
-    switch: switch,
-    onReplyDialer: onReplyDialer,
-    fwdRBehavior: fwdRBehavior,
-    pHandler: proc(
-        conn: Connection, codec: string
-    ): Future[void] {.async: (raises: [CancelledError]).} =
-      try:
-        await callHandler(switch, conn, codec)
-      except CatchableError as e:
-        error "Error during execution of MixProtocol handler: ", err = e.msg
-    ,
-  )
+  ExitLayer(switch: switch, onReplyDialer: onReplyDialer, destReadBehavior: destReadBehavior)
 
 proc replyDialerCbFactory(self: ExitLayer): MixReplyDialer =
   return proc(
@@ -84,26 +54,11 @@ proc reply(
     error "could not reply", description = exc.msg
     mix_messages_error.inc(labelValues = ["ExitLayer", "REPLY_FAILED"])
 
-proc runHandler(
-    self: ExitLayer, codec: string, message: seq[byte], surbs: seq[SURB]
-) {.async: (raises: [CancelledError]).} =
-  let exitConn = MixExitConnection.new(message)
-  defer:
-    if not exitConn.isNil:
-      await exitConn.close()
-
-  await self.pHandler(exitConn, codec)
-
-  if surbs.len != 0:
-    let response = exitConn.getResponse()
-    await self.reply(surbs, response)
-
 proc onMessage*(
     self: ExitLayer, codec: string, message: seq[byte], nextHop: Hop, surbs: seq[SURB]
 ) {.async: (raises: [CancelledError]).} =
   if nextHop == Hop():
-    trace "onMessage - exit is destination", codec, message
-    await self.runHandler(codec, message, surbs)
+    error "no destination available"
     return
 
   # Forward to destination
@@ -140,13 +95,13 @@ proc onMessage*(
     await destConn.write(message)
 
     if surbs.len != 0:
-      if not self.fwdRBehavior.hasKey(codec):
-        error "No fwdRBehavior for codec", codec
+      if not self.destReadBehavior.hasKey(codec):
+        error "No destReadBehavior for codec", codec
         return
 
-      var behaviorCb: fwdReadBehaviorCb
+      var behaviorCb: destReadBehaviorCb
       try:
-        behaviorCb = self.fwdRBehavior[codec]
+        behaviorCb = self.destReadBehavior[codec]
       except KeyError:
         doAssert false, "checked with HasKey"
 

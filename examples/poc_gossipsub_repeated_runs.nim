@@ -116,7 +116,10 @@ proc makeMixConnCb(mixProto: MixProtocol): CustomConnCreationProc =
       destAddr: Option[MultiAddress], destPeerId: PeerId, codec: string
   ): Connection {.gcsafe, raises: [].} =
     try:
-      return mixProto.toConnection(destPeerId, codec).get()
+      let dest = destAddr.valueOr:
+        debug "No destination address available"
+        return
+      return mixProto.toConnection(MixDestination.init(destPeerId, dest), codec).get()
     except CatchableError as e:
       error "Error during execution of MixEntryConnection callback: ", err = e.msg
       return nil

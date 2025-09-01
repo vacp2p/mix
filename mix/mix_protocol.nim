@@ -2,8 +2,8 @@ import chronicles, chronos, sequtils, strutils, os, results
 import std/[strformat, sysrand, tables], metrics
 import
   ./[
-    config, curve25519, exit_connection, fragmentation, mix_message, mix_node, sphinx,
-    serialization, tag_manager, utils, mix_metrics, exit_layer,
+    config, curve25519, fragmentation, mix_message, mix_node, sphinx, serialization,
+    tag_manager, utils, mix_metrics, exit_layer,
   ]
 import libp2p
 import
@@ -25,15 +25,15 @@ type MixProtocol* = ref object of LPProtocol
   rng: ref HmacDrbgContext
   # TODO: verify if this requires cleanup for cases in which response never arrives (and connection is closed)
   connCreds: Table[I, ConnCreds]
-  fwdRBehavior: TableRef[string, fwdReadBehaviorCb]
+  destReadBehavior: TableRef[string, destReadBehaviorCb]
 
-proc hasFwdBehavior*(mixProto: MixProtocol, codec: string): bool =
-  return mixProto.fwdRBehavior.hasKey(codec)
+proc hasDestReadBehavior*(mixProto: MixProtocol, codec: string): bool =
+  return mixProto.destReadBehavior.hasKey(codec)
 
-proc registerFwdReadBehavior*(
-    mixProto: MixProtocol, codec: string, fwdBehavior: fwdReadBehaviorCb
+proc registerDestReadBehavior*(
+    mixProto: MixProtocol, codec: string, fwdBehavior: destReadBehaviorCb
 ) =
-  mixProto.fwdRBehavior[codec] = fwdBehavior
+  mixProto.destReadBehavior[codec] = fwdBehavior
 
 proc loadMixNodeInfo*(
     index: int, nodeFolderInfoPath: string = "./nodeInfo"
@@ -406,17 +406,9 @@ proc anonymizeLocalProtocolSend*(
     incoming: AsyncQueue[seq[byte]],
     msg: seq[byte],
     codec: string,
-    destPeerId: Opt[PeerId],
-    fwdDestination: Opt[MixDestination],
+    destination: MixDestination,
     numSurbs: uint8,
 ) {.async.} =
-  ## destPeerId: use when dest == exit
-  ## fwdDestination: use when dest != exit
-
-  doAssert (destPeerId.isSome and fwdDestination.isNone) or
-    (destPeerId.isNone and fwdDestination.isSome),
-    "specify either the destPeerId or destination but not both"
-
   let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
 
   mix_messages_recvd.inc(labelValues = ["Entry"])
@@ -432,11 +424,9 @@ proc anonymizeLocalProtocolSend*(
   let numMixNodes = mixProto.pubNodeInfo.len
   var numAvailableNodes = numMixNodes
 
-  info "Destination data", destPeerId, fwdDestination
+  debug "Destination data", destination
 
-  let skipDest = destPeerId.valueOr:
-    fwdDestination.value.peerId
-  if mixProto.pubNodeInfo.hasKey(skipDest):
+  if mixProto.pubNodeInfo.hasKey(destination.peerId):
     numAvailableNodes = numMixNodes - 1
 
   if numAvailableNodes < L:
@@ -450,35 +440,22 @@ proc anonymizeLocalProtocolSend*(
     randPeerId: PeerId
     availableIndices = toSeq(0 ..< numMixNodes)
 
-  if destPeerId.isSome:
-    let index = pubNodeInfoKeys.find(destPeerId.value())
-    if index != -1:
-      availableIndices.del(index)
-    else:
-      error "Destination does not support Mix"
-      return
-
   var i = 0
   while i < L:
-    if destPeerId.isSome and i == L - 1:
-      randPeerId = destPeerId.value()
-      exitPeerId = destPeerId.value()
-    else:
-      let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
-        error "Failed to genanrate random number", err = error
-        mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
-        return
-      let selectedIndex = availableIndices[randomIndexPosition]
-      randPeerId = pubNodeInfoKeys[selectedIndex]
-      availableIndices.del(randomIndexPosition)
+    let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
+      error "Failed to genanrate random number", err = error
+      mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
+      return
+    let selectedIndex = availableIndices[randomIndexPosition]
+    randPeerId = pubNodeInfoKeys[selectedIndex]
+    availableIndices.del(randomIndexPosition)
 
-    if fwdDestination.isSome:
-      # Skip the destination peer
-      if randPeerId == fwdDestination.value().peerId:
-        continue
-      # Last hop will be the exit node that will forward the request
-      if i == L - 1:
-        exitPeerId = randPeerId
+    # Skip the destination peer
+    if randPeerId == destination.peerId:
+      continue
+    # Last hop will be the exit node that will forward the request
+    if i == L - 1:
+      exitPeerId = randPeerId
 
     debug "Selected mix node: ", indexInPath = i, peerId = randPeerId
 
@@ -510,16 +487,12 @@ proc anonymizeLocalProtocolSend*(
 
     i = i + 1
 
-  let destHop =
-    if fwdDestination.isSome:
-      #Encode destination
-      let destAddrBytes = multiAddrToBytes($fwdDestination.value()).valueOr:
-        error "Failed to convert multiaddress to bytes", err = error
-        mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
-        return
-      Hop.init(destAddrBytes)
-    else:
-      Hop()
+  #Encode destination
+  let destAddrBytes = multiAddrToBytes($destination).valueOr:
+    error "Failed to convert multiaddress to bytes", err = error
+    mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
+    return
+  let destHop = Hop.init(destAddrBytes)
 
   let msgWithSurbs = mixProto.prepareMsgWithSurbs(incoming, msg, numSurbs, exitPeerId).valueOr:
     error "Could not prepend SURBs", err = error
@@ -570,14 +543,14 @@ proc new*(
   mixProto.pubNodeInfo = pubNodeInfo
   mixProto.switch = switch
   mixProto.tagManager = tagManager
-  mixProto.fwdRBehavior = newTable[string, fwdReadBehaviorCb]()
+  mixProto.destReadBehavior = newTable[string, destReadBehaviorCb]()
 
   let onReplyDialer = proc(
       surb: SURB, message: seq[byte]
   ) {.async: (raises: [CancelledError]).} =
     await mixProto.reply(surb, message)
 
-  mixProto.exitLayer = ExitLayer.init(switch, onReplyDialer, mixProto.fwdRBehavior)
+  mixProto.exitLayer = ExitLayer.init(switch, onReplyDialer, mixProto.destReadBehavior)
   mixProto.codecs = @[MixProtocolID]
   mixProto.rng = rng
   mixProto.handler = proc(

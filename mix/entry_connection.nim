@@ -5,34 +5,8 @@ import ./mix_protocol
 import ./config
 from fragmentation import dataSize
 
-type
-  DestinationType* = enum
-    MixNode
-    ForwardAddr
-
-  Destination* = object
-    peerId*: PeerId
-    case kind*: DestinationType
-    of ForwardAddr:
-      address*: MultiAddress
-    else:
-      discard
-
-proc mixNode*(T: typedesc[Destination], p: PeerId): T =
-  T(kind: DestinationType.MixNode, peerId: p)
-
-proc forwardToAddr*(T: typedesc[Destination], p: PeerId, address: MultiAddress): T =
-  T(kind: DestinationType.ForwardAddr, peerId: p, address: address)
-
-proc `$`*(d: Destination): string =
-  case d.kind
-  of MixNode:
-    "Destination[MixNode](" & $d.peerId & ")"
-  of ForwardAddr:
-    "Destination[ForwardAddr](" & $d.address & "/p2p/" & $d.peerId & ")"
-
 type MixDialer* = proc(
-  msg: seq[byte], codec: string, destination: Destination
+  msg: seq[byte], codec: string, destination: MixDestination
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true).}
 
 type MixParameters* = object
@@ -40,7 +14,7 @@ type MixParameters* = object
   numSurbs*: Opt[uint8]
 
 type MixEntryConnection* = ref object of Connection
-  destination: Destination
+  destination: MixDestination
   codec: string
   mixDialer: MixDialer
   params: Opt[MixParameters]
@@ -235,7 +209,7 @@ when defined(libp2p_agents_metrics):
 proc new*(
     T: typedesc[MixEntryConnection],
     srcMix: MixProtocol,
-    destination: Destination,
+    destination: MixDestination,
     codec: string,
     params: Opt[MixParameters],
 ): T {.raises: [].} =
@@ -261,17 +235,11 @@ proc new*(
     instance.incomingFut = checkForIncoming()
 
   instance.mixDialer = proc(
-      msg: seq[byte], codec: string, dest: Destination
+      msg: seq[byte], codec: string, dest: MixDestination
   ): Future[void] {.async: (raises: [CancelledError, LPStreamError]).} =
     try:
-      let (peerId, destination) =
-        if dest.kind == DestinationType.MixNode:
-          (Opt.some(dest.peerId), Opt.none(MixDestination))
-        else:
-          (Opt.none(PeerId), Opt.some(MixDestination.init(dest.peerId, dest.address)))
-
       await srcMix.anonymizeLocalProtocolSend(
-        instance.incoming, msg, codec, peerId, destination, numSurbs
+        instance.incoming, msg, codec, dest, numSurbs
       )
     except CatchableError as e:
       error "Error during execution of anonymizeLocalProtocolSend: ", err = e.msg
@@ -284,19 +252,14 @@ proc new*(
 
 proc toConnection*(
     srcMix: MixProtocol,
-    destination: Destination | PeerId,
+    destination: MixDestination,
     codec: string,
     params: Opt[MixParameters] = Opt.none(MixParameters),
 ): Result[Connection, string] {.gcsafe, raises: [].} =
-  let dest =
-    when destination is PeerId:
-      Destination.mixNode(destination)
+  if not srcMix.hasDestReadBehavior(codec):
+    if params.get(MixParameters()).expectReply.get(false):
+      return err("no destination read behavior for codec")
     else:
-      destination
+      warn "no destination read behavior for codec", codec
 
-  if dest.kind == DestinationType.ForwardAddr and
-      params.get(MixParameters()).expectReply.get(false) and
-      not srcMix.hasFwdBehavior(codec):
-    return err("no forward behavior for codec")
-
-  ok(MixEntryConnection.new(srcMix, dest, codec, params))
+  ok(MixEntryConnection.new(srcMix, destination, codec, params))
