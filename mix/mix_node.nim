@@ -304,3 +304,11 @@ proc findByPeerId*(self: MixNodes, peerId: PeerId): Result[MixNodeInfo, string] 
     if peerIdRes == peerId:
       return ok(node)
   return err("No node with peer id: " & $peerId)
+
+proc initMixMultiAddrByIndex*(
+    self: var MixNodes, index: int, multiAddr: string
+): Result[void, string] =
+  if index < 0 or index >= self.len:
+    return err("Index must be between 0 and " & $(self.len))
+  self[index].multiAddr = multiAddr
+  ok()

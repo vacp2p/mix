@@ -24,6 +24,7 @@ export MixParameters
 export destReadBehaviorCb
 export registerDestReadBehavior
 export MixNodes
+export initMixMultiAddrByIndex
 
 proc readLp*(maxSize: int): destReadBehaviorCb =
   ## create callback to read length prefixed msg, with the length encoded as a varint
