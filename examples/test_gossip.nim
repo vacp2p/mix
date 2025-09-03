@@ -176,6 +176,15 @@ proc mixnet_gossipsub_test() {.async: (raises: [Exception]).} =
     switchG.start(),
   )
 
+  echo "A: ", switchA.peerInfo.peerId
+  echo "B: ", switchB.peerInfo.peerId
+  echo "C: ", switchC.peerInfo.peerId
+  echo "D: ", switchD.peerInfo.peerId
+  echo "E: ", switchE.peerInfo.peerId
+  echo "F: ", switchF.peerInfo.peerId
+  echo "G: ", switchG.peerInfo.peerId
+
+
   # Gossip network
   await connectNodesTCP(switchA, switchC)
   await connectNodesTCP(switchB, switchC)
@@ -232,9 +241,14 @@ proc mixnet_gossipsub_test() {.async: (raises: [Exception]).} =
   echo "===================="
   echo "===================="
 
+  #await switchD.stop()
+  #await switchE.stop()
+  #await switchF.stop()
+  #await switchG.stop()
+
   await sleepAsync(5.seconds)
 
-  discard await gossipB.publish("message", cast[seq[byte]]("Hello World from B"))
+  discard await gossipC.publish("message", cast[seq[byte]]("Hello World from C"))
 
   await sleepAsync(10.seconds)
 
