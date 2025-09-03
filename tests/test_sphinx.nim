@@ -133,8 +133,7 @@ suite "Sphinx Tests":
       error "Processing status should be Exit", status3
       fail()
 
-    let processedMessage = Message.init(processedPacket3)
-    if processedMessage != message:
+    if processedPacket3 != message.getContent():
       error "Packet processing failed"
       fail()
 
@@ -385,8 +384,7 @@ suite "Sphinx Tests":
       error "Reply processing failed", err = msgRes.error
     let msg = msgRes.get()
 
-    let processedMessage = Message.init(msg)
-    if processedMessage != message:
+    if msg != message.getContent():
       error "Message tampered"
       fail()
 
