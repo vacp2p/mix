@@ -1,5 +1,6 @@
-import hashes, chronos, libp2p/varint
+import hashes, chronos, libp2p/varint, stew/byteutils
 import libp2p/stream/connection
+from fragmentation import dataSize
 
 type MixExitConnection* = ref object of Connection
   message: seq[byte]
@@ -113,15 +114,46 @@ method readLp*(
     self.message = self.message[int(length) .. ^1]
   return result
 
+method write*(
+    self: MixExitConnection, msg: seq[byte]
+): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
+  # TODO: dial back
+  discard
+
+proc write*(
+    self: MixExitConnection, msg: string
+): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
+  self.write(msg.toBytes())
+
 method writeLp*(
     self: MixExitConnection, msg: openArray[byte]
-): Future[void] {.async: (raises: [CancelledError, LPStreamError]), public.} =
-  raise newException(LPStreamError, "writeLp not implemented for MixExitConnection")
+): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
+  if msg.len() > dataSize:
+    let fut = newFuture[void]()
+    fut.fail(
+      newException(LPStreamError, "exceeds max msg size of " & $dataSize & " bytes")
+    )
+    return fut
+
+  var
+    vbytes: seq[byte] = @[]
+    value = msg.len().uint64
+
+  while value >= 128:
+    vbytes.add(byte((value and 127) or 128))
+    value = value shr 7
+  vbytes.add(byte(value))
+
+  var buf = newSeqUninitialized[byte](msg.len() + vbytes.len)
+  buf[0 ..< vbytes.len] = vbytes.toOpenArray(0, vbytes.len - 1)
+  buf[vbytes.len ..< buf.len] = msg
+
+  # TODO: dial back
 
 method writeLp*(
     self: MixExitConnection, msg: string
-): Future[void] {.async: (raises: [CancelledError, LPStreamError]), public.} =
-  raise newException(LPStreamError, "writeLp not implemented for MixExitConnection")
+): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
+  self.writeLp(msg.toOpenArrayByte(0, msg.high))
 
 func shortLog*(self: MixExitConnection): string {.raises: [].} =
   "MixExitConnection"
