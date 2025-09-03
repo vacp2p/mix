@@ -26,12 +26,15 @@ export registerDestReadBehavior
 export MixNodes
 
 proc readLp*(maxSize: int): destReadBehaviorCb =
+  ## create callback to read length prefixed msg, with the length encoded as a varint
   return proc(
       conn: Connection
   ): Future[seq[byte]] {.async: (raises: [CancelledError, LPStreamError]).} =
     await conn.readLp(maxSize)
 
 proc readExactly*(nBytes: int): destReadBehaviorCb =
+  ## create callback that waits for `nbytes` to be available, then read
+  ## them and return them
   return proc(
       conn: Connection
   ): Future[seq[byte]] {.async: (raises: [CancelledError, LPStreamError]).} =

@@ -142,6 +142,8 @@ proc readMixNodeInfoFromFile*(
     return err("OS error: " & $e.msg)
 
 proc deleteNodeInfoFolder*(nodeInfoFolderPath: string = "./nodeInfo") =
+  ## Deletes the folder that stores serialized mix node info files
+  ## along with all its contents, if the folder exists.  
   if dirExists(nodeInfoFolderPath):
     removeDir(nodeInfoFolderPath)
 
@@ -238,6 +240,8 @@ proc readMixPubInfoFromFile*(
     return err("OS error: " & $e.msg)
 
 proc deletePubInfoFolder*(pubInfoFolderPath: string = "./pubInfo") =
+  ## Deletes the folder containing serialized public mix node info
+  ## and all files inside it, if the folder exists.  
   if dirExists(pubInfoFolderPath):
     removeDir(pubInfoFolderPath)
 
@@ -282,6 +286,7 @@ proc generateMixNodes(count: int, basePort: int = 4242): Result[MixNodes, string
   ok(nodes)
 
 proc initializeMixNodes*(count: int, basePort: int = 4242): Result[MixNodes, string] =
+  ## Creates and initializes a set of mix nodes 
   let mixNodes = generateMixNodes(count, basePort).valueOr:
     return err("Mix node initialization error: " & error)
   return ok(mixNodes)

@@ -9,6 +9,7 @@ type MixDialer* = proc(
   msg: seq[byte], codec: string, destination: MixDestination
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true).}
 
+## Holds configuration parameters used in mix protocol operations.  
 type MixParameters* = object
   expectReply*: Opt[bool]
   numSurbs*: Opt[uint8]
@@ -256,6 +257,9 @@ proc toConnection*(
     codec: string,
     params: Opt[MixParameters] = Opt.none(MixParameters),
 ): Result[Connection, string] {.gcsafe, raises: [].} =
+  ## Create a stream to send and optionally receive responses.
+  ## Under the hood it will wrap the message in a sphinx packet
+  ## and send it via a random mix path.
   if not srcMix.hasDestReadBehavior(codec):
     if params.get(MixParameters()).expectReply.get(false):
       return err("no destination read behavior for codec")
