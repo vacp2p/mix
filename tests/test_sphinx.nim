@@ -2,6 +2,7 @@
 
 import chronicles, random, results, unittest
 import ../mix/[config, curve25519, serialization, sphinx, tag_manager]
+import bearssl/rand
 
 # Helper function to pad/truncate message
 proc padMessage(message: openArray[byte], size: int): seq[byte] =
@@ -50,6 +51,14 @@ proc createDummyData(): (
     message = Message.init(newSeq[byte](messageSize))
     dest = Hop.init(newSeq[byte](addrSize))
   return (message, privateKeys, publicKeys, delay, hops, dest)
+
+proc randomI(): I =
+  let rng = HmacDrbgContext.new()
+  if rng.isNil:
+    doAssert false, "Failed to creat HmacDrbgContext with system randomness"
+  var id: I
+  hmacDrbgGenerate(rng[], id)
+  return id
 
 # Unit tests for sphinx.nim
 suite "Sphinx Tests":
@@ -304,14 +313,14 @@ suite "Sphinx Tests":
         fail()
 
   test "create_and_use_surb":
-    let (message, privateKeys, publicKeys, delay, hops, dest) = createDummyData()
+    let (message, privateKeys, publicKeys, delay, hops, _) = createDummyData()
 
-    let surbRes = createSURB(publicKeys, delay, hops, dest)
+    let surbRes = createSURB(publicKeys, delay, hops, randomI())
     if surbRes.isErr:
       error "Create SURB error", err = surbRes.error
-    let (hop, header, s, key) = surbRes.get()
+    let surb = surbRes.get()
 
-    let packetBytesRes = useSURB(header, key, message)
+    let packetBytesRes = useSURB(surb.header, surb.key, message)
     if packetBytesRes.isErr:
       error "Use SURB error", err = packetBytesRes.error
     let packetBytes = packetBytesRes.get()
@@ -379,7 +388,7 @@ suite "Sphinx Tests":
       error "Processing status should be Reply"
       fail()
 
-    let msgRes = processReply(key, s, processedPacket3)
+    let msgRes = processReply(surb.key, surb.secret.get(), processedPacket3)
     if msgRes.isErr:
       error "Reply processing failed", err = msgRes.error
     let msg = msgRes.get()
@@ -389,22 +398,22 @@ suite "Sphinx Tests":
       fail()
 
   test "create_surb_empty_public_keys":
-    let (message, _, _, delay, _, dest) = createDummyData()
+    let (message, _, _, delay, _, _) = createDummyData()
 
-    let surbRes = createSURB(@[], delay, @[], dest)
+    let surbRes = createSURB(@[], delay, @[], randomI())
     if surbRes.isOk:
       error "Expected create SURB error when public keys are empty, but got success"
       fail()
 
   test "surb_sphinx_process_invalid_mac":
-    let (message, privateKeys, publicKeys, delay, hops, dest) = createDummyData()
+    let (message, privateKeys, publicKeys, delay, hops, _) = createDummyData()
 
-    let surbRes = createSURB(publicKeys, delay, hops, dest)
+    let surbRes = createSURB(publicKeys, delay, hops, randomI())
     if surbRes.isErr:
       error "Create SURB error", err = surbRes.error
-    let (hop, header, s, key) = surbRes.get()
+    let surb = surbRes.get()
 
-    let packetRes = useSURB(header, key, message)
+    let packetRes = useSURB(surb.header, surb.key, message)
     if packetRes.isErr:
       error "Use SURB error", err = packetRes.error
     let packet = packetRes.get()
@@ -435,14 +444,14 @@ suite "Sphinx Tests":
       fail()
 
   test "surb_sphinx_process_duplicate_tag":
-    let (message, privateKeys, publicKeys, delay, hops, dest) = createDummyData()
+    let (message, privateKeys, publicKeys, delay, hops, _) = createDummyData()
 
-    let surbRes = createSURB(publicKeys, delay, hops, dest)
+    let surbRes = createSURB(publicKeys, delay, hops, randomI())
     if surbRes.isErr:
       error "Create SURB error", err = surbRes.error
-    let (hop, header, s, key) = surbRes.get()
+    let surb = surbRes.get()
 
-    let packetBytesRes = useSURB(header, key, message)
+    let packetBytesRes = useSURB(surb.header, surb.key, message)
     if packetBytesRes.isErr:
       error "Use SURB error", err = packetBytesRes.error
     let packetBytes = packetBytesRes.get()
@@ -482,19 +491,19 @@ suite "Sphinx Tests":
   test "create_and_use_surb_message_sizes":
     let messageSizes = @[32, 64, 128, 256, 512]
     for size in messageSizes:
-      let (_, privateKeys, publicKeys, delay, hops, dest) = createDummyData()
+      let (_, privateKeys, publicKeys, delay, hops, _) = createDummyData()
       var message = newSeq[byte](size)
       randomize()
       for i in 0 ..< size:
         message[i] = byte(rand(256))
       let paddedMessage = padMessage(message, messageSize)
 
-      let surbRes = createSURB(publicKeys, delay, hops, dest)
+      let surbRes = createSURB(publicKeys, delay, hops, randomI())
       if surbRes.isErr:
         error "Create SURB error", err = surbRes.error
-      let (hop, header, s, key) = surbRes.get()
+      let surb = surbRes.get()
 
-      let packetBytesRes = useSURB(header, key, Message.init(paddedMessage))
+      let packetBytesRes = useSURB(surb.header, surb.key, Message.init(paddedMessage))
       if packetBytesRes.isErr:
         error "Use SURB error", err = packetBytesRes.error
       let packetBytes = packetBytesRes.get()
@@ -564,7 +573,7 @@ suite "Sphinx Tests":
         error "Processing status should be Reply"
         fail()
 
-      let msgRes = processReply(key, s, processedPacket3)
+      let msgRes = processReply(surb.key, surb.secret.get(), processedPacket3)
       if msgRes.isErr:
         error "Reply processing failed", err = msgRes.error
       let msg = msgRes.get()

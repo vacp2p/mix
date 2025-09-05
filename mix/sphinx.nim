@@ -112,13 +112,17 @@ proc generateRandomDelay(): seq[byte] =
   return toseq(delayBytes)
 ]#
 
-const paddingLength = (((t + 1) * (r - L)) + 2) * k
+const paddingLength = (((t + 1) * (r - L)) + 1) * k
 
 # Function to compute:
 # Beta: The nested encrypted routing information. It encodes the next hop address, the forwarding delay, integrity check Gamma for the next hop, and the Beta for subsequent hops.
 # Gamma: A message authentication code computed over Beta using the session key derived from Alpha. It ensures header integrity at each hop.
 proc computeBetaGamma(
-    s: seq[seq[byte]], hop: openArray[Hop], delay: openArray[seq[byte]], destHop: Hop
+    s: seq[seq[byte]],
+    hop: openArray[Hop],
+    delay: openArray[seq[byte]],
+    destHop: Hop,
+    id: I,
 ): Result[(seq[byte], seq[byte]), string] = # TODO: name tuples
   let sLen = s.len
   var
@@ -139,7 +143,7 @@ proc computeBetaGamma(
     # Compute Beta and Gamma
     if i == sLen - 1:
       let destBytes = ?destHop.serialize()
-      let destPadding = destBytes & delay[i] & newSeq[byte](paddingLength)
+      let destPadding = destBytes & delay[i] & @id & newSeq[byte](paddingLength)
 
       let aes = aes_ctr(beta_aes_key, beta_iv, destPadding).valueOr:
         return err("Error in aes: " & error)
@@ -186,22 +190,32 @@ proc computeDelta(s: seq[seq[byte]], msg: Message): Result[seq[byte], string] =
 proc createSURB*(
     publicKeys: openArray[FieldElement],
     delay: openArray[seq[byte]],
-    hop: openArray[Hop],
-    destHop: Hop,
-): Result[(Hop, Header, seq[seq[byte]], seq[byte]), string] =
+    hops: openArray[Hop],
+    id: I,
+): Result[SURB, string] =
+  if id == default(I):
+    return err("id should be initialized")
+
   # Compute alpha and shared secrets
   let (alpha_0, s) = computeAlpha(publicKeys).valueOr:
     return err("Error in alpha generation: " & error)
 
   # Compute beta and gamma
-  let (beta_0, gamma_0) = computeBetaGamma(s, hop, delay, destHop).valueOr:
+  let (beta_0, gamma_0) = computeBetaGamma(s, hops, delay, Hop(), id).valueOr:
     return err("Error in beta and gamma generation: " & error)
 
   # Generate key
   var key = newSeqUninitialized[byte](k)
   discard randomBytes(key)
 
-  return ok((hop[0], Header.init(alpha_0, beta_0, gamma_0), s, key))
+  return ok(
+    SURB(
+      hop: hops[0],
+      header: Header.init(alpha_0, beta_0, gamma_0),
+      secret: Opt.some(s),
+      key: key,
+    )
+  )
 
 proc useSURB*(header: Header, key: seq[byte], msg: Message): Result[seq[byte], string] =
   # Derive AES key and IV
@@ -262,7 +276,7 @@ proc wrapInSphinxPacket*(
     return err("Error in alpha generation: " & error)
 
   # Compute beta and gamma
-  let (beta_0, gamma_0) = computeBetaGamma(s, hop, delay, destHop).valueOr:
+  let (beta_0, gamma_0) = computeBetaGamma(s, hop, delay, destHop, default(I)).valueOr:
     return err("Error in beta and gamma generation: " & error)
 
   # Compute delta
@@ -327,17 +341,22 @@ proc processSphinxPacket*(
   # Check if B has the required prefix for the original message
   zeroPadding = newSeq[byte](paddingLength)
 
-  if B[(t * k) .. (t * k) + paddingLength - 1] == zeroPadding:
+  if B[((t + 1) * k) .. ((t + 1) * k) + paddingLength - 1] == zeroPadding:
     let hop = Hop.deserialize(B[0 .. addrSize - 1]).valueOr:
       return err(error)
 
-    if delta_prime[0 .. (k - 1)] == newSeq[byte](k):
-      let msg = Message.deserialize(delta_prime).valueOr:
-        return err("Message deserialization error: " & error)
-      let content = msg.getContent()
-      return
-        ok((hop, B[addrSize .. ((t * k) - 1)], content[0 .. messageSize - 1], Exit))
-    else:
+    if B[addrSize .. ((t + 1) * k) - 1] == newSeq[byte](k + 2):
+      if delta_prime[0 .. (k - 1)] == newSeq[byte](k):
+        let msg = Message.deserialize(delta_prime).valueOr:
+          return err("Message deserialization error: " & error)
+        let content = msg.getContent()
+        return
+          ok((hop, B[addrSize .. ((t * k) - 1)], content[0 .. messageSize - 1], Exit))
+      else:
+        return err("delta_prime should be all zeros")
+    elif B[0 .. (t * k) - 1] == newSeq[byte](t * k):
+      let I = B[(t * k) .. (((t + 1) * k) - 1)]
+      # TODO: return I
       return ok((hop, B[addrSize .. ((t * k) - 1)], delta_prime, Reply))
   else:
     # Extract routing information from B

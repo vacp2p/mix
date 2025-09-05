@@ -14,4 +14,5 @@ jobs:
        nimble c ./examples/poc_gossipsub.nim
        nimble c ./examples/poc_gossipsub_repeated_runs.nim
        nimble c ./examples/poc_noresp_ping.nim
+       nimble c ./examples/poc_resp_ping.nim
       nim-versions: '["version-2-0", "version-2-2", "devel"]'

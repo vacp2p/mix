@@ -1,5 +1,7 @@
 import results
-import ./mix/[mix_protocol, mix_node, entry_connection]
+import chronos
+import libp2p
+import ./mix/[mix_protocol, mix_node, entry_connection, exit_layer]
 
 export results
 
@@ -21,3 +23,20 @@ export Destination
 export DestinationType
 export forwardToAddr
 export mixNode
+export MixParameters
+export fwdReadBehaviorCb
+export registerFwdReadBehavior
+
+proc readLp*(maxSize: int): fwdReadBehaviorCb =
+  return proc(
+      conn: Connection
+  ): Future[seq[byte]] {.async: (raises: [CancelledError, LPStreamError]).} =
+    await conn.readLp(maxSize)
+
+proc readExactly*(nBytes: int): fwdReadBehaviorCb =
+  return proc(
+      conn: Connection
+  ): Future[seq[byte]] {.async: (raises: [CancelledError, LPStreamError]).} =
+    let buf = newSeqUninitialized[byte](nBytes)
+    await conn.readExactly(addr buf[0], nBytes)
+    return buf

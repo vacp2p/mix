@@ -4,6 +4,7 @@ from fragmentation import dataSize
 
 type MixExitConnection* = ref object of Connection
   message: seq[byte]
+  response: seq[byte]
 
 method join*(
     self: MixExitConnection
@@ -117,8 +118,7 @@ method readLp*(
 method write*(
     self: MixExitConnection, msg: seq[byte]
 ): Future[void] {.async: (raises: [CancelledError, LPStreamError], raw: true), public.} =
-  # TODO: dial back
-  discard
+  self.response.add(msg)
 
 proc write*(
     self: MixExitConnection, msg: string
@@ -148,7 +148,7 @@ method writeLp*(
   buf[0 ..< vbytes.len] = vbytes.toOpenArray(0, vbytes.len - 1)
   buf[vbytes.len ..< buf.len] = msg
 
-  # TODO: dial back
+  self.write(buf)
 
 method writeLp*(
     self: MixExitConnection, msg: string
@@ -170,6 +170,11 @@ method closeImpl*(
 
 func hash*(self: MixExitConnection): Hash =
   discard
+
+proc getResponse*(self: MixExitConnection): seq[byte] =
+  let r = self.response
+  self.response = @[]
+  return r
 
 proc new*(T: typedesc[MixExitConnection], message: seq[byte]): T =
   let instance = T(message: message)
