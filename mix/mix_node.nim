@@ -14,8 +14,6 @@ type MixNodeInfo* = object
   libp2pPubKey: SkPublicKey
   libp2pPrivKey: SkPrivateKey
 
-var mixNodes*: seq[MixNodeInfo] = @[] # TODO: global variable?
-
 proc initMixNodeInfo*(
     multiAddr: string,
     mixPubKey, mixPrivKey: FieldElement,
@@ -243,20 +241,20 @@ proc deletePubInfoFolder*(pubInfoFolderPath: string = "./pubInfo") =
   if dirExists(pubInfoFolderPath):
     removeDir(pubInfoFolderPath)
 
-proc getMixPubInfoByIndex*(index: int): Result[MixPubInfo, string] =
-  if index < 0 or index >= mixNodes.len:
-    return err("Index must be between 0 and " & $(mixNodes.len))
+type MixNodes* = seq[MixNodeInfo]
+
+proc getMixPubInfoByIndex*(self: MixNodes, index: int): Result[MixPubInfo, string] =
+  if index < 0 or index >= self.len:
+    return err("Index must be between 0 and " & $(self.len))
   ok(
     MixPubInfo(
-      multiAddr: mixNodes[index].multiAddr,
-      mixPubKey: mixNodes[index].mixPubKey,
-      libp2pPubKey: mixNodes[index].libp2pPubKey,
+      multiAddr: self[index].multiAddr,
+      mixPubKey: self[index].mixPubKey,
+      libp2pPubKey: self[index].libp2pPubKey,
     )
   )
 
-proc generateMixNodes(
-    count: int, basePort: int = 4242
-): Result[seq[MixNodeInfo], string] =
+proc generateMixNodes(count: int, basePort: int = 4242): Result[MixNodes, string] =
   var nodes = newSeq[MixNodeInfo](count)
   for i in 0 ..< count:
     let keyPairResult = generateKeyPair()
@@ -283,9 +281,10 @@ proc generateMixNodes(
 
   ok(nodes)
 
-proc initializeMixNodes*(count: int, basePort: int = 4242): Result[void, string] =
-  mixNodes = generateMixNodes(count, basePort).valueOr:
+proc initializeMixNodes*(count: int, basePort: int = 4242): Result[MixNodes, string] =
+  let mixNodes = generateMixNodes(count, basePort).valueOr:
     return err("Mix node initialization error: " & error)
+  return ok(mixNodes)
 
 proc getPeerIdFromMultiAddr*(multiAddr: string): Result[PeerId, string] =
   let parts = multiAddr.split("/")
@@ -293,21 +292,10 @@ proc getPeerIdFromMultiAddr*(multiAddr: string): Result[PeerId, string] =
     return err("Invalid multiaddress format")
   ok(PeerId.init(parts[6]).get())
 
-proc findMixNodeByPeerId*(peerId: PeerId): Result[MixNodeInfo, string] =
-  for node in mixNodes:
+proc findByPeerId*(self: MixNodes, peerId: PeerId): Result[MixNodeInfo, string] =
+  for node in self:
     let peerIdRes = getPeerIdFromMultiAddr(node.multiAddr).valueOr:
       return err("Failed to get peer id from multiAddress")
     if peerIdRes == peerId:
       return ok(node)
   return err("No node with peer id: " & $peerId)
-
-proc getMixNodeByIndex*(index: int): Result[MixNodeInfo, string] =
-  if index < 0 or index >= mixNodes.len:
-    return err("Index must be between 0 and " & $(mixNodes.len))
-  ok(mixNodes[index])
-
-proc initMixMultiAddrByIndex*(index: int, multiAddr: string): Result[void, string] =
-  if index < 0 or index >= mixNodes.len:
-    return err("Index must be between 0 and " & $(mixNodes.len))
-  mixNodes[index].multiAddr = multiAddr
-  ok()
