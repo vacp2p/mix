@@ -184,8 +184,9 @@ type
 proc serializeMessageWithSURBs*(
     msg: seq[byte], surbs: seq[SURB]
 ): Result[seq[byte], string] =
-  if surbs.len > high(int8):
+  if surbs.len > (messageSize - surbLenSize - 1) div surbSize:
     return err("too many SURBs")
+
   let surbBytes =
     surbs.mapIt(?it.hop.serialize() & ?it.header.serialize() & it.key).concat()
   ok(byte(surbs.len) & surbBytes & msg)
@@ -211,6 +212,10 @@ proc extractSURBs*(msg: seq[byte]): Result[(seq[SURB], seq[byte]), string] =
   var offset = 0
   let surbsLenBytes = ?readBytes(msg, offset, 1)
   let surbsLen = int(surbsLenBytes[0])
+
+  if surbsLen > (messageSize - surbLenSize - 1) div surbSize:
+    return err("too many SURBs")
+
   var surbs: seq[SURB] = newSeq[SURB](surbsLen)
   for i in 0 ..< surbsLen:
     let hopBytes = ?readBytes(msg, offset, addrSize)

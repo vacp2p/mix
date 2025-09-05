@@ -241,7 +241,7 @@ proc new*(
 ): T {.raises: [].} =
   let params = params.get(MixParameters())
   let expectReply = params.expectReply.get(false)
-  let surbs =
+  let numSurbs =
     if expectReply:
       params.numSurbs.get(defaultSurbs)
     else:
@@ -271,7 +271,7 @@ proc new*(
           (Opt.none(PeerId), Opt.some(MixDestination.init(dest.peerId, dest.address)))
 
       await srcMix.anonymizeLocalProtocolSend(
-        instance.incoming, msg, codec, peerId, destination, surbs
+        instance.incoming, msg, codec, peerId, destination, numSurbs
       )
     except CatchableError as e:
       error "Error during execution of anonymizeLocalProtocolSend: ", err = e.msg
