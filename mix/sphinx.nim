@@ -1,6 +1,6 @@
 import results, sequtils
 import nimcrypto/sysrand
-import ./[config, crypto, curve25519, serialization, tag_manager]
+import ./[config, crypto, curve25519, serialization, tag_manager, utils]
 
 # Define possible outcomes of processing a Sphinx packet
 type ProcessingStatus* = enum
@@ -123,7 +123,7 @@ proc computeBetaGamma(
     delay: openArray[seq[byte]],
     destHop: Hop,
     id: I,
-): Result[(seq[byte], seq[byte]), string] = # TODO: name tuples
+): Result[tuple[beta: seq[byte], gamma: seq[byte]], string] =
   let sLen = s.len
   var
     beta: seq[byte]
@@ -161,7 +161,7 @@ proc computeBetaGamma(
 
     gamma = toSeq(hmac(mac_key, beta))
 
-  return ok((beta, gamma))
+  return ok((beta: beta, gamma: gamma))
 
 # Function to compute deltas
 proc computeDelta(s: seq[seq[byte]], msg: Message): Result[seq[byte], string] =
@@ -291,9 +291,24 @@ proc wrapInSphinxPacket*(
 
   return ok(serialized)
 
+type ProcessedSphinxPacket* = object
+  case status*: ProcessingStatus
+  of ProcessingStatus.Exit:
+    destination*: Hop
+    messageChunk*: seq[byte]
+  of ProcessingStatus.Intermediate:
+    nextHop*: Hop
+    delayMs*: int
+    serializedSphinxPacket*: seq[byte]
+  of ProcessingStatus.Reply:
+    id*: I
+    delta_prime*: seq[byte]
+  else:
+    discard
+
 proc processSphinxPacket*(
     sphinxPacket: SphinxPacket, privateKey: FieldElement, tm: var TagManager
-): Result[(Hop, seq[byte], seq[byte], ProcessingStatus), string] = # TODO: named touple
+): Result[ProcessedSphinxPacket, string] =
   let
     (header, payload) = sphinxPacket.getSphinxPacket()
     (alpha, beta, gamma) = getHeader(header)
@@ -308,14 +323,14 @@ proc processSphinxPacket*(
 
   # Check if the tag has been seen
   if isTagSeen(tm, s):
-    return ok((Hop(), @[], @[], Duplicate))
+    return ok(ProcessedSphinxPacket(status: Duplicate))
 
   # Compute MAC
   let mac_key = kdf(deriveKeyMaterial("mac_key", sBytes))
 
   if not (toSeq(hmac(mac_key, beta)) == gamma):
     # If MAC not verified
-    return ok((Hop(), @[], @[], InvalidMAC))
+    return ok(ProcessedSphinxPacket(status: InvalidMAC))
 
   # Store the tag as seen
   addTag(tm, s)
@@ -350,14 +365,18 @@ proc processSphinxPacket*(
         let msg = Message.deserialize(delta_prime).valueOr:
           return err("Message deserialization error: " & error)
         let content = msg.getContent()
-        return
-          ok((hop, B[addrSize .. ((t * k) - 1)], content[0 .. messageSize - 1], Exit))
+        return ok(
+          ProcessedSphinxPacket(
+            status: Exit, destination: hop, messageChunk: content[0 .. messageSize - 1]
+          )
+        )
       else:
         return err("delta_prime should be all zeros")
     elif B[0 .. (t * k) - 1] == newSeq[byte](t * k):
-      let I = B[(t * k) .. (((t + 1) * k) - 1)]
-      # TODO: return I
-      return ok((hop, B[addrSize .. ((t * k) - 1)], delta_prime, Reply))
+      let idSeq = B[(t * k) .. (((t + 1) * k) - 1)]
+      var id: I
+      copyMem(addr id[0], unsafeAddr idSeq[0], k)
+      return ok(ProcessedSphinxPacket(status: Reply, id: id, delta_prime: delta_prime))
   else:
     # Extract routing information from B
     let routingInfo = RoutingInfo.deserialize(B).valueOr:
@@ -383,4 +402,11 @@ proc processSphinxPacket*(
     let serializedSP = sphinxPkt.serialize().valueOr:
       return err("Sphinx packet serialization error: " & error)
 
-    return ok((address, delay, serializedSP, Intermediate))
+    return ok(
+      ProcessedSphinxPacket(
+        status: Intermediate,
+        nextHop: address,
+        delayMs: (?bytesToUInt16(delay)).int,
+        serializedSphinxPacket: serializedSP,
+      )
+    )
