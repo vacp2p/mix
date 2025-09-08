@@ -6,6 +6,7 @@ import ./[mix_metrics, reply_connection, serialization, utils]
 type OnReplyDialer* =
   proc(surb: SURB, message: seq[byte]) {.async: (raises: [CancelledError]).}
 
+## Callback type for reading responses from a destination connection
 type destReadBehaviorCb* = proc(conn: Connection): Future[seq[byte]] {.
   async: (raises: [CancelledError, LPStreamError])
 .}
@@ -21,7 +22,9 @@ proc init*(
     onReplyDialer: OnReplyDialer,
     destReadBehavior: TableRef[string, destReadBehaviorCb],
 ): T =
-  ExitLayer(switch: switch, onReplyDialer: onReplyDialer, destReadBehavior: destReadBehavior)
+  ExitLayer(
+    switch: switch, onReplyDialer: onReplyDialer, destReadBehavior: destReadBehavior
+  )
 
 proc replyDialerCbFactory(self: ExitLayer): MixReplyDialer =
   return proc(

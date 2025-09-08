@@ -16,6 +16,11 @@ type ConnCreds = object
   incoming: AsyncQueue[seq[byte]]
   surbSKSeq: seq[(secret, key)]
 
+## Mix Protocol defines a decentralized anonymous message routing layer for libp2p networks.
+## It enables sender anonymity by routing each message through a decentralized mix overlay 
+## network composed of participating libp2p nodes, known as mix nodes. Each message is 
+## routed independently in a stateless manner, allowing other libp2p protocols to selectively 
+## anonymize messages without modifying their core protocol behavior.
 type MixProtocol* = ref object of LPProtocol
   mixNodeInfo: MixNodeInfo
   pubNodeInfo: Table[PeerId, MixPubInfo]
@@ -231,6 +236,9 @@ proc handleMixNodeConnection(
 proc getMaxMessageSizeForCodec*(
     codec: string, numberOfSurbs: uint8 = 0
 ): Result[int, string] =
+  ## Computes the maximum payload size (in bytes) available for a message when encoded  
+  ## with the given `codec`, optionally including space for the chosen number of surbs.  
+  ## Returns an error if the codec + surb overhead exceeds the data capacity.  
   let serializedMsg = ?MixMessage.init(@[], codec).serialize()
   var totalLen = serializedMsg.len + surbLenSize + (int(numberOfSurbs) * surbSize)
   if numberOfSurbs > 0:
@@ -391,11 +399,14 @@ proc buildMessage(
 
   ok(Message.init(serializedMsgChunk))
 
+## Represents the final target of a mixnet message.  
+## contains the peer id and multiaddress of the destination node.  
 type MixDestination* = object
   peerId*: PeerId
   address*: MultiAddress
 
 proc init*(T: typedesc[MixDestination], peerId: PeerId, address: MultiAddress): T =
+  ## Initializes a destination object with the given peer id and multiaddress.  
   T(peerId: peerId, address: address)
 
 proc `$`*(d: MixDestination): string =
@@ -567,6 +578,8 @@ proc new*(
     nodeFolderInfoPath: string = ".",
     rng: ref HmacDrbgContext = newRng(),
 ): Result[T, string] =
+  ## Constructs a new `MixProtocol` instance for the mix node at `index`,  
+  ## loading its private info from `nodeInfo` and the public info of all other nodes from `pubInfo`.  
   let mixNodeInfo = loadMixNodeInfo(index, nodeFolderInfoPath / fmt"nodeInfo").valueOr:
     return err("Failed to load mix node info for index " & $index & " - err: " & error)
 
