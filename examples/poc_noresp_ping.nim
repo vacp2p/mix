@@ -114,7 +114,8 @@ proc mixnetSimulation() {.async: (raises: [Exception]).} =
     return
 
   discard await noRespPingProto[senderIndex].noRespPing(conn)
-  await sleepAsync(1.seconds)
+
+  await sleepAsync(3.seconds)
 
   deleteNodeInfoFolder()
   deletePubInfoFolder()

@@ -49,10 +49,12 @@ Execute the test suite with:
 
 ## Usage
 
-Run the Mix protocol proof-of-concept:
+Run the Mix protocol proof-of-concepts:
 
    ```bash
-   nim c -r src/mix_poc.nim
+   nim c -r examples/poc_gossipsub.nim
+   nim c -r examples/poc_resp_ping.nim
+   nim c -r examples/poc_noresp_ping.nim
    ```
 
 ## Current Implementation Challenges
