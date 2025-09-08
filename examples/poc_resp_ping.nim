@@ -85,7 +85,7 @@ proc mixnetSimulation() {.async: (raises: [Exception]).} =
       return
 
     # We'll fwd requests, so let's register how should the exit node will read responses
-    proto.registerFwdReadBehavior(PingCodec, readExactly(32))
+    proto.registerDestReadBehavior(PingCodec, readExactly(32))
 
     mixProto.add(proto)
 
@@ -105,7 +105,7 @@ proc mixnetSimulation() {.async: (raises: [Exception]).} =
     receiverIndex = senderIndex + 1
 
   let conn = mixProto[senderIndex].toConnection(
-    Destination.forwardToAddr(
+    MixDestination.init(
       nodes[receiverIndex].peerInfo.peerId, nodes[receiverIndex].peerInfo.addrs[0]
     ),
     PingCodec,

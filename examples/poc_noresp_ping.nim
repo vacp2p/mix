@@ -105,7 +105,7 @@ proc mixnetSimulation() {.async: (raises: [Exception]).} =
     receiverIndex = senderIndex + 1
 
   let conn = mixProto[senderIndex].toConnection(
-    Destination.forwardToAddr(
+    MixDestination.init(
       nodes[receiverIndex].peerInfo.peerId, nodes[receiverIndex].peerInfo.addrs[0]
     ),
     NoRespPingCodec,

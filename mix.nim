@@ -15,27 +15,23 @@ export writeMixPubInfoToFile
 export writeMixNodeInfoToFile
 export getMixNodeInfo
 export `new`
+export init
 export getMaxMessageSizeForCodec
 export deleteNodeInfoFolder
 export deletePubInfoFolder
-
-export Destination
-export DestinationType
-export forwardToAddr
-export mixNode
-
+export MixDestination
 export MixParameters
-export fwdReadBehaviorCb
-export registerFwdReadBehavior
+export destReadBehaviorCb
+export registerDestReadBehavior
 export MixNodes
 
-proc readLp*(maxSize: int): fwdReadBehaviorCb =
+proc readLp*(maxSize: int): destReadBehaviorCb =
   return proc(
       conn: Connection
   ): Future[seq[byte]] {.async: (raises: [CancelledError, LPStreamError]).} =
     await conn.readLp(maxSize)
 
-proc readExactly*(nBytes: int): fwdReadBehaviorCb =
+proc readExactly*(nBytes: int): destReadBehaviorCb =
   return proc(
       conn: Connection
   ): Future[seq[byte]] {.async: (raises: [CancelledError, LPStreamError]).} =
