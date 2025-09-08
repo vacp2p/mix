@@ -57,9 +57,9 @@ proc cryptoRandomInt(max: int): Result[int, string] =
 proc toUnixNs(t: Time): int64 =
   t.toUnix().int64 * 1_000_000_000 + times.nanosecond(t).int64
 
-# func byteToHex(b: byte): string = 
+# func byteToHex(b: byte): string =
 #   b.toHex(2)
-# func bytesToHex(data: seq[byte]): string = 
+# func bytesToHex(data: seq[byte]): string =
 #   data.map(byteToHex).join(" ")
 
 proc handleMixNodeConnection(
@@ -384,6 +384,7 @@ proc new*(
 ): Result[T, string] =
   let mixNodeInfo = loadMixNodeInfo(index, nodeFolderInfoPath / fmt"nodeInfo").valueOr:
     return err("Failed to load mix node info for index " & $index & " - err: " & error)
+  info "mixNodeInfo ", mixNodeInfo
 
   let pubNodeInfo = loadAllButIndexMixPubInfo(
     index, numNodes, nodeFolderInfoPath / fmt"pubInfo"

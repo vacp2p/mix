@@ -1,4 +1,5 @@
 import options, os, results, strformat, strutils
+import chronicles
 import std/streams
 import libp2p/[crypto/crypto, crypto/curve25519, crypto/secp, multiaddress, peerid]
 import ./[config, curve25519, utils]
@@ -119,6 +120,7 @@ proc readMixNodeInfoFromFile*(
 ): Result[MixNodeInfo, string] =
   try:
     let filename = nodeInfoFolderPath / fmt"mixNode_{index}"
+    info "reading mix node info from ", filename
     if not fileExists(filename):
       return err("File does not exist")
     var file = newFileStream(filename, fmRead)
