@@ -120,7 +120,7 @@ proc readMixNodeInfoFromFile*(
 ): Result[MixNodeInfo, string] =
   try:
     let filename = nodeInfoFolderPath / fmt"mixNode_{index}"
-    info "reading mix node info from ", filename
+    info "reading mix node info from file", filename = filename
     if not fileExists(filename):
       return err("File does not exist")
     var file = newFileStream(filename, fmRead)

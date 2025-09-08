@@ -384,7 +384,7 @@ proc new*(
 ): Result[T, string] =
   let mixNodeInfo = loadMixNodeInfo(index, nodeFolderInfoPath / fmt"nodeInfo").valueOr:
     return err("Failed to load mix node info for index " & $index & " - err: " & error)
-  info "mixNodeInfo ", mixNodeInfo
+  info "mixNodeInfo", mixNodeInfo = mixNodeInfo
 
   let pubNodeInfo = loadAllButIndexMixPubInfo(
     index, numNodes, nodeFolderInfoPath / fmt"pubInfo"
