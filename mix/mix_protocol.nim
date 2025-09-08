@@ -565,6 +565,7 @@ proc anonymizeLocalProtocolSend*(
   let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
 
   when defined(enable_mix_benchmarks):
+    # Assumes a fixed gossipsub message layout of 100
     config.orig = uint64.fromBytesLE(msg[5 ..< 13])
     config.msgId = uint64.fromBytesLE(msg[13 ..< 21])
     config.origAndMsgId = msg[5 ..< 21]

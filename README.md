@@ -57,14 +57,6 @@ Run the Mix protocol proof-of-concepts:
    nim c -r examples/poc_noresp_ping.nim
    ```
 
-## Build mix runner Docker Image
-```
-docker build -t mixrunner .
-
-# Run mixrunner
-./examples/mixrunner/mixrunner.sh
-```
-
 ## Current Implementation Challenges
 
 1. **Protocol Handler Diversity**: Existing protocols have diverse input formats for handlers and send functions,
