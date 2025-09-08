@@ -21,7 +21,9 @@ proc init*(
     onReplyDialer: OnReplyDialer,
     destReadBehavior: TableRef[string, destReadBehaviorCb],
 ): T =
-  ExitLayer(switch: switch, onReplyDialer: onReplyDialer, destReadBehavior: destReadBehavior)
+  ExitLayer(
+    switch: switch, onReplyDialer: onReplyDialer, destReadBehavior: destReadBehavior
+  )
 
 proc replyDialerCbFactory(self: ExitLayer): MixReplyDialer =
   return proc(
