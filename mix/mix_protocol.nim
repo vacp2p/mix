@@ -689,15 +689,14 @@ proc reply(
 
   await mixProto.sendPacket(multiAddr, sphinxPacket, SendPacketConfig(logType: Reply))
 
-proc new*(
-    T: typedesc[MixProtocol],
+proc init*(
+    mixProto: MixProtocol,
     mixNodeInfo: MixNodeInfo,
     pubNodeInfo: Table[PeerId, MixPubInfo],
     switch: Switch,
     tagManager: TagManager = TagManager.new(),
     rng: ref HmacDrbgContext = newRng(),
-): T =
-  let mixProto = new(T)
+) =
   mixProto.mixNodeInfo = mixNodeInfo
   mixProto.pubNodeInfo = pubNodeInfo
   mixProto.switch = switch
@@ -717,6 +716,16 @@ proc new*(
   ) {.async: (raises: [CancelledError]).} =
     await mixProto.handleMixNodeConnection(conn)
 
+proc new*(
+    T: typedesc[MixProtocol],
+    mixNodeInfo: MixNodeInfo,
+    pubNodeInfo: Table[PeerId, MixPubInfo],
+    switch: Switch,
+    tagManager: TagManager = TagManager.new(),
+    rng: ref HmacDrbgContext = newRng(),
+): T =
+  let mixProto = new(T)
+  mixProto.init(mixNodeInfo, pubNodeInfo, switch)
   mixProto
 
 proc new*(
