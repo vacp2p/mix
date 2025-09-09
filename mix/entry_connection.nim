@@ -25,6 +25,15 @@ type MixEntryConnection* = ref object of Connection
   replyReceivedFut: Future[void]
   cached: seq[byte]
 
+func shortLog*(conn: MixEntryConnection): string =
+  if conn == nil:
+    "MixEntryConnection(nil)"
+  else:
+    "MixEntryConnection(" & $conn.destination & ")"
+
+chronicles.formatIt(MixEntryConnection):
+  shortLog(it)
+
 method readOnce*(
     s: MixEntryConnection, pbytes: pointer, nbytes: int
 ): Future[int] {.async: (raises: [CancelledError, LPStreamError]), public.} =
