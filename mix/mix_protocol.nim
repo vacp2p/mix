@@ -20,7 +20,7 @@ type
     members: HashSet[I]
 
   ConnCreds = object
-    group: IGroup
+    igroup: IGroup
     incoming: AsyncQueue[seq[byte]]
     surbSecret: secret
     surbKey: key
@@ -238,16 +238,16 @@ proc handleMixNodeConnection(
 
       let connCred = mixProto.connCreds[processedSP.id]
 
-      # Deleting all other SURBs associated to this
-      for id in connCred.group.members:
-        mixProto.connCreds.del(id)
-
       let reply = processReply(
         connCred.surbKey, connCred.surbSecret, processedSP.delta_prime
       ).valueOr:
         error "could not process reply", id = processedSP.id
         mix_messages_error.inc(labelValues = ["Reply", "INVALID_CREDS"])
         return
+
+      # Deleting all other SURBs associated to this
+      for id in connCred.igroup.members:
+        mixProto.connCreds.del(id)
 
       let msgChunk = MessageChunk.deserialize(reply).valueOr:
         error "Deserialization failed", err = error
@@ -366,8 +366,8 @@ proc buildSurbs(
     exitPeerId: PeerId,
 ): Result[seq[SURB], string] =
   var response: seq[SURB]
-  var group = IGroup(members: initHashSet[I]())
-  
+  var igroup = IGroup(members: initHashSet[I]())
+
   for _ in uint8(0) ..< numSurbs:
     var
       id: I
@@ -432,8 +432,13 @@ proc buildSurbs(
     let surb = createSURB(publicKeys, delay, hops, id).valueOr:
       return err(error)
 
-    group.members.incl(id)
-    mixProto.connCreds[id] = ConnCreds(group: group, surbSecret: surb.secret.get(), surbKey: surb.key, incoming: incoming)
+    igroup.members.incl(id)
+    mixProto.connCreds[id] = ConnCreds(
+      igroup: igroup,
+      surbSecret: surb.secret.get(),
+      surbKey: surb.key,
+      incoming: incoming,
+    )
     response.add(surb)
 
   return ok(response)
