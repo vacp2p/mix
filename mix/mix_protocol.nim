@@ -15,9 +15,15 @@ when defined(enable_mix_benchmarks):
 
 const MixProtocolID* = "/mix/1.0.0"
 
-type ConnCreds = object
-  incoming: AsyncQueue[seq[byte]]
-  surbSKSeq: seq[(secret, key)]
+type
+  IGroup = ref object
+    members: HashSet[I]
+
+  ConnCreds = object
+    group: IGroup
+    incoming: AsyncQueue[seq[byte]]
+    surbSecret: secret
+    surbKey: key
 
 ## Mix Protocol defines a decentralized anonymous message routing layer for libp2p networks.
 ## It enables sender anonymity by routing each message through a decentralized mix overlay 
@@ -231,45 +237,43 @@ proc handleMixNodeConnection(
         return
 
       let connCred = mixProto.connCreds[processedSP.id]
-      mixProto.connCreds.del(processedSP.id)
 
-      var couldProcessReply = false
-      var reply: seq[byte]
-      for sk in connCred.surbSKSeq:
-        let processReplyRes = processReply(sk[1], sk[0], processedSP.delta_prime)
-        if processReplyRes.isOk:
-          couldProcessReply = true
-          reply = processReplyRes.value()
-          break
+      # Deleting all other SURBs associated to this
+      for id in connCred.group.members:
+        mixProto.connCreds.del(id)
 
-      if couldProcessReply:
-        let msgChunk = MessageChunk.deserialize(reply).valueOr:
-          error "Deserialization failed", err = error
-          mix_messages_error.inc(labelValues = ["Reply", "INVALID_SPHINX"])
-          return
-
-        let unpaddedMsg = unpadMessage(msgChunk).valueOr:
-          error "Unpadding message failed", err = error
-          mix_messages_error.inc(labelValues = ["Reply", "INVALID_SPHINX"])
-          return
-
-        let deserialized = MixMessage.deserialize(unpaddedMsg).valueOr:
-          error "Deserialization failed", err = error
-          mix_messages_error.inc(labelValues = ["Reply", "INVALID_SPHINX"])
-          return
-
-        when defined(enable_mix_benchmarks):
-          benchmarkLog "Reply",
-            mixProto.switch.peerInfo.peerId,
-            startTime,
-            msgId,
-            orig,
-            Opt.some(fromPeerId),
-            Opt.none(PeerId)
-
-        await connCred.incoming.put(deserialized.message)
-      else:
+      let reply = processReply(
+        connCred.surbKey, connCred.surbSecret, processedSP.delta_prime
+      ).valueOr:
         error "could not process reply", id = processedSP.id
+        mix_messages_error.inc(labelValues = ["Reply", "INVALID_CREDS"])
+        return
+
+      let msgChunk = MessageChunk.deserialize(reply).valueOr:
+        error "Deserialization failed", err = error
+        mix_messages_error.inc(labelValues = ["Reply", "INVALID_SPHINX"])
+        return
+
+      let unpaddedMsg = unpadMessage(msgChunk).valueOr:
+        error "Unpadding message failed", err = error
+        mix_messages_error.inc(labelValues = ["Reply", "INVALID_SPHINX"])
+        return
+
+      let deserialized = MixMessage.deserialize(unpaddedMsg).valueOr:
+        error "Deserialization failed", err = error
+        mix_messages_error.inc(labelValues = ["Reply", "INVALID_SPHINX"])
+        return
+
+      when defined(enable_mix_benchmarks):
+        benchmarkLog "Reply",
+          mixProto.switch.peerInfo.peerId,
+          startTime,
+          msgId,
+          orig,
+          Opt.some(fromPeerId),
+          Opt.none(PeerId)
+
+      await connCred.incoming.put(deserialized.message)
     except KeyError:
       doAssert false, "checked with hasKey"
   of Intermediate:
@@ -362,16 +366,17 @@ proc buildSurbs(
     exitPeerId: PeerId,
 ): Result[seq[SURB], string] =
   var response: seq[SURB]
-  var surbSK: seq[(secret, key)] = @[]
-  var id: I
-  hmacDrbgGenerate(mixProto.rng[], id)
-
+  var group = IGroup(members: initHashSet[I]())
+  
   for _ in uint8(0) ..< numSurbs:
     var
+      id: I
       multiAddrs: seq[string] = @[]
       publicKeys: seq[FieldElement] = @[]
       hops: seq[Hop] = @[]
       delay: seq[seq[byte]] = @[]
+
+    hmacDrbgGenerate(mixProto.rng[], id)
 
     # Select L mix nodes at random
     let numMixNodes = mixProto.pubNodeInfo.len
@@ -427,12 +432,9 @@ proc buildSurbs(
     let surb = createSURB(publicKeys, delay, hops, id).valueOr:
       return err(error)
 
-    surbSK.add((surb.secret.get(), surb.key))
-
+    group.members.incl(id)
+    mixProto.connCreds[id] = ConnCreds(group: group, surbSecret: surb.secret.get(), surbKey: surb.key, incoming: incoming)
     response.add(surb)
-
-  if surbSK.len != 0:
-    mixProto.connCreds[id] = ConnCreds(surbSKSeq: surbSK, incoming: incoming)
 
   return ok(response)
 
