@@ -363,6 +363,7 @@ proc buildSurbs(
     mixProto: MixProtocol,
     incoming: AsyncQueue[seq[byte]],
     numSurbs: uint8,
+    destPeerId: PeerId,
     exitPeerId: PeerId,
 ): Result[seq[SURB], string] =
   var response: seq[SURB]
@@ -379,23 +380,16 @@ proc buildSurbs(
     hmacDrbgGenerate(mixProto.rng[], id)
 
     # Select L mix nodes at random
-    let numMixNodes = mixProto.pubNodeInfo.len
 
     if mixProto.pubNodeInfo.len < L:
       return err("No. of public mix nodes less than path length")
 
-    var
-      pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
-      randPeerId: PeerId
-      availableIndices = toSeq(0 ..< numMixNodes)
+    # Remove exit and dest node from nodes to consider for surbs
+    var pubNodeInfoKeys =
+      mixProto.pubNodeInfo.keys.toSeq().filterIt(it != exitPeerId and it != destPeerId)
+    var availableIndices = toSeq(0 ..< pubNodeInfoKeys.len)
 
-    # Remove exit node from nodes to consider for surbs
-    let index = pubNodeInfoKeys.find(exitPeerId)
-    if index != -1:
-      availableIndices.del(index)
-    else:
-      return err("could not find exit node")
-
+    # Select L mix nodes at random
     var i = 0
     while i < L:
       let (multiAddr, mixPubKey, delayMillisec) =
@@ -403,7 +397,7 @@ proc buildSurbs(
           let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
             return err("failed to generate random num: " & error)
           let selectedIndex = availableIndices[randomIndexPosition]
-          randPeerId = pubNodeInfoKeys[selectedIndex]
+          let randPeerId = pubNodeInfoKeys[selectedIndex]
           availableIndices.del(randomIndexPosition)
           debug "Selected mix node for surbs: ", indexInPath = i, peerId = randPeerId
           let mixPubInfo = getMixPubInfo(mixProto.pubNodeInfo.getOrDefault(randPeerId))
@@ -448,9 +442,10 @@ proc prepareMsgWithSurbs(
     incoming: AsyncQueue[seq[byte]],
     msg: seq[byte],
     numSurbs: uint8 = 0,
+    destPeerId: PeerId,
     exitPeerId: PeerId,
 ): Result[seq[byte], string] =
-  let surbs = mixProto.buildSurbs(incoming, numSurbs, exitPeerId).valueOr:
+  let surbs = mixProto.buildSurbs(incoming, numSurbs, destPeerId, exitPeerId).valueOr:
     return err(error)
 
   let serialized = ?serializeMessageWithSURBs(msg, surbs)
@@ -601,10 +596,10 @@ proc anonymizeLocalProtocolSend*(
     mix_messages_error.inc(labelValues = ["Entry", "LOW_MIX_POOL"])
     return
 
-  var
-    pubNodeInfoKeys = toSeq(mixProto.pubNodeInfo.keys)
-    randPeerId: PeerId
-    availableIndices = toSeq(0 ..< numMixNodes)
+  # Skip the destination peer
+  var pubNodeInfoKeys =
+    mixProto.pubNodeInfo.keys.toSeq().filterIt(it != destination.peerId)
+  var availableIndices = toSeq(0 ..< pubNodeInfoKeys.len)
 
   var i = 0
   while i < L:
@@ -613,12 +608,9 @@ proc anonymizeLocalProtocolSend*(
       mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
       return
     let selectedIndex = availableIndices[randomIndexPosition]
-    randPeerId = pubNodeInfoKeys[selectedIndex]
+    let randPeerId = pubNodeInfoKeys[selectedIndex]
     availableIndices.del(randomIndexPosition)
 
-    # Skip the destination peer
-    if randPeerId == destination.peerId:
-      continue
     # Last hop will be the exit node that will forward the request
     if i == L - 1:
       exitPeerId = randPeerId
@@ -660,7 +652,9 @@ proc anonymizeLocalProtocolSend*(
     return
   let destHop = Hop.init(destAddrBytes)
 
-  let msgWithSurbs = mixProto.prepareMsgWithSurbs(incoming, msg, numSurbs, exitPeerId).valueOr:
+  let msgWithSurbs = mixProto.prepareMsgWithSurbs(
+    incoming, msg, numSurbs, destination.peerId, exitPeerId
+  ).valueOr:
     error "Could not prepend SURBs", err = error
     return
 
