@@ -1,5 +1,5 @@
 import chronicles, chronos, sequtils, strutils, os, results
-import std/[strformat, sysrand, tables], metrics
+import std/[strformat, sysrand, tables], metrics, times
 import
   ./[
     config, curve25519, fragmentation, mix_message, mix_node, sphinx, serialization,
@@ -44,14 +44,14 @@ type MixProtocol* = ref object of LPProtocol
 proc benchmarkLog*(
     eventName: static[string],
     myPeerId: PeerId,
-    startTime: Moment,
+    startTime: Time,
     msgId: uint64,
     orig: uint64,
     fromPeerId: Opt[PeerId],
     toPeerId: Opt[PeerId],
 ) =
-  let endTime = Moment.now()
-  let procDelay = (endTime - startTime).milliseconds()
+  let endTime = getTime()
+  let procDelay = (endTime - startTime).inMilliseconds()
   let fromPeerId =
     if fromPeerId.isNone:
       "None"
@@ -131,7 +131,7 @@ proc handleMixNodeConnection(
         error "Failed to close incoming stream: ", err = e.msg
 
   when defined(enable_mix_benchmarks):
-    let startTime = Moment.now()
+    let startTime = getTime()
 
     if metadata.len == 0:
       mix_messages_error.inc(labelValues = ["Intermediate/Exit", "NO_DATA"])
@@ -280,7 +280,7 @@ proc handleMixNodeConnection(
     trace "# Intermediate: ", multiAddr = multiAddr
     # Add delay
     mix_messages_recvd.inc(labelValues = ["Intermediate"])
-    await sleepAsync(milliseconds(processedSP.delayMs))
+    await sleepAsync(chronos.milliseconds(processedSP.delayMs))
 
     # Forward to next hop
     let nextHopBytes = getHop(processedSP.nextHop)
@@ -459,7 +459,7 @@ type SendPacketType* = enum
 type SendPacketConfig = object
   logType: SendPacketType
   when defined(enable_mix_benchmarks):
-    startTime: Moment
+    startTime: Time
     orig: uint64
     msgId: uint64
     origAndMsgId: seq[byte]
@@ -562,7 +562,7 @@ proc anonymizeLocalProtocolSend*(
 ) {.async.} =
   var config = SendPacketConfig(logType: Entry)
   when defined(enable_mix_benchmarks):
-    config.startTime = Moment.now()
+    config.startTime = getTime()
 
   let (multiAddr, _, _, _, _) = getMixNodeInfo(mixProto.mixNodeInfo)
 
