@@ -1,5 +1,6 @@
 import chronicles, chronos, sequtils, strutils, os, results
 import std/[strformat, sysrand, tables], metrics, times
+from times import getTime, toUnixFloat, `-`, initTime, `$`, inMilliseconds, Time
 import
   ./[
     config, curve25519, fragmentation, mix_message, mix_node, sphinx, serialization,
@@ -62,8 +63,9 @@ proc benchmarkLog*(
       "None"
     else:
       toPeerId.get().shortLog()
+  let nowNano = int64(toUnixFloat(endTime) * 1_000_000_000)
   info eventName,
-    msgId, fromPeerId, toPeerId, myPeerId, orig, current = startTime, procDelay
+    msgId, fromPeerId, toPeerId, myPeerId, orig, current = nowNano, procDelay
 
 proc hasDestReadBehavior*(mixProto: MixProtocol, codec: string): bool =
   return mixProto.destReadBehavior.hasKey(codec)
@@ -280,8 +282,13 @@ proc handleMixNodeConnection(
     trace "# Intermediate: ", multiAddr = multiAddr
     # Add delay
     mix_messages_recvd.inc(labelValues = ["Intermediate"])
-    info "sleeping for", delay = processedSP.delayMs
+    let currTime = getTime()
+    let nowNano = int64(toUnixFloat(currTime) * 1_000_000_000)
+    info "start sleeping for", delayMs = processedSP.delayMs, now = nowNano
     await sleepAsync(chronos.milliseconds(processedSP.delayMs))
+    let after = getTime()
+    let afterNano = int64(toUnixFloat(after) * 1_000_000_000)
+    info "done sleeping for", delayMs = processedSP.delayMs, now = afterNano
 
     # Forward to next hop
     let nextHopBytes = getHop(processedSP.nextHop)
