@@ -1,4 +1,5 @@
 import chronicles, chronos, metrics
+from times import getTime, toUnixFloat, `-`, initTime, `$`, inMilliseconds, Time
 import libp2p, libp2p/[builders, stream/connection]
 import ./[mix_metrics, reply_connection, serialization]
 
@@ -68,7 +69,13 @@ proc onMessage*(
   var response: seq[byte]
   try:
     destConn = await self.switch.dial(destPeerId, @[destAddr], codec)
+    let currTime1 = getTime()
+    let currTimeNano1 = int64(toUnixFloat(currTime1) * 1_000_000_000)
+    info "got destConn", now = currTimeNano1
     await destConn.write(message)
+    let currTime2 = getTime()
+    let currTimeNano2 = int64(toUnixFloat(currTime2) * 1_000_000_000)
+    info "destConn write done", now = currTimeNano2
 
     if surbs.len != 0:
       if not self.destReadBehavior.hasKey(codec):
@@ -82,6 +89,9 @@ proc onMessage*(
         doAssert false, "checked with HasKey"
 
       response = await behaviorCb(destConn)
+      let currTime3 = getTime()
+      let currTimeNano3 = int64(toUnixFloat(currTime3) * 1_000_000_000)
+      info "behaviorCb done", now = currTimeNano3
   except CatchableError as e:
     error "Failed to dial next hop: ", err = e.msg
     mix_messages_error.inc(labelValues = ["ExitLayer", "DIAL_FAILED"])
@@ -91,3 +101,6 @@ proc onMessage*(
       await destConn.close()
 
   await self.reply(surbs, response)
+  let currTime4 = getTime()
+  let currTimeNano4 = int64(toUnixFloat(currTime4) * 1_000_000_000)
+  info "reply done", now = currTimeNano4

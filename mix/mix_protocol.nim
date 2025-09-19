@@ -229,6 +229,9 @@ proc handleMixNodeConnection(
     await mixProto.exitLayer.onMessage(
       deserialized.codec, message, destAddr, destPeerId, surbs
     )
+    let afterOnMessage = getTime()
+    let afterOnMessageNano = int64(toUnixFloat(afterOnMessage) * 1_000_000_000)
+    info "done mixProto.exitLayer.onMessage", now = afterOnMessageNano
 
     mix_messages_forwarded.inc(labelValues = ["Exit"])
   of Reply:
