@@ -68,6 +68,9 @@ proc onMessage*(
   var destConn: Connection
   var response: seq[byte]
   try:
+    let currTime0 = getTime()
+    let currTimeNano0 = int64(toUnixFloat(currTime0) * 1_000_000_000)
+    info "getting destConn", now = currTimeNano0
     destConn = await self.switch.dial(destPeerId, @[destAddr], codec)
     let currTime1 = getTime()
     let currTimeNano1 = int64(toUnixFloat(currTime1) * 1_000_000_000)
