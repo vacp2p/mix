@@ -1,6 +1,9 @@
-import chronicles, chronos, metrics
+import chronicles, chronos, metrics, std/[enumerate, strutils]
 import libp2p, libp2p/[builders, stream/connection]
-import ./[mix_metrics, reply_connection, serialization]
+import ./[mix_metrics, reply_connection, serialization, utils]
+
+when defined(mix_experimental_exit_is_destination):
+  import ./exit_connection
 
 type OnReplyDialer* =
   proc(surb: SURB, message: seq[byte]) {.async: (raises: [CancelledError]).}
@@ -56,14 +59,68 @@ proc reply(
     error "could not reply", description = exc.msg
     mix_messages_error.inc(labelValues = ["ExitLayer", "REPLY_FAILED"])
 
-proc onMessage*(
+when defined(mix_experimental_exit_is_destination):
+  proc runHandler(
+      self: ExitLayer, codec: string, message: seq[byte], surbs: seq[SURB]
+  ) {.async: (raises: [CancelledError]).} =
+    let exitConn = MixExitConnection.new(message)
+    defer:
+      if not exitConn.isNil:
+        await exitConn.close()
+
+      var hasHandler: bool = false
+      for index, handler in enumerate(self.switch.ms.handlers):
+        if codec in handler.protos:
+          try:
+            hasHandler = true
+            await handler.protocol.handler(exitConn, codec)
+          except CatchableError as e:
+            error "Error during execution of MixProtocol handler: ", err = e.msg
+
+      if not hasHandler:
+        error "Handler doesn't exist", codec = codec
+        return
+
+      if surbs.len != 0:
+        let response = exitConn.getResponse()
+        await self.reply(surbs, response)
+
+proc fwdRequest(
     self: ExitLayer,
     codec: string,
     message: seq[byte],
-    destAddr: MultiAddress,
-    destPeerId: PeerId,
+    destination: Hop,
     surbs: seq[SURB],
 ) {.async: (raises: [CancelledError]).} =
+  if destination == Hop():
+    error "no destination available"
+    mix_messages_error.inc(labelValues = ["Exit", "NO_DESTINATION"])
+    return
+
+  let destBytes = getHop(destination)
+
+  let fullAddrStr = bytesToMultiAddr(destBytes).valueOr:
+    error "Failed to convert bytes to multiaddress", err = error
+    mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
+    return
+
+  let parts = fullAddrStr.split("/p2p/")
+  if parts.len != 2:
+    error "Invalid multiaddress format", parts
+    mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
+    return
+
+  # Create MultiAddress and PeerId
+  let destAddr = MultiAddress.init(parts[0]).valueOr:
+    error "Failed to parse location multiaddress: ", err = error
+    mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
+    return
+
+  let destPeerId = PeerId.init(parts[1]).valueOr:
+    error "Failed to initialize PeerId", err = error
+    mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
+    return
+
   var destConn: Connection
   var response: seq[byte]
   try:
@@ -91,3 +148,20 @@ proc onMessage*(
       await destConn.close()
 
   await self.reply(surbs, response)
+
+proc onMessage*(
+    self: ExitLayer,
+    codec: string,
+    message: seq[byte],
+    destination: Hop,
+    surbs: seq[SURB],
+) {.async: (raises: [CancelledError]).} =
+  when defined(mix_experimental_exit_is_destination):
+    if destination == Hop():
+      trace "onMessage - exit is destination", codec, message
+      await self.runHandler(codec, message, surbs)
+    else:
+      trace "onMessage - exist is not destination", codec, message
+      await self.fwdRequest(codec, message, destination, surbs)
+  else:
+    await self.fwdRequest(codec, message, destination, surbs)

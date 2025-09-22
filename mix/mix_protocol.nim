@@ -2,8 +2,8 @@ import chronicles, chronos, sequtils, strutils, os, results
 import std/[strformat, sysrand, tables], metrics, times
 import
   ./[
-    config, curve25519, fragmentation, mix_message, mix_node, sphinx, serialization,
-    tag_manager, utils, mix_metrics, exit_layer,
+    config, curve25519, exit_connection, fragmentation, mix_message, mix_node, sphinx,
+    serialization, tag_manager, utils, mix_metrics, exit_layer,
   ]
 import libp2p
 import
@@ -186,35 +186,6 @@ proc handleMixNodeConnection(
     trace "Exit node - Received mix message",
       receiver = multiAddr, message = deserialized.message, codec = deserialized.codec
 
-    if processedSP.destination == Hop():
-      error "no destination available"
-      mix_messages_error.inc(labelValues = ["Exit", "NO_DESTINATION"])
-      return
-
-    let destBytes = getHop(processedSP.destination)
-
-    let fullAddrStr = bytesToMultiAddr(destBytes).valueOr:
-      error "Failed to convert bytes to multiaddress", err = error
-      mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
-      return
-
-    let parts = fullAddrStr.split("/p2p/")
-    if parts.len != 2:
-      error "Invalid multiaddress format", parts
-      mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
-      return
-
-    # Create MultiAddress and PeerId
-    let destAddr = MultiAddress.init(parts[0]).valueOr:
-      error "Failed to parse location multiaddress: ", err = error
-      mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
-      return
-
-    let destPeerId = PeerId.init(parts[1]).valueOr:
-      error "Failed to initialize PeerId", err = error
-      mix_messages_error.inc(labelValues = ["Exit", "INVALID_DEST"])
-      return
-
     when defined(enable_mix_benchmarks):
       benchmarkLog "Exit",
         mixProto.switch.peerInfo.peerId,
@@ -222,10 +193,10 @@ proc handleMixNodeConnection(
         msgId,
         orig,
         Opt.some(fromPeerId),
-        Opt.some(destPeerId)
+        Opt.none(PeerId)
 
     await mixProto.exitLayer.onMessage(
-      deserialized.codec, message, destAddr, destPeerId, surbs
+      deserialized.codec, message, processedSP.destination, surbs
     )
 
     mix_messages_forwarded.inc(labelValues = ["Exit"])
@@ -540,17 +511,37 @@ proc buildMessage(
   ok(Message.init(serializedMsgChunk))
 
 ## Represents the final target of a mixnet message.  
-## contains the peer id and multiaddress of the destination node.  
-type MixDestination* = object
-  peerId*: PeerId
-  address*: MultiAddress
+## contains the peer id and multiaddress of the destination node.
+type DestinationType* = enum
+  ForwardAddr
+  MixNode
 
-proc init*(T: typedesc[MixDestination], peerId: PeerId, address: MultiAddress): T =
-  ## Initializes a destination object with the given peer id and multiaddress.  
-  T(peerId: peerId, address: address)
+type MixDestination* = object
+  peerId: PeerId
+  case kind: DestinationType
+  of ForwardAddr:
+    address: MultiAddress
+  else:
+    discard
 
 proc `$`*(d: MixDestination): string =
-  $d.address & "/p2p/" & $d.peerId
+  case d.kind
+  of ForwardAddr:
+    return "MixDestination[ForwardAddr](" & $d.address & "/p2p/" & $d.peerId & ")"
+  of MixNode:
+    return "MixDestination[MixNode](" & $d.peerId & ")"
+
+when defined(mix_experimental_exit_is_destination):
+  proc exitNode*(T: typedesc[MixDestination], p: PeerId): T =
+    T(kind: DestinationType.MixNode, peerId: p)
+
+  proc forwardToAddr*(
+      T: typedesc[MixDestination], p: PeerId, address: MultiAddress
+  ): T =
+    T(kind: DestinationType.ForwardAddr, peerId: p, address: address)
+
+proc init*(T: typedesc[MixDestination], p: PeerId, address: MultiAddress): T =
+  MixDestination.forwardToAddr(p, address)
 
 proc anonymizeLocalProtocolSend*(
     mixProto: MixProtocol,
@@ -560,6 +551,9 @@ proc anonymizeLocalProtocolSend*(
     destination: MixDestination,
     numSurbs: uint8,
 ) {.async.} =
+  when not defined(mix_experimental_exit_is_destination):
+    doAssert destination.kind == ForwardAddr, "Only exit != destination is allowed"
+
   var config = SendPacketConfig(logType: Entry)
   when defined(enable_mix_benchmarks):
     config.startTime = getTime()
@@ -597,23 +591,40 @@ proc anonymizeLocalProtocolSend*(
     return
 
   # Skip the destination peer
-  var pubNodeInfoKeys =
-    mixProto.pubNodeInfo.keys.toSeq().filterIt(it != destination.peerId)
+  var pubNodeInfoKeys = mixProto.pubNodeInfo.keys.toSeq()
   var availableIndices = toSeq(0 ..< pubNodeInfoKeys.len)
+
+  let index = pubNodeInfoKeys.find(destination.peerId)
+  if index != -1:
+    availableIndices.del(index)
+  else:
+    if destination.kind == MixNode:
+      error" Destination does not support mix"
+      return
 
   var i = 0
   while i < L:
     let randomIndexPosition = cryptoRandomInt(availableIndices.len).valueOr:
-      error "Failed to genanrate random number", err = error
+      error "Failed to generate random number", err = error
       mix_messages_error.inc(labelValues = ["Entry", "NON_RECOVERABLE"])
       return
     let selectedIndex = availableIndices[randomIndexPosition]
-    let randPeerId = pubNodeInfoKeys[selectedIndex]
+    var randPeerId = pubNodeInfoKeys[selectedIndex]
     availableIndices.del(randomIndexPosition)
 
-    # Last hop will be the exit node that will forward the request
+    if destination.kind == ForwardAddr and randPeerId == destination.peerId:
+      # Skip the destination peer
+      continue
+
     if i == L - 1:
-      exitPeerId = randPeerId
+      case destination.kind
+      of ForwardAddr:
+        # Last hop will be the exit node that will forward the request
+        exitPeerId = randPeerId
+      of MixNode:
+        # Exit node will be the destination
+        exitPeerId = destination.peerId
+        randPeerId = destination.peerId
 
     debug "Selected mix node: ", indexInPath = i, peerId = randPeerId
 
@@ -646,11 +657,17 @@ proc anonymizeLocalProtocolSend*(
     i = i + 1
 
   #Encode destination
-  let destAddrBytes = multiAddrToBytes($destination).valueOr:
-    error "Failed to convert multiaddress to bytes", err = error
-    mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
-    return
-  let destHop = Hop.init(destAddrBytes)
+  let destHop =
+    if destination.kind == ForwardAddr:
+      let destAddrBytes = multiAddrToBytes(
+        $destination.address & "/p2p/" & $destination.peerId
+      ).valueOr:
+        error "Failed to convert multiaddress to bytes", err = error
+        mix_messages_error.inc(labelValues = ["Entry", "INVALID_DEST"])
+        return
+      Hop.init(destAddrBytes)
+    else:
+      Hop()
 
   let msgWithSurbs = mixProto.prepareMsgWithSurbs(
     incoming, msg, numSurbs, destination.peerId, exitPeerId
