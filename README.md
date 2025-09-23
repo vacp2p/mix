@@ -38,31 +38,56 @@ It provides a basis for future development and invites community experimentation
    ```bash
    nimble install
    ```
-   
+
 ## Running Tests
 
 Execute the test suite with:
 
-   ```bash
-   nimble test
-   ```
+```bash
+nimble test
+```
 
 ## Usage
 
 Run the Mix protocol proof-of-concepts:
 
-   ```bash
-   nim c -r examples/poc_gossipsub.nim
-   nim c -r examples/poc_resp_ping.nim
-   nim c -r examples/poc_noresp_ping.nim
-   ```
+```bash
+nim c -r examples/poc_gossipsub.nim
+nim c -r examples/poc_resp_ping.nim
+nim c -r examples/poc_noresp_ping.nim
+```
+
+## Using experimental `exit == destination`
+
+1. Compile with: `-d:mix_experimental_exit_is_destination`
+2. In `toConnection` you can now specify the behavior the exit node will have:`
+
+```
+# Exit != destination (the default)
+# The exit node will forward the request to the destination
+# You can also use MixDestination.init instead
+let theDestination = MixDestination.forwardToAddr(thePeerId, theMultiAddress)
+let conn = mixProto.toConnection(
+    theDestination,
+    theCodec,
+  ).expect("should build connection")
+
+
+# Exit == destination
+# The protocol handler will be executed at the exit node
+let theDestination = MixDestination.exitNode(thePeerId)
+let conn = mixProto.toConnection(
+    theDestination,
+    theCodec,
+  ).expect("should build connection")
+```
 
 ## Current Implementation Challenges
 
 1. **Protocol Handler Diversity**: Existing protocols have diverse input formats for handlers and send functions,
-complicating the integration.
+   complicating the integration.
 2. **Function Call Complexity**: Difficulty in calling Mix send/handler functions from existing protocols
-without significant overrides to send functions (and handlers in some cases, *e.g.,* ping).
+   without significant overrides to send functions (and handlers in some cases, _e.g.,_ ping).
 
 ## Transport Approach
 
