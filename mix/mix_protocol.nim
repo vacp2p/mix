@@ -535,10 +535,8 @@ when defined(mix_experimental_exit_is_destination):
   proc exitNode*(T: typedesc[MixDestination], p: PeerId): T =
     T(kind: DestinationType.MixNode, peerId: p)
 
-  proc forwardToAddr*(
-      T: typedesc[MixDestination], p: PeerId, address: MultiAddress
-  ): T =
-    T(kind: DestinationType.ForwardAddr, peerId: p, address: address)
+proc forwardToAddr*(T: typedesc[MixDestination], p: PeerId, address: MultiAddress): T =
+  T(kind: DestinationType.ForwardAddr, peerId: p, address: address)
 
 proc init*(T: typedesc[MixDestination], p: PeerId, address: MultiAddress): T =
   MixDestination.forwardToAddr(p, address)

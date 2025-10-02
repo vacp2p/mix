@@ -1,8 +1,9 @@
-import chronicles, chronos, metrics, std/[enumerate, strutils]
+import chronicles, chronos, metrics, std/[strutils]
 import libp2p, libp2p/[builders, stream/connection]
 import ./[mix_metrics, reply_connection, serialization, utils]
 
 when defined(mix_experimental_exit_is_destination):
+  import std/enumerate
   import ./exit_connection
 
 type OnReplyDialer* =
