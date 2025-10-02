@@ -26,6 +26,10 @@ export registerDestReadBehavior
 export MixNodes
 export initMixMultiAddrByIndex
 
+when defined(mix_experimental_exit_is_destination):
+  export exitNode
+  export forwardToAddr
+
 proc readLp*(maxSize: int): destReadBehaviorCb =
   ## create callback to read length prefixed msg, with the length encoded as a varint
   return proc(
