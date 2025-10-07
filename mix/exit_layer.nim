@@ -50,6 +50,8 @@ proc reply(
   if surbs.len == 0:
     return
 
+  info "message requires reply", numSurbs = surbs.len
+
   let replyConn = MixReplyConnection.new(surbs, self.replyDialerCbFactory())
   defer:
     if not replyConn.isNil:
@@ -141,7 +143,7 @@ proc fwdRequest(
 
       response = await behaviorCb(destConn)
   except CatchableError as e:
-    error "Failed to dial next hop: ", err = e.msg
+    error "Failed to dial destination: ", destPeerId, destAddr, err = e.msg
     mix_messages_error.inc(labelValues = ["ExitLayer", "DIAL_FAILED"])
     return
   finally:

@@ -301,7 +301,7 @@ proc handleMixNodeConnection(
       await nextHopConn.writeLp(processedSP.serializedSphinxPacket)
       mix_messages_forwarded.inc(labelValues = ["Intermediate"])
     except CatchableError as e:
-      error "Failed to dial next hop: ", err = e.msg
+      error "Failed to dial next hop: ", peerId, locationAddr, err = e.msg
     finally:
       if nextHopConn != nil:
         try:
@@ -702,6 +702,8 @@ proc reply(
   let sphinxPacket = useSURB(surb.header, surb.key, message).valueOr:
     error "Use SURB error", err = error
     return
+
+  info "sending reply", to = multiAddr
 
   await mixProto.sendPacket(multiAddr, sphinxPacket, SendPacketConfig(logType: Reply))
 
