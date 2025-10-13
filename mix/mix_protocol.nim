@@ -143,7 +143,7 @@ proc writeLp(
 
 proc handleMixMessages(
     mixProto: MixProtocol, conn: Connection
-) {.async: (raises: [CancelledError]).} =
+) {.async: (raises: [LPStreamError, CancelledError]).} =
   var receivedBytes: seq[byte]
 
   when defined(enable_mix_benchmarks):
@@ -157,7 +157,8 @@ proc handleMixMessages(
 
     receivedBytes = await conn.readLp(packetSize)
   except Exception as e:
-    error "Failed to read: ", err = e.msg
+    error "Failed to read: ", err = e.msg, conn = conn.atEof()
+    raise newException(LPStreamError, "stream error: " & e.msg)
 
   when defined(enable_mix_benchmarks):
     let startTime = getTime()
