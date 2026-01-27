@@ -1,0 +1,9 @@
+header:
+  license:
+    content:
+      | 
+      # SPDX-License-Identifier: Apache-2.0 OR MIT
+      # Copyright (c) Logos
+  paths:
+  - "**/*.nim"
+  comment: on-failure

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Copyright (c) Logos
+
 import chronicles, results, os, unittest
 import std/[random, times]
 import ./pow, ../crypto

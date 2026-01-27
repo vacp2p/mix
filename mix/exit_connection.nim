@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Copyright (c) Logos
+
 import hashes, chronos, libp2p/varint, stew/byteutils
 import libp2p/stream/connection
 from fragmentation import dataSize

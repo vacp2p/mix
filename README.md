@@ -107,7 +107,9 @@ For a detailed technical specification and discussion, please refer to the [Mix 
 
 ## License
 
-This project is licensed under the MIT License.
+- MIT License – see [LICENSE-MIT](https://github.com/vacp2p/mix/blob/master/LICENSE-MIT) or [http://opensource.org/licenses/MIT](http://opensource.org/licenses/MIT)
+- Apache License 2.0 – see [LICENSE-APACHEv2](https://github.com/vacp2p/mix/blob/master/LICENSE-APACHEv2) or [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0)
+at your option.
 
 ## Acknowledgments
 

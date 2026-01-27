@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Copyright (c) Logos
+
 import hashes, chronos, stew/byteutils, results, chronicles
 import libp2p/stream/connection
 import libp2p/varint

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Copyright (c) Logos
+
 import results, sequtils
 import nimcrypto/sysrand
 import ./[config, crypto, curve25519, serialization, tag_manager, utils]
