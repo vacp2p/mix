@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Copyright (c) Logos
+
 import chronicles, chronos, sequtils, strutils, os, results
 import std/[strformat, sysrand, tables], metrics, times
 import

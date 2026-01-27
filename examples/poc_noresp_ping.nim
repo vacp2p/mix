@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Copyright (c) Logos
+
 import chronicles, chronos, results, strutils
 import std/[enumerate, sysrand]
 import libp2p

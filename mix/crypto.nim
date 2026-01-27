@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Copyright (c) Logos
+
 import endians, nimcrypto, results
 
 # This function processes 'data' using AES in CTR mode.

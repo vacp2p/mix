@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Copyright (c) Logos
+
 import os, results, strformat, strutils
 import std/streams
 import libp2p/[crypto/crypto, crypto/curve25519, crypto/secp, multiaddress, peerid]
