@@ -43,6 +43,7 @@ type MixProtocol* = ref object of LPProtocol
   # TODO: verify if this requires cleanup for cases in which response never arrives (and connection is closed)
   connCreds: Table[I, ConnCreds]
   destReadBehavior: TableRef[string, destReadBehaviorCb]
+  sendPool: Table[PeerId, Connection]
 
 proc benchmarkLog*(
     eventName: static[string],
@@ -109,9 +110,43 @@ proc cryptoRandomInt(max: int): Result[int, string] =
   let value = cast[uint64](bytes)
   return ok(int(value mod uint64(max)))
 
-proc handleMixNodeConnection(
+proc getConn(
+    mixProto: MixProtocol,
+    pid: PeerId,
+    addrs: seq[MultiAddress],
+    codecs: seq[string],
+    forceNewStream: bool = false,
+): Future[Connection] {.async: (raises: [DialFailedError, CancelledError]).} =
+  if mixProto.sendPool.hasKey(pid):
+    if forceNewStream:
+      mixProto.sendPool.del(pid)
+    else:
+      try:
+        return mixProto.sendPool[pid]
+      except KeyError:
+        raiseAssert "checked with hasKey"
+  let c = await mixProto.switch.dial(pid, addrs, codecs)
+  mixProto.sendPool[pid] = c
+  return c
+
+proc writeLp(
+    mixProto: MixProtocol,
+    pid: PeerId,
+    addrs: seq[MultiAddress],
+    codecs: seq[string],
+    payload: seq[byte],
+) {.async: (raises: [DialFailedError, LPStreamError, CancelledError]).} =
+  let c = await mixProto.getConn(pid, addrs, codecs)
+  try:
+    await c.writeLp(payload)
+  except LPStreamClosedError, LPStreamResetError, LPStreamRemoteClosedError,
+      LPStreamConnDownError:
+    let c = await mixProto.getConn(pid, addrs, codecs, forceNewStream = true)
+    await c.writeLp(payload)
+
+proc handleMixMessages(
     mixProto: MixProtocol, conn: Connection
-) {.async: (raises: [CancelledError]).} =
+) {.async: (raises: [LPStreamError, CancelledError]).} =
   var receivedBytes: seq[byte]
 
   when defined(enable_mix_benchmarks):
@@ -125,13 +160,8 @@ proc handleMixNodeConnection(
 
     receivedBytes = await conn.readLp(packetSize)
   except Exception as e:
-    error "Failed to read: ", err = e.msg
-  finally:
-    if conn != nil:
-      try:
-        await conn.close()
-      except CatchableError as e:
-        error "Failed to close incoming stream: ", err = e.msg
+    error "Failed to read: ", err = e.msg, conn = conn.atEof()
+    raise newException(LPStreamError, "stream error: " & e.msg)
 
   when defined(enable_mix_benchmarks):
     let startTime = getTime()
@@ -294,23 +324,15 @@ proc handleMixNodeConnection(
         Opt.some(fromPeerId),
         Opt.some(peerId)
 
-    var nextHopConn: Connection
     try:
-      nextHopConn = await mixProto.switch.dial(peerId, @[locationAddr], MixProtocolID)
-
       when defined(enable_mix_benchmarks):
-        await nextHopConn.writeLp(metadata)
-
-      await nextHopConn.writeLp(processedSP.serializedSphinxPacket)
+        await mixProto.writeLp(peerId, @[locationAddr], @[MixProtocolID], metadata)
+      await mixProto.writeLp(
+        peerId, @[locationAddr], @[MixProtocolID], processedSP.serializedSphinxPacket
+      )
       mix_messages_forwarded.inc(labelValues = ["Intermediate"])
     except CatchableError as e:
       error "Failed to dial next hop: ", peerId, locationAddr, err = e.msg
-    finally:
-      if nextHopConn != nil:
-        try:
-          await nextHopConn.close()
-        except CatchableError as e:
-          error "Failed to close outgoing stream: ", err = e.msg
       mix_messages_error.inc(labelValues = ["Intermediate", "DIAL_FAILED"])
   of Duplicate:
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "DUPLICATE"])
@@ -318,6 +340,14 @@ proc handleMixNodeConnection(
   of InvalidMAC:
     mix_messages_error.inc(labelValues = ["Intermediate/Exit", "INVALID_MAC"])
     discard
+
+proc handleMixNodeConnection(
+    mixProto: MixProtocol, conn: Connection
+) {.async: (raises: [LPStreamError, CancelledError]).} =
+  defer:
+    await conn.close()
+  while not conn.atEof:
+    await mixProto.handleMixMessages(conn)
 
 proc getMaxMessageSizeForCodec*(
     codec: string, numberOfSurbs: uint8 = 0
@@ -472,25 +502,18 @@ proc sendPacket(
         Opt.none(PeerId),
         Opt.some(firstMixPeerId)
 
-  var nextHopConn: Connection
   try:
-    nextHopConn =
-      await mixProto.switch.dial(firstMixPeerId, @[firstMixAddr], @[MixProtocolID])
-
     when defined(enable_mix_benchmarks):
-      await nextHopConn.writeLp(config.origAndMsgId)
-
-    await nextHopConn.writeLp(sphinxPacket)
+      await mixProto.writeLp(
+        firstMixPeerId, @[firstMixAddr], @[MixProtocolID], config.origAndMsgId
+      )
+    await mixProto.writeLp(
+      firstMixPeerId, @[firstMixAddr], @[MixProtocolID], sphinxPacket
+    )
     mix_messages_forwarded.inc(labelValues = ["Entry"])
   except CatchableError as e:
     error "Failed to send message to next hop: ", err = e.msg
     mix_messages_error.inc(labelValues = [label, "SEND_FAILED"])
-  finally:
-    if nextHopConn != nil:
-      try:
-        await nextHopConn.close()
-      except CatchableError as e:
-        error "Failed to close outgoing stream: ", err = e.msg
 
 proc buildMessage(
     msg: seq[byte], codec: string, multiAddr: string
@@ -735,7 +758,10 @@ proc init*(
   mixProto.handler = proc(
       conn: Connection, proto: string
   ) {.async: (raises: [CancelledError]).} =
-    await mixProto.handleMixNodeConnection(conn)
+    try:
+      await mixProto.handleMixNodeConnection(conn)
+    except LPStreamError as e:
+      debug "Stream error", conn = conn, err = e.msg
 
 proc new*(
     T: typedesc[MixProtocol],
