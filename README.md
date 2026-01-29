@@ -1,5 +1,12 @@
 # Mix
 
+> **⚠️ This repository is no longer maintained.**
+>
+> Development has moved to [nim-libp2p/libp2p/protocols/mix](https://github.com/vacp2p/nim-libp2p/tree/master/libp2p/protocols/mix). Please refer to that implementation for the latest updates.
+
+---
+
+
 This repository contains the implementation of the Mix protocol, a custom protocol within the libp2p framework
 designed to enable anonymous communication in peer-to-peer networks.
 
